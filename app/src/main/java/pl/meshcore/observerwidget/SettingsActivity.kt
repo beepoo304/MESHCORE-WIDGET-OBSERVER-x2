@@ -117,9 +117,24 @@ class SettingsActivity : Activity() {
         }
         val orange = orangeField.text.toString().toIntOrNull()
         val red = redField.text.toString().toIntOrNull()
-        if (orange == null || red == null || orange < 1 || red < orange) {
+        if (orange == null || red == null || orange < 1 || red <= orange) {
             info.setTextColor(Color.parseColor("#FF3B30"))
-            info.text = "Progi: liczby całkowite, czerwony nie mniej niż pomarańczowy"
+            info.text = "Progi: liczby całkowite; czerwony musi być większy niż pomarańczowy"
+            return
+        }
+        val timeout = timeoutField.text.toString().toIntOrNull()
+        if (timeout == null || timeout !in 2..30) {
+            timeoutField.error = "Timeout musi wynosić 2–30 s"
+            return
+        }
+        val delay = delayField.text.toString().toIntOrNull()
+        if (delay == null || delay !in 0..1440) {
+            delayField.error = "Opóźnienie musi wynosić 0–1440 min"
+            return
+        }
+        val cooldown = cooldownField.text.toString().toIntOrNull()
+        if (cooldown == null || cooldown !in 1..10080) {
+            cooldownField.error = "Cooldown musi wynosić 1–10080 min"
             return
         }
         if (m1Field.text.isBlank() || m2Field.text.isBlank()) {
@@ -131,15 +146,15 @@ class SettingsActivity : Activity() {
         cfg.mqtt1Host = m1Field.text.toString()
         cfg.mqtt2Host = m2Field.text.toString()
         cfg.fallbackHost = fbField.text.toString()
-        cfg.timeoutSec = timeoutField.text.toString().toIntOrNull() ?: 6
+        cfg.timeoutSec = timeout
         cfg.intervalSec = intervalBar.progress + Config.MIN_INTERVAL
         cfg.orangeMin = orange
         cfg.redMin = red
         cfg.alertObserver = alertObs.isChecked
         cfg.alertMqtt1 = alertM1.isChecked
         cfg.alertMqtt2 = alertM2.isChecked
-        cfg.alertDelayMin = delayField.text.toString().toIntOrNull() ?: 2
-        cfg.alertCooldownMin = cooldownField.text.toString().toIntOrNull() ?: 15
+        cfg.alertDelayMin = delay
+        cfg.alertCooldownMin = cooldown
         Alerts.ensureChannels(this)
         RefreshWorker.sync(this)
         info.setTextColor(Color.parseColor("#6EF015"))
