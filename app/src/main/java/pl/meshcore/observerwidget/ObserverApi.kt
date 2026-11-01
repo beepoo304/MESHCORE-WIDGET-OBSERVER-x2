@@ -65,10 +65,11 @@ object ObserverApi {
         val id = str("id", "observer_id", "observerId", "public_key", "publicKey", "hash").orEmpty()
         if (id.isBlank()) return FetchResult.Fail(host, "Brak identyfikatora Observera w JSON")
 
-        val last = str(
+        val lastRaw = str(
             "last_packet_at", "lastPacketAt", "last_packet", "lastPacket",
             "last_seen", "lastSeen", "last_heard_at", "lastHeardAt"
-        )?.let { parseTime(it) }
+        )
+        val last = lastRaw?.let { parseTime(it) }
         return FetchResult.Ok(
             ObserverSnapshot(
                 host = host,
@@ -76,17 +77,32 @@ object ObserverApi {
                 name = str("name", "display_name", "displayName"),
                 model = str("model", "device", "device_type", "deviceType"),
                 firmware = str("firmware", "fw"),
-                totalPackets = o.optLong("packet_count", o.optLong("packetCount", o.optLong("total_packets", 0L))),
-                packetsPerHour = o.optLong("packetsLastHour", o.optLong("packets_per_hour", o.optLong("packetsPerHour", 0L))),
+                totalPackets = longValue(o, "packet_count", "packetCount", "total_packets", "totalPackets", "packets_total"),
+                packetsPerHour = longValue(o, "packetsLastHour", "packets_per_hour", "packetsPerHour", "packets_hour"),
                 lastPacketMs = last,
                 fetchedAtMs = nowMs
             )
         )
     }
 
-    /** Akceptuje ISO-8601 z strefą oraz "yyyy-MM-dd HH:mm:ss" (traktowane jako UTC). */
+    private fun longValue(o: JSONObject, vararg keys: String): Long {
+        for (key in keys) {
+            if (!o.has(key) || o.isNull(key)) continue
+            val value = o.opt(key)
+            if (value is Number) return value.toLong()
+            value?.toString()?.toLongOrNull()?.let { return it }
+        }
+        return 0L
+    }
+
+    /** Akceptuje epoch w sekundach/milisekundach oraz ISO-8601 i yyyy-MM-dd HH:mm:ss (UTC). */
     fun parseTime(raw: String): Long? {
         val t = raw.trim()
+        t.toLongOrNull()?.let { value ->
+            return if (value in 1_000_000_000L..99_999_999_999L) value * 1000L
+            else if (value >= 100_000_000_000L) value
+            else null
+        }
         return try {
             Instant.parse(t).toEpochMilli()
         } catch (_: Exception) {
