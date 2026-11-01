@@ -35,60 +35,75 @@ object Alerts {
         val last1 = (data.broker1 as? FetchResult.Ok)?.snapshot?.lastPacketMs
         val last2 = (data.broker2 as? FetchResult.Ok)?.snapshot?.lastPacketMs
         val freshest = listOfNotNull(last1, last2, data.observer?.lastPacketMs).maxOrNull()
-        val a = AlertEngine.assess(last1, last2, freshest, nowMs, cfg.redMin)
+        val assessment = AlertEngine.assess(last1, last2, freshest, nowMs, cfg.redMin)
         val delayMs = cfg.alertDelayMin * 60_000L
         val cooldownMs = cfg.alertCooldownMin * 60_000L
-        step(ctx, Kind.OBSERVER, a.observer, cfg.alertObserver, nowMs, delayMs, cooldownMs)
-        step(ctx, Kind.MQTT1, a.mqtt1, cfg.alertMqtt1, nowMs, delayMs, cooldownMs)
-        step(ctx, Kind.MQTT2, a.mqtt2, cfg.alertMqtt2, nowMs, delayMs, cooldownMs)
+        step(ctx, Kind.OBSERVER, assessment.observer, cfg.alertObserver, nowMs, delayMs, cooldownMs)
+        step(ctx, Kind.MQTT1, assessment.mqtt1, cfg.alertMqtt1, nowMs, delayMs, cooldownMs)
+        step(ctx, Kind.MQTT2, assessment.mqtt2, cfg.alertMqtt2, nowMs, delayMs, cooldownMs)
     }
 
-    private fun step(ctx: Context, k: Kind, h: Health, enabled: Boolean, now: Long, delay: Long, cooldown: Long) {
+    private fun step(ctx: Context, kind: Kind, health: Health, enabled: Boolean, nowMs: Long, delayMs: Long, cooldownMs: Long) {
         synchronized(lock) {
             val prefs = ctx.applicationContext.getSharedPreferences("alert_state", Context.MODE_PRIVATE)
-            val prev = KeyState(
-                bad = prefs.getBoolean("${k.key}_bad", false),
-                badSinceMs = prefs.getLong("${k.key}_since", 0),
-                notified = prefs.getBoolean("${k.key}_notified", false),
-                lastNotifiedMs = prefs.getLong("${k.key}_last", 0)
+            val key = kind.key
+            val previous = KeyState(
+                bad = prefs.getBoolean("${key}_bad", false),
+                badSinceMs = prefs.getLong("${key}_since", 0),
+                notified = prefs.getBoolean("${key}_notified", false),
+                lastNotifiedMs = prefs.getLong("${key}_last", 0)
             )
-            val (next, action) = AlertEngine.step(prev, h, enabled, now, delay, cooldown)
-            prefs.edit()
-                .putBoolean("${k.key}_bad", next.bad)
-                .putLong("${k.key}_since", next.badSinceMs)
-                .putBoolean("${k.key}_notified", next.notified)
-                .putLong("${k.key}_last", next.lastNotifiedMs)
-                .apply()
+            val (next, action) = AlertEngine.step(previous, health, enabled, nowMs, delayMs, cooldownMs)
+
+            var stateToPersist = next
             when (action) {
-                AlertAction.NOTIFY -> notify(ctx, k, next.badSinceMs, now)
-                AlertAction.CLEAR -> NotificationManagerCompat.from(ctx).cancel(k.id)
-                AlertAction.NONE -> {}
+                AlertAction.NOTIFY -> {
+                    if (!notify(ctx, kind, next.badSinceMs, nowMs)) {
+                        // Keep the alert pending; a later refresh can retry after permission is granted.
+                        stateToPersist = next.copy(notified = false, lastNotifiedMs = previous.lastNotifiedMs)
+                    }
+                }
+                AlertAction.CLEAR -> NotificationManagerCompat.from(ctx).cancel(kind.id)
+                AlertAction.NONE -> Unit
             }
+
+            prefs.edit()
+                .putBoolean("${key}_bad", stateToPersist.bad)
+                .putLong("${key}_since", stateToPersist.badSinceMs)
+                .putBoolean("${key}_notified", stateToPersist.notified)
+                .putLong("${key}_last", stateToPersist.lastNotifiedMs)
+                .apply()
         }
     }
 
-    private fun notify(ctx: Context, k: Kind, sinceMs: Long, nowMs: Long) {
+    private fun notify(ctx: Context, kind: Kind, sinceMs: Long, nowMs: Long): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) return
+        ) return false
+
         ensureChannels(ctx)
-        val open = PendingIntent.getActivity(
-            ctx, k.id, Intent(ctx, MainActivity::class.java),
+        val openIntent = PendingIntent.getActivity(
+            ctx, kind.id, Intent(ctx, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val mins = ((nowMs - sinceMs) / 60_000L).coerceAtLeast(0)
-        val n = NotificationCompat.Builder(ctx, k.channel)
+        val elapsedMinutes = ((nowMs - sinceMs) / 60_000L).coerceAtLeast(0)
+        val notification = NotificationCompat.Builder(ctx, kind.channel)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle(k.title)
-            .setContentText("Stan trwa od ok. $mins min. Dotknij, aby otworzyć.")
-            .setContentIntent(open)
+            .setContentTitle(kind.title)
+            .setContentText("Stan trwa od ok. $elapsedMinutes min. Dotknij, aby otworzyć.")
+            .setContentIntent(openIntent)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
-        try {
-            NotificationManagerCompat.from(ctx).notify(k.id, n)
+
+        return try {
+            NotificationManagerCompat.from(ctx).notify(kind.id, notification)
+            true
         } catch (_: SecurityException) {
+            false
+        } catch (_: RuntimeException) {
+            false
         }
     }
 }
