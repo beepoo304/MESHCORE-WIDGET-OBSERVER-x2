@@ -4,8 +4,8 @@
     android:minHeight="190dp"
     android:targetCellWidth="4"
     android:targetCellHeight="3"
-    android:initialLayout="@layout/widget_observer_safe"
+    android:initialLayout="@layout/widget_observer"
     android:previewLayout="@layout/widget_observer"
     android:updatePeriodMillis="0"
-    android:resizeMode="none"
+    android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"/>
