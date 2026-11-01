@@ -67,7 +67,7 @@ class Config(context: Context) {
     val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2
 
     companion object {
-        const val DEFAULT_MQTT1 = "meshcorekk.xyz"
+        const val DEFAULT_MQTT1 = "live.meshcorekk.xyz"
         const val DEFAULT_MQTT2 = "analyzer.marwoj.net"
         const val DEFAULT_FALLBACK = "mc.inside.net.pl"
         const val MIN_INTERVAL = 2
