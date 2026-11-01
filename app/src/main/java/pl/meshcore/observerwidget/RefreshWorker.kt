@@ -10,10 +10,13 @@ import java.util.concurrent.TimeUnit
 
 /** Odświeżanie w tle co 15 min (minimum Androida dla WorkManagera). */
 class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
-    override suspend fun doWork(): Result {
-        ObserverRefresh.refreshOnce(applicationContext)
-        return Result.success()
-    }
+    override suspend fun doWork(): Result =
+        try {
+            ObserverRefresh.refreshOnce(applicationContext)
+            Result.success()
+        } catch (exception: Exception) {
+            Result.retry()
+        }
 
     companion object {
         private const val NAME = "observer_widget_refresh"
