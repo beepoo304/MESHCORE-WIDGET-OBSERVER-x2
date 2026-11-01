@@ -56,22 +56,28 @@ object ObserverApi {
         } catch (e: JSONException) {
             return FetchResult.Fail(host, "Niepoprawny JSON")
         }
-        val id = o.optString("id", "")
-        if (id.isBlank()) return FetchResult.Fail(host, "Brak pola id w odpowiedzi")
+        fun str(vararg keys: String): String? =
+            keys.firstNotNullOfOrNull { key ->
+                if (!o.has(key) || o.isNull(key)) null
+                else o.optString(key).trim().takeIf { it.isNotEmpty() }
+            }
 
-        fun str(key: String): String? =
-            if (!o.has(key) || o.isNull(key)) null else o.optString(key).trim().takeIf { it.isNotEmpty() }
+        val id = str("id", "observer_id", "observerId", "public_key", "publicKey", "hash").orEmpty()
+        if (id.isBlank()) return FetchResult.Fail(host, "Brak identyfikatora Observera w JSON")
 
-        val last = str("last_packet_at")?.let { parseTime(it) }
+        val last = str(
+            "last_packet_at", "lastPacketAt", "last_packet", "lastPacket",
+            "last_seen", "lastSeen", "last_heard_at", "lastHeardAt"
+        )?.let { parseTime(it) }
         return FetchResult.Ok(
             ObserverSnapshot(
                 host = host,
                 id = id,
-                name = str("name"),
-                model = str("model"),
-                firmware = str("firmware"),
-                totalPackets = o.optLong("packet_count", 0L),
-                packetsPerHour = o.optLong("packetsLastHour", 0L),
+                name = str("name", "display_name", "displayName"),
+                model = str("model", "device", "device_type", "deviceType"),
+                firmware = str("firmware", "fw"),
+                totalPackets = o.optLong("packet_count", o.optLong("packetCount", o.optLong("total_packets", 0L))),
+                packetsPerHour = o.optLong("packetsLastHour", o.optLong("packets_per_hour", o.optLong("packetsPerHour", 0L))),
                 lastPacketMs = last,
                 fetchedAtMs = nowMs
             )
