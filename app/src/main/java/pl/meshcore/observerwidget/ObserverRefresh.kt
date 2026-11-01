@@ -24,13 +24,22 @@ object ObserverRefresh {
         AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, ObserverWidgetProvider::class.java))
 
     /** Odświeża wszystkie widgety. Sieć na Dispatchers.IO, główny wątek nie jest blokowany. */
+    private val refreshInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
+
     fun refreshAll(ctx: Context, pending: BroadcastReceiver.PendingResult? = null) {
-        val app = ctx.applicationContext
-        val ids = widgetIds(app)
-        if (ids.isEmpty()) {
+        if (!refreshInProgress.compareAndSet(false, true)) {
             pending?.finish()
             return
         }
+
+        val app = ctx.applicationContext
+        val ids = widgetIds(app)
+        if (ids.isEmpty()) {
+            refreshInProgress.set(false)
+            pending?.finish()
+            return
+        }
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 push(app, ids, WidgetRenderer.render(app, emptyData(app, busy = true)))
@@ -40,6 +49,7 @@ object ObserverRefresh {
             } catch (e: Exception) {
                 push(app, ids, WidgetRenderer.safe(app, "Błąd odświeżania"))
             } finally {
+                refreshInProgress.set(false)
                 pending?.finish()
             }
         }
