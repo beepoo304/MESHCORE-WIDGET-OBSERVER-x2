@@ -137,15 +137,21 @@ class SettingsActivity : Activity() {
             cooldownField.error = "Cooldown musi wynosić 1–10080 min"
             return
         }
-        if (m1Field.text.isBlank() || m2Field.text.isBlank()) {
+        val hosts = listOf(m1Field.text.toString().trim(), m2Field.text.toString().trim())
+        val fallback = fbField.text.toString().trim()
+        val validHost: (String) -> Boolean = { host ->
+            host.isNotBlank() && !host.any { it.isWhitespace() } &&
+                (host.startsWith("https://") || host.startsWith("http://") || !host.contains("://"))
+        }
+        if (hosts.any { !validHost(it) } || (fallback.isNotBlank() && !validHost(fallback))) {
             info.setTextColor(Color.parseColor("#FF3B30"))
-            info.text = "Adresy MQTT1 i MQTT2 nie mogą być puste"
+            info.text = "Podaj poprawne adresy hostów API (bez spacji)"
             return
         }
         cfg.observerId = id
-        cfg.mqtt1Host = m1Field.text.toString()
-        cfg.mqtt2Host = m2Field.text.toString()
-        cfg.fallbackHost = fbField.text.toString()
+        cfg.mqtt1Host = hosts[0]
+        cfg.mqtt2Host = hosts[1]
+        cfg.fallbackHost = fallback
         cfg.timeoutSec = timeout
         cfg.intervalSec = intervalBar.progress + Config.MIN_INTERVAL
         cfg.orangeMin = orange
