@@ -3,6 +3,7 @@ package pl.meshcore.observerwidget
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.widget.RemoteViews
 
 object WidgetRenderer {
@@ -72,7 +73,7 @@ object WidgetRenderer {
                     v.setInt(lastId, "setBackgroundResource", R.drawable.pill_gray)
                 } else {
                     val age = nowMs - s.lastPacketMs
-                    v.setTextViewText(lastId, Status.formatAge(age))
+                    v.setChronometer(lastId, SystemClock.elapsedRealtime() - age.coerceAtLeast(0), "%s", true)
                     v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                         Level.GREEN -> R.drawable.pill_green
                         Level.ORANGE -> R.drawable.pill_orange
