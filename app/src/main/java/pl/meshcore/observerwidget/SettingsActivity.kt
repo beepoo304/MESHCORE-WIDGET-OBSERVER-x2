@@ -14,7 +14,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import kotlin.concurrent.thread
 
-/** Ekran ustawień: Observer, API, odświeżanie, progi kolorów. (Powiadomienia PUSH: następna partia.) */
+/** Ekran ustawień: Observer, API, odświeżanie, progi kolorów i powiadomienia PUSH. */
 class SettingsActivity : Activity() {
     private lateinit var cfg: Config
     private lateinit var idField: EditText
