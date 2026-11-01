@@ -38,7 +38,12 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
-        v.setTextViewText(R.id.interval_text, "${d.intervalSec} s")
+        // Countdown runs locally in RemoteViews between API refreshes.
+        val countdown = SystemClock.elapsedRealtime() + d.intervalSec * 1000L
+        v.setChronometer(R.id.interval_text, countdown, "%s", true)
+        if (android.os.Build.VERSION.SDK_INT >= 24) {
+            v.setChronometerCountDown(R.id.interval_text, true)
+        }
         v.setImageViewResource(R.id.refresh_icon, if (d.busy) R.drawable.ic_refresh_busy else R.drawable.ic_refresh)
 
         v.setTextViewText(R.id.m1_host, Config.displayHost(d.mqtt1Host))
