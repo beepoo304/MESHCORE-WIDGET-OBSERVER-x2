@@ -47,9 +47,8 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
-        // A RemoteViews Chronometer can continue below zero when Android delays an alarm.
-        // Display the configured polling interval instead of a misleading negative countdown.
-        v.setTextViewText(R.id.interval_text, "co ${d.intervalSec}s")
+        // Count elapsed time since this refresh; unlike a countdown it cannot become negative.
+        v.setChronometer(R.id.interval_text, SystemClock.elapsedRealtime(), "odśw. %s", true)
         v.setImageViewResource(R.id.refresh_icon, if (d.busy) R.drawable.ic_refresh_busy else R.drawable.ic_refresh)
 
         v.setTextViewText(R.id.m1_host, Config.displayHost(d.mqtt1Host))
