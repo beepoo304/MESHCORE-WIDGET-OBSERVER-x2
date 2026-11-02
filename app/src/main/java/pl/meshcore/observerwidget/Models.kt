@@ -29,10 +29,7 @@ data class WidgetData(
     val mqtt1Host: String,
     val mqtt2Host: String,
     val observerId: String,
-    val busy: Boolean = false,
-    val mqtt1Health: Health = Health.UNKNOWN,
-    val mqtt2Health: Health = Health.UNKNOWN,
-    val fallbackHealth: Health = Health.UNKNOWN
+    val busy: Boolean = false
 )
 
 enum class Level { GREEN, ORANGE, RED, UNKNOWN }
