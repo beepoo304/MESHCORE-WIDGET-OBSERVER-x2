@@ -47,8 +47,12 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
-        // Count elapsed time since this refresh; unlike a countdown it cannot become negative.
-        v.setChronometer(R.id.interval_text, SystemClock.elapsedRealtime(), "odśw. %s", true)
+        // Count down from the configured refresh interval to zero.
+        val countdownBase = SystemClock.elapsedRealtime() + d.intervalSec * 1_000L
+        v.setChronometer(R.id.interval_text, countdownBase, "%s", true)
+        if (android.os.Build.VERSION.SDK_INT >= 24) {
+            v.setChronometerCountDown(R.id.interval_text, true)
+        }
         v.setImageViewResource(R.id.refresh_icon, if (d.busy) R.drawable.ic_refresh_busy else R.drawable.ic_refresh)
 
         v.setTextViewText(R.id.m1_host, Config.displayHost(d.mqtt1Host))
