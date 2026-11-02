@@ -32,7 +32,7 @@ class ObserverWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onEnabled(context: Context) {
-        RefreshWorker.schedule(context)
+        RefreshWorker.sync(context)
     }
 
     override fun onDisabled(context: Context) {

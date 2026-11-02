@@ -53,23 +53,23 @@ object WidgetRenderer {
         if (android.os.Build.VERSION.SDK_INT >= 24) {
             v.setChronometerCountDown(R.id.interval_text, true)
         }
-        v.setImageViewResource(R.id.refresh_icon, if (d.busy) R.drawable.ic_refresh_busy else R.drawable.ic_refresh)
+        v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
+        v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
         v.setTextViewText(R.id.m1_host, Config.displayHost(d.mqtt1Host))
         v.setTextViewText(R.id.m2_host, Config.displayHost(d.mqtt2Host))
 
         // Wiersz Observera
         val obs = d.observer
-        v.setTextViewText(R.id.obs_hash, if (d.observerId.length >= 4) d.observerId.take(4).uppercase() else "----")
+        v.setTextViewText(R.id.obs_hash, d.observerId.ifBlank { "----" }.uppercase())
+        v.setTextColor(R.id.obs_hash, GRAY)
         v.setTextViewText(R.id.obs_name, when {
             !d.configured -> "Ustaw hash w aplikacji"
             obs?.name != null -> obs.name
             else -> "—"
         })
-        val (liveText, liveColor) = liveState(d, nowMs)
-        v.setTextViewText(R.id.obs_live, liveText)
-        v.setTextColor(R.id.obs_live, liveColor)
-        v.setInt(R.id.obs_live, "setBackgroundResource", liveBg(liveColor))
+        v.setTextColor(R.id.m1_title, healthColor(d.mqtt1Health))
+        v.setTextColor(R.id.m2_title, healthColor(d.mqtt2Health))
 
         broker(v, d, d.broker1, nowMs, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
         broker(v, d, d.broker2, nowMs, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
@@ -118,6 +118,12 @@ object WidgetRenderer {
                 })
             }
         }
+    }
+
+    private fun healthColor(health: Health): Int = when (health) {
+        Health.GOOD -> android.graphics.Color.WHITE
+        Health.BAD -> RED
+        Health.UNKNOWN -> GRAY
     }
 
     private fun liveBg(color: Int) = when (color) {
