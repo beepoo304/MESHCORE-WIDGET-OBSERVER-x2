@@ -182,18 +182,11 @@ class SettingsActivity : Activity() {
         info.text = "Sprawdzam…"
         thread {
             val lines = hosts.map { h ->
-                val observerResult = ObserverApi.fetch(h, id, timeout)
-                val observerLine = when (observerResult) {
-                    is FetchResult.Ok -> "Observer ✓: ${observerResult.snapshot.name ?: "(brak nazwy)"}" +
-                        (observerResult.snapshot.model?.let { " / $it" } ?: "") + (observerResult.snapshot.firmware?.let { " / fw $it" } ?: "")
-                    is FetchResult.Fail -> "Observer ✕: ${observerResult.reason}"
+                when (val r = ObserverApi.fetch(h, id, timeout)) {
+                    is FetchResult.Ok -> "✓ ${Config.displayHost(h)}: ${r.snapshot.name ?: "(brak nazwy)"}" +
+                        (r.snapshot.model?.let { " / $it" } ?: "") + (r.snapshot.firmware?.let { " / fw $it" } ?: "")
+                    is FetchResult.Fail -> "✗ ${Config.displayHost(h)}: ${r.reason}"
                 }
-                val mqttLine = when (MqttStatusApi.fetch(h, timeout)) {
-                    Health.GOOD -> "MQTT: CONNECTED"
-                    Health.BAD -> "MQTT: DISCONNECTED"
-                    Health.UNKNOWN -> "MQTT: UNKNOWN (brak /api/mqtt/status lub nieaktualny status)"
-                }
-                "${Config.displayHost(h)}\n$observerLine\n$mqttLine"
             }
             runOnUiThread {
                 info.setTextColor(Color.WHITE)

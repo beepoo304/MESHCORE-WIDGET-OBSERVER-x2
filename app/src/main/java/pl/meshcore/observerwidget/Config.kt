@@ -10,10 +10,6 @@ class Config(context: Context) {
      * Pełny hash Observera (64 znaki hex), zapisywany WIELKIMI literami: tak zwracają go serwery CoreScope,
      * a wyszukiwanie po ID rozróżnia wielkość liter (małe litery dają 404 / pustą listę pakietów).
      */
-    var monitoringEnabled: Boolean
-        get() = prefs.getBoolean("monitoring_enabled", true)
-        set(value) = prefs.edit().putBoolean("monitoring_enabled", value).apply()
-
     var observerId: String
         get() = normalizeId(prefs.getString("observer_id", "").orEmpty())
         set(v) = prefs.edit().putString("observer_id", normalizeId(v)).apply()

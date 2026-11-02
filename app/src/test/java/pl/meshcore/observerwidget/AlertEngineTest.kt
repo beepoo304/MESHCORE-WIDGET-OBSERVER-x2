@@ -8,30 +8,23 @@ class AlertEngineTest {
     private val now = 10_000 * min
 
     @Test fun observerDeadDoesNotBlameBrokers() {
-        val a = AlertEngine.assess(now - 8 * min, now, 5, Health.GOOD, Health.GOOD)
+        val a = AlertEngine.assess(now - 9 * min, now - 8 * min, now - 8 * min, now, 5)
         assertEquals(Health.BAD, a.observer)
-        assertEquals(Health.GOOD, a.mqtt1)
-        assertEquals(Health.GOOD, a.mqtt2)
+        assertEquals(Health.UNKNOWN, a.mqtt1)
+        assertEquals(Health.UNKNOWN, a.mqtt2)
     }
 
     @Test fun brokerDeadWhileObserverAlive() {
-        val a = AlertEngine.assess(now - 20_000, now, 5, Health.BAD, Health.GOOD)
+        val a = AlertEngine.assess(now - 10 * min, now - 20_000, now - 20_000, now, 5)
         assertEquals(Health.GOOD, a.observer)
         assertEquals(Health.BAD, a.mqtt1)
         assertEquals(Health.GOOD, a.mqtt2)
     }
 
     @Test fun apiDownIsUnknownNotFailure() {
-        val a = AlertEngine.assess(null, now, 5, Health.UNKNOWN, Health.UNKNOWN)
+        val a = AlertEngine.assess(null, null, null, now, 5)
         assertEquals(Health.UNKNOWN, a.observer)
         assertEquals(Health.UNKNOWN, a.mqtt1)
-    }
-
-    @Test fun mqttHealthIsIndependentFromObserverSilence() {
-        val result = AlertEngine.assess(now - 10 * min, now, 5, Health.GOOD, Health.BAD)
-        assertEquals(Health.BAD, result.observer)
-        assertEquals(Health.GOOD, result.mqtt1)
-        assertEquals(Health.BAD, result.mqtt2)
     }
 
     @Test fun notifiesOnlyAfterDelayAndOnlyOnce() {

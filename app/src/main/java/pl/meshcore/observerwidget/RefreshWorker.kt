@@ -28,10 +28,6 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
 
         /** Worker działa tylko wtedy, gdy jest po co: istnieje widget albo włączony jest jakiś alarm. */
         fun sync(ctx: Context) {
-            if (!Config(ctx).monitoringEnabled) {
-                cancel(ctx)
-                return
-            }
             val ids = android.appwidget.AppWidgetManager.getInstance(ctx)
                 .getAppWidgetIds(android.content.ComponentName(ctx, ObserverWidgetProvider::class.java))
             if (ids.isNotEmpty() || Config(ctx).anyAlertEnabled) schedule(ctx) else cancel(ctx)

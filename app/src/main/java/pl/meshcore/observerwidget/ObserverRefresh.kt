@@ -47,7 +47,7 @@ object ObserverRefresh {
      */
     fun scheduleNext(ctx: Context) {
         val app = ctx.applicationContext
-        if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
+        if (widgetIds(app).isEmpty()) return
         try {
             val am = app.getSystemService(AlarmManager::class.java)
             val at = SystemClock.elapsedRealtime() + Config(app).intervalSec * 1000L
@@ -63,24 +63,6 @@ object ObserverRefresh {
         } catch (e: Exception) {
             Log.w(TAG, "cancelAlarm failed", e)
         }
-    }
-
-    fun stop(ctx: Context) {
-        val app = ctx.applicationContext
-        Config(app).monitoringEnabled = false
-        cancelAlarm(app)
-        RefreshWorker.sync(app)
-        Alerts.clearAll(app)
-        lastData = lastData?.copy(busy = false)
-        val ids = widgetIds(app)
-        if (ids.isNotEmpty()) pushAll(app, ids, lastData ?: emptyData(app))
-    }
-
-    fun start(ctx: Context) {
-        val app = ctx.applicationContext
-        Config(app).monitoringEnabled = true
-        RefreshWorker.sync(app)
-        refreshAll(app)
     }
 
     private fun widgetIds(ctx: Context): IntArray =
@@ -117,11 +99,6 @@ object ObserverRefresh {
      * Gdy odświeżanie już trwa, żądanie jest zapamiętane i wykonane po bieżącym cyklu (nie ginie).
      */
     fun refreshAll(ctx: Context, pending: BroadcastReceiver.PendingResult? = null) {
-        if (!Config(ctx).monitoringEnabled) {
-            cancelAlarm(ctx)
-            pending?.finish()
-            return
-        }
         if (!gate.request()) {
             pending?.finish()
             return
@@ -157,7 +134,6 @@ object ObserverRefresh {
             job.cancel()
             Log.w(TAG, "Refresh timed out after ${HARD_TIMEOUT_MS} ms")
         }
-        if (!Config(app).monitoringEnabled) return
         val result = data ?: lastData?.copy(busy = false) ?: emptyData(app)
         if (data != null) {
             lastData = data
@@ -172,9 +148,7 @@ object ObserverRefresh {
     /** Wersja dla WorkManagera: wykonuje się synchronicznie w korutynie workera. */
     suspend fun refreshOnce(ctx: Context) {
         val app = ctx.applicationContext
-        if (!Config(app).monitoringEnabled) return
         val data = collect(app)
-        if (!Config(app).monitoringEnabled) return
         lastData = data
         val ids = widgetIds(app)
         if (ids.isNotEmpty()) pushAll(app, ids, data)
@@ -241,19 +215,13 @@ object ObserverRefresh {
         return coroutineScope {
             val a1 = async(Dispatchers.IO) { ObserverApi.fetch(c.mqtt1Host, c.observerId, timeout) }
             val a2 = async(Dispatchers.IO) { ObserverApi.fetch(c.mqtt2Host, c.observerId, timeout) }
-            val h1 = async(Dispatchers.IO) { MqttStatusApi.fetch(c.mqtt1Host, timeout) }
-            val h2 = async(Dispatchers.IO) { MqttStatusApi.fetch(c.mqtt2Host, timeout) }
-            val hf = async(Dispatchers.IO) { if (c.fallbackHost.isBlank()) Health.UNKNOWN else MqttStatusApi.fetch(c.fallbackHost, timeout) }
             val r1 = a1.await()
             val r2 = a2.await()
-            val health1 = h1.await()
-            val health2 = h2.await()
-            val fallbackHealth = hf.await()
             var obs = (r1 as? FetchResult.Ok)?.snapshot ?: (r2 as? FetchResult.Ok)?.snapshot
             if (obs == null && c.fallbackHost.isNotBlank()) {
                 obs = (ObserverApi.fetch(c.fallbackHost, c.observerId, minOf(timeout, 2_000)) as? FetchResult.Ok)?.snapshot
             }
-            base.copy(observer = obs, broker1 = r1, broker2 = r2, mqtt1Health = health1, mqtt2Health = health2, fallbackHealth = fallbackHealth)
+            base.copy(observer = obs, broker1 = r1, broker2 = r2)
         }
     }
 }
