@@ -4,7 +4,10 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.widget.FrameLayout
 import android.widget.RemoteViews
+import androidx.work.Configuration
+import androidx.work.WorkManager
 import org.junit.Assert.assertNotNull
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -19,6 +22,10 @@ class WidgetInflationTest {
     private val ctx: Context get() = RuntimeEnvironment.getApplication()
     private val id = "9B250340D918846EFB9140F6243E9253FA0DB9DD3B1B8C0AD8A53337CE5D1234"
     private val now = System.currentTimeMillis()
+
+    @Before fun initWorkManager() {
+        try { WorkManager.initialize(ctx, Configuration.Builder().build()) } catch (_: IllegalStateException) { }
+    }
 
     private fun inflate(v: RemoteViews) = v.apply(ctx, FrameLayout(ctx))
 
