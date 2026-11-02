@@ -30,7 +30,7 @@ object Alerts {
     }
 
     fun evaluate(ctx: Context, data: WidgetData, nowMs: Long = System.currentTimeMillis()) {
-        if (!data.configured) return
+        if (!Config(ctx).monitoringEnabled || !data.configured) return
         val cfg = Config(ctx)
         val last1 = (data.broker1 as? FetchResult.Ok)?.snapshot?.lastPacketMs
         val last2 = (data.broker2 as? FetchResult.Ok)?.snapshot?.lastPacketMs
@@ -41,6 +41,16 @@ object Alerts {
         step(ctx, Kind.OBSERVER, assessment.observer, cfg.alertObserver, nowMs, delayMs, cooldownMs)
         step(ctx, Kind.MQTT1, assessment.mqtt1, cfg.alertMqtt1, nowMs, delayMs, cooldownMs)
         step(ctx, Kind.MQTT2, assessment.mqtt2, cfg.alertMqtt2, nowMs, delayMs, cooldownMs)
+    }
+
+    fun clearAll(ctx: Context) {
+        val app = ctx.applicationContext
+        app.getSharedPreferences("alert_state", Context.MODE_PRIVATE).edit().clear().apply()
+        NotificationManagerCompat.from(app).apply {
+            cancel(1001)
+            cancel(1002)
+            cancel(1003)
+        }
     }
 
     private fun step(ctx: Context, kind: Kind, health: Health, enabled: Boolean, nowMs: Long, delayMs: Long, cooldownMs: Long) {
