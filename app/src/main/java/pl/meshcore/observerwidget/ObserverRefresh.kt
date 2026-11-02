@@ -6,14 +6,27 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.util.Log
+import android.widget.RemoteViews
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 object ObserverRefresh {
     const val ACTION_REFRESH = "pl.meshcore.observerwidget.ACTION_REFRESH"
+    private const val TAG = "ObserverWidget"
+
+    /** Poniżej limitu ~10 s dla odbiorników z goAsync(), po którym system uznaje aplikację za zawieszoną. */
+    private const val HARD_TIMEOUT_MS = 8_500L
+
+    private val gate = RefreshGate()
+
+    /** Ostatnie dane: pozwalają natychmiast narysować widget (też po zmianie rozmiaru) bez czekania na sieć. */
+    @Volatile
+    private var lastData: WidgetData? = null
 
     fun pendingIntent(ctx: Context): PendingIntent {
         val i = Intent(ctx, ObserverWidgetProvider::class.java).setAction(ACTION_REFRESH)
@@ -23,60 +36,126 @@ object ObserverRefresh {
     private fun widgetIds(ctx: Context): IntArray =
         AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, ObserverWidgetProvider::class.java))
 
-    /** Odświeża wszystkie widgety. Sieć na Dispatchers.IO, główny wątek nie jest blokowany. */
-    private val refreshInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
-
-    fun refreshAll(ctx: Context, pending: BroadcastReceiver.PendingResult? = null) {
-        if (!refreshInProgress.compareAndSet(false, true)) {
-            pending?.finish()
-            return
+    /** Wariant layoutu dla konkretnego widgetu, na podstawie rozmiaru z opcji launchera. */
+    private fun layoutFor(mgr: AppWidgetManager, id: Int): WidgetLayout {
+        val o = try {
+            mgr.getAppWidgetOptions(id)
+        } catch (e: Exception) {
+            null
         }
+        return WidgetLayout.choose(
+            o?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0) ?: 0,
+            o?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0) ?: 0
+        )
+    }
 
+    /**
+     * Natychmiastowy widok (bez sieci), wywoływany synchronicznie z onUpdate / po zmianie rozmiaru:
+     * ostatnie znane dane albo stan "ładowanie" / "ustaw hash". Zwraca false, gdy nie ma jeszcze żadnych danych.
+     */
+    fun renderNow(ctx: Context, ids: IntArray? = null): Boolean {
         val app = ctx.applicationContext
-        val ids = widgetIds(app)
-        if (ids.isEmpty()) {
-            refreshInProgress.set(false)
+        val targets = ids ?: widgetIds(app)
+        if (targets.isEmpty()) return false
+        val cached = lastData
+        pushAll(app, targets, cached?.copy(busy = false) ?: emptyData(app, busy = true))
+        return cached != null
+    }
+
+    /**
+     * Odświeża wszystkie widgety. Sieć na Dispatchers.IO, główny wątek nie jest blokowany.
+     * Gdy odświeżanie już trwa, żądanie jest zapamiętane i wykonane po bieżącym cyklu (nie ginie).
+     */
+    fun refreshAll(ctx: Context, pending: BroadcastReceiver.PendingResult? = null) {
+        if (!gate.request()) {
             pending?.finish()
             return
         }
-
+        val app = ctx.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                push(app, ids, WidgetRenderer.render(app, emptyData(app, busy = true)))
-                val data = collect(app)
-                push(app, ids, safeRender(app, data))
-                Alerts.evaluate(app, data)
-            } catch (e: Exception) {
-                push(app, ids, WidgetRenderer.safe(app, "Błąd odświeżania"))
+                do {
+                    try {
+                        cycle(app)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Refresh cycle failed", e)
+                        val ids = widgetIds(app)
+                        if (ids.isNotEmpty()) pushSafe(app, ids, "Błąd odświeżania")
+                    }
+                } while (gate.finish())
             } finally {
-                refreshInProgress.set(false)
                 pending?.finish()
             }
         }
     }
 
+    private suspend fun cycle(app: Context) {
+        val ids = widgetIds(app)
+        if (ids.isEmpty()) return
+        // 1) od razu pokazujemy ostatnie dane (albo stan ładowania) ze znacznikiem "odświeżanie"
+        pushAll(app, ids, (lastData ?: emptyData(app)).copy(busy = true))
+        // 2) pobieranie z twardym limitem czasu; blokujące I/O nie jest anulowalne, więc czekamy na Deferred
+        val job = CoroutineScope(Dispatchers.IO).async { collect(app) }
+        val data = withTimeoutOrNull(HARD_TIMEOUT_MS) { job.await() }
+        if (data == null) {
+            job.cancel()
+            Log.w(TAG, "Refresh timed out after ${HARD_TIMEOUT_MS} ms")
+        }
+        val result = data ?: emptyData(app)
+        lastData = result
+        pushAll(app, widgetIds(app), result)
+        evaluateAlerts(app, result)
+    }
+
     /** Wersja dla WorkManagera: wykonuje się synchronicznie w korutynie workera. */
     suspend fun refreshOnce(ctx: Context) {
         val app = ctx.applicationContext
-        val ids = widgetIds(app)
         val data = collect(app)
-        if (ids.isNotEmpty()) push(app, ids, safeRender(app, data))
-        Alerts.evaluate(app, data)
+        lastData = data
+        val ids = widgetIds(app)
+        if (ids.isNotEmpty()) pushAll(app, ids, data)
+        evaluateAlerts(app, data)
     }
 
-    private fun safeRender(ctx: Context, data: WidgetData) =
+    /** Błąd alertów (np. powiadomienia) nie może zastąpić poprawnie narysowanego widgetu ekranem błędu. */
+    private fun evaluateAlerts(app: Context, data: WidgetData) {
         try {
-            WidgetRenderer.render(ctx, data)
+            Alerts.evaluate(app, data)
         } catch (e: Exception) {
-            WidgetRenderer.safe(ctx, "Błąd widgetu")
+            Log.w(TAG, "Alert evaluation failed", e)
         }
+    }
 
-    private fun push(ctx: Context, ids: IntArray, views: android.widget.RemoteViews) {
+    private fun pushAll(ctx: Context, ids: IntArray, data: WidgetData) {
         val mgr = AppWidgetManager.getInstance(ctx)
-        try {
-            mgr.updateAppWidget(ids, views)
-        } catch (e: Exception) {
-            mgr.updateAppWidget(ids, WidgetRenderer.safe(ctx, "Błąd widgetu"))
+        for (id in ids) {
+            val views: RemoteViews = try {
+                WidgetRenderer.render(ctx, data, layoutFor(mgr, id))
+            } catch (e: Exception) {
+                Log.e(TAG, "Render failed for widget $id", e)
+                WidgetRenderer.safe(ctx, "Błąd widgetu")
+            }
+            try {
+                mgr.updateAppWidget(id, views)
+            } catch (e: Exception) {
+                Log.e(TAG, "updateAppWidget failed for widget $id", e)
+                try {
+                    mgr.updateAppWidget(id, WidgetRenderer.safe(ctx, "Błąd widgetu"))
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Fallback widget update failed for widget $id", e2)
+                }
+            }
+        }
+    }
+
+    private fun pushSafe(ctx: Context, ids: IntArray, message: String) {
+        val mgr = AppWidgetManager.getInstance(ctx)
+        for (id in ids) {
+            try {
+                mgr.updateAppWidget(id, WidgetRenderer.safe(ctx, message))
+            } catch (e: Exception) {
+                Log.e(TAG, "Safe widget update failed for widget $id", e)
+            }
         }
     }
 
