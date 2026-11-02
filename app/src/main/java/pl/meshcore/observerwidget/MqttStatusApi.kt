@@ -6,6 +6,30 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object MqttStatusApi {
+    /**
+     * Checks whether the broker's HTTP site is reachable. This is intentionally
+     * independent from the MQTT connection status exposed by /api/mqtt/status.
+     */
+    fun checkWebsite(host: String, timeoutMs: Int): Health {
+        if (host.isBlank()) return Health.BAD
+        val url = try { URL(Config.baseUrl(host)) } catch (_: Exception) { return Health.BAD }
+        return try {
+            val connection = url.openConnection() as HttpURLConnection
+            try {
+                connection.connectTimeout = timeoutMs.coerceAtLeast(1)
+                connection.readTimeout = timeoutMs.coerceAtLeast(1)
+                connection.requestMethod = "GET"
+                connection.useCaches = false
+                connection.setRequestProperty("Cache-Control", "no-cache, no-store")
+                if (connection.responseCode in 200..299) Health.GOOD else Health.BAD
+            } finally {
+                connection.disconnect()
+            }
+        } catch (_: Exception) {
+            Health.BAD
+        }
+    }
+
     fun fetch(host: String, timeoutMs: Int, nowMs: Long = System.currentTimeMillis()): Health {
         if (host.isBlank()) return Health.UNKNOWN
         val url = try { URL("${Config.baseUrl(host)}/api/mqtt/status") } catch (_: Exception) { return Health.UNKNOWN }
