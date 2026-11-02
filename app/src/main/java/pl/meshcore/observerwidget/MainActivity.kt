@@ -114,6 +114,11 @@ class MainActivity : Activity() {
     }
 
     private fun refresh() {
+        if (!Config(this).monitoringEnabled) {
+            if (tab == 0) renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this))
+            else showLive(null, "Monitoring zatrzymany.", emptyList())
+            return
+        }
         if (!busy.compareAndSet(false, true)) return
         val app = applicationContext
         val which = tab
@@ -203,7 +208,6 @@ class MainActivity : Activity() {
                 handler.post(ticker)
             }
             renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this@MainActivity))
-            if (!wasEnabled) refresh()
         }
     }
 
