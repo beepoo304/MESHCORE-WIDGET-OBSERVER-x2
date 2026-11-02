@@ -176,18 +176,16 @@ class MainActivity : Activity() {
             return
         }
         val obs = d.observer
-        val (liveText, liveColor) = WidgetRenderer.liveState(d, now)
         dash.addView(line(obs?.name ?: "—", 26f, Color.WHITE, bold = true))
         dash.addView(line(
             listOfNotNull(obs?.model, obs?.firmware?.let { "fw $it" }, d.observerId.take(4).uppercase()).joinToString("  ·  "),
             16f, Color.WHITE
         ))
-        dash.addView(line(liveText, 24f, liveColor, bold = true))
         obs?.let { dash.addView(line("Dane z: ${Config.displayHost(it.host)}", 12f, WidgetRenderer.GRAY)) }
         dash.addView(spacer())
-        dash.addView(brokerCard("MQTT1", d.mqtt1Host, d.broker1, d, now))
+        dash.addView(brokerCard("MQTT1", d.mqtt1Host, d.broker1, d, now, d.mqtt1Health))
         dash.addView(spacer())
-        dash.addView(brokerCard("MQTT2", d.mqtt2Host, d.broker2, d, now))
+        dash.addView(brokerCard("MQTT2", d.mqtt2Host, d.broker2, d, now, d.mqtt2Health))
         dash.addView(spacer())
         dash.addView(line("Odświeżono ${DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()))}, co ${d.intervalSec} s", 12f, WidgetRenderer.GRAY))
     }
@@ -211,13 +209,14 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun brokerCard(title: String, host: String, r: FetchResult?, d: WidgetData, now: Long): View {
+    private fun brokerCard(title: String, host: String, r: FetchResult?, d: WidgetData, now: Long, health: Health): View {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.card_outline)
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
-        box.addView(line("$title  ${Config.displayHost(host)}", 18f, Color.WHITE, bold = true))
+        val titleColor = when (health) { Health.GOOD -> Color.WHITE; Health.BAD -> WidgetRenderer.RED; Health.UNKNOWN -> WidgetRenderer.GRAY }
+        box.addView(line("$title  ${Config.displayHost(host)}", 18f, titleColor, bold = true))
         when (r) {
             is FetchResult.Ok -> {
                 val s = r.snapshot
