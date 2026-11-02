@@ -21,10 +21,13 @@ class ObserverWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == ObserverRefresh.ACTION_REFRESH) {
-            ObserverRefresh.refreshAll(context, goAsync())
-        } else {
-            super.onReceive(context, intent)
+        when (intent.action) {
+            ObserverRefresh.ACTION_REFRESH -> ObserverRefresh.refreshAll(context, goAsync())
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                RefreshWorker.sync(context)
+                ObserverRefresh.refreshAll(context)
+            }
+            else -> super.onReceive(context, intent)
         }
     }
 
