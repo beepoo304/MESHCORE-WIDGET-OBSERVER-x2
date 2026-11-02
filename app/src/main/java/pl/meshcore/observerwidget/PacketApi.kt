@@ -32,7 +32,17 @@ object PacketApi {
         11 to "CONTROL", 15 to "RAW_CUSTOM"
     )
 
+    /** Próbuje ID wielkimi literami; gdy lista jest pusta, także małymi (serwery rozróżniają wielkość liter). */
     fun fetch(host: String, id: String, timeoutMs: Int): PacketsResult {
+        var last: PacketsResult = PacketsResult.Fail(host, "Brak identyfikatora")
+        for (variant in Config.idVariants(id)) {
+            last = fetchOne(host, variant, timeoutMs)
+            if (last !is PacketsResult.Ok || last.packets.isNotEmpty()) return last
+        }
+        return last
+    }
+
+    private fun fetchOne(host: String, id: String, timeoutMs: Int): PacketsResult {
         val url = try {
             URL("${Config.baseUrl(host)}/api/packets?observer=${URLEncoder.encode(id, "UTF-8")}&limit=$LIMIT")
         } catch (e: Exception) {

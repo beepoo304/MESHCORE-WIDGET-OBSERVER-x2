@@ -43,4 +43,27 @@ class ObserverApiTest {
         assertTrue(!Config.isValidId(id.take(63)))
         assertTrue(!Config.isValidId(id.replace('f', 'z')))
     }
+
+    /** Odpowiedź skopiowana z żywego serwera (GET /api/observers/{ID}), z dodatkowymi polami, które ignorujemy. */
+    @Test fun parsesRealServerResponse() {
+        val body = """{"id":"9B250340D918846EFB9140F6243E9253FA0DB9DD3B1B8C0AD8A53337CE5D1234","name":"Ro69ot","iata":"KTW",
+            "last_seen":"2026-11-02T10:19:37Z","first_seen":"2026-09-24T11:26:26Z","packet_count":171554,"model":"ProMicro DIY",
+            "firmware":"v1.16.0-07a3ca9","battery_mv":4296,"noise_floor":-107,"last_packet_at":"2026-11-02T10:19:28Z",
+            "packetsLastHour":143,"lat":null,"lon":null,"nodeRole":null,"clock_skew_seconds":null}"""
+        val s = (ObserverApi.parse("live.meshcorekk.xyz", body) as FetchResult.Ok).snapshot
+        assertEquals("Ro69ot", s.name)
+        assertEquals("ProMicro DIY", s.model)
+        assertEquals(171_554L, s.totalPackets)
+        assertEquals(143L, s.packetsPerHour)
+        assertEquals(ObserverApi.parseTime("2026-11-02T10:19:28Z"), s.lastPacketMs)
+    }
+
+    @Test fun errorBodyIsFailure() =
+        assertTrue(ObserverApi.parse("h", """{"error":"Observer not found"}""") is FetchResult.Fail)
+
+    /** Serwery rozróżniają wielkość liter: hash musi trafiać do API wielkimi literami. */
+    @Test fun idIsNormalizedToUppercase() {
+        assertEquals(id.uppercase(), Config.normalizeId("  $id "))
+        assertEquals(listOf(id.uppercase(), id.lowercase()), Config.idVariants(id))
+    }
 }
