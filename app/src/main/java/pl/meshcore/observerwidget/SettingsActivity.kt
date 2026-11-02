@@ -102,6 +102,7 @@ class SettingsActivity : Activity() {
         setContentView(ScrollView(this).apply {
             setBackgroundColor(Color.BLACK)
             addView(root)
+            applySystemBarsPadding()
         })
     }
 

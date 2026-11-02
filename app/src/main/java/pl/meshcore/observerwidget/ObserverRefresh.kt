@@ -1,11 +1,13 @@
 package pl.meshcore.observerwidget
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import android.widget.RemoteViews
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +33,36 @@ object ObserverRefresh {
     fun pendingIntent(ctx: Context): PendingIntent {
         val i = Intent(ctx, ObserverWidgetProvider::class.java).setAction(ACTION_REFRESH)
         return PendingIntent.getBroadcast(ctx, 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun alarmIntent(ctx: Context): PendingIntent {
+        val i = Intent(ctx, ObserverWidgetProvider::class.java).setAction(ACTION_REFRESH)
+        return PendingIntent.getBroadcast(ctx, 2, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    /**
+     * WorkManager ma minimum 15 min, więc interwał z ustawień (np. 15 s) realizuje samoodnawialny alarm:
+     * po każdym odświeżeniu planujemy następne. Nie wymaga uprawnień (inexact, działa też w Doze, choć rzadziej).
+     * WorkManager zostaje jako zapas, który wznawia łańcuch po zabiciu procesu.
+     */
+    fun scheduleNext(ctx: Context) {
+        val app = ctx.applicationContext
+        if (widgetIds(app).isEmpty()) return
+        try {
+            val am = app.getSystemService(AlarmManager::class.java)
+            val at = SystemClock.elapsedRealtime() + Config(app).intervalSec * 1000L
+            am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, alarmIntent(app))
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleNext failed", e)
+        }
+    }
+
+    fun cancelAlarm(ctx: Context) {
+        try {
+            ctx.applicationContext.getSystemService(AlarmManager::class.java).cancel(alarmIntent(ctx.applicationContext))
+        } catch (e: Exception) {
+            Log.w(TAG, "cancelAlarm failed", e)
+        }
     }
 
     private fun widgetIds(ctx: Context): IntArray =
@@ -84,6 +116,7 @@ object ObserverRefresh {
                     }
                 } while (gate.finish())
             } finally {
+                scheduleNext(app)
                 pending?.finish()
             }
         }
@@ -115,6 +148,7 @@ object ObserverRefresh {
         val ids = widgetIds(app)
         if (ids.isNotEmpty()) pushAll(app, ids, data)
         evaluateAlerts(app, data)
+        scheduleNext(app)
     }
 
     /** Błąd alertów (np. powiadomienia) nie może zastąpić poprawnie narysowanego widgetu ekranem błędu. */
