@@ -33,6 +33,7 @@ class ObserverWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onDisabled(context: Context) {
+        ObserverRefresh.cancelAlarm(context)
         RefreshWorker.sync(context)
     }
 }

@@ -83,6 +83,7 @@ class MainActivity : Activity() {
         root.addView(dashScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(liveBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
+        root.applySystemBarsPadding()
         select(0)
     }
 
