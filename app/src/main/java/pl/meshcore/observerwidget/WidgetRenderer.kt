@@ -34,8 +34,16 @@ object WidgetRenderer {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-    fun render(ctx: Context, d: WidgetData, nowMs: Long = System.currentTimeMillis()): RemoteViews {
-        val v = RemoteViews(ctx.packageName, R.layout.widget_observer)
+    fun render(
+        ctx: Context,
+        d: WidgetData,
+        layout: WidgetLayout = WidgetLayout.DEFAULT,
+        nowMs: Long = System.currentTimeMillis()
+    ): RemoteViews {
+        val v = RemoteViews(ctx.packageName, if (layout.compact) R.layout.widget_observer_compact else R.layout.widget_observer)
+        val totalVisibility = if (layout.showTotal) android.view.View.VISIBLE else android.view.View.GONE
+        v.setViewVisibility(R.id.m1_total_col, totalVisibility)
+        v.setViewVisibility(R.id.m2_total_col, totalVisibility)
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
@@ -63,36 +71,51 @@ object WidgetRenderer {
         v.setTextColor(R.id.obs_live, liveColor)
         v.setInt(R.id.obs_live, "setBackgroundResource", liveBg(liveColor))
 
-        broker(v, d, d.broker1, nowMs, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
-        broker(v, d, d.broker2, nowMs, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
+        broker(v, d, d.broker1, nowMs, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
+        broker(v, d, d.broker2, nowMs, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
         return v
     }
 
-    private fun broker(v: RemoteViews, d: WidgetData, r: FetchResult?, nowMs: Long, hourId: Int, totalId: Int, lastId: Int) {
-        when (r) {
-            is FetchResult.Ok -> {
-                val s = r.snapshot
-                v.setTextViewText(hourId, s.packetsPerHour.toString())
-                v.setTextViewText(totalId, Status.formatCount(s.totalPackets))
-                if (s.lastPacketMs == null) {
-                    v.setTextViewText(lastId, "brak")
-                    v.setInt(lastId, "setBackgroundResource", R.drawable.pill_gray)
-                } else {
-                    val age = nowMs - s.lastPacketMs
-                    v.setChronometer(lastId, SystemClock.elapsedRealtime() - age.coerceAtLeast(0), "%s", true)
-                    v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
-                        Level.GREEN -> R.drawable.pill_green
-                        Level.ORANGE -> R.drawable.pill_orange
-                        else -> R.drawable.pill_red
-                    })
-                }
+    /** Teksty karty brokera. last == null oznacza, że czas ostatniego pakietu pokazuje Chronometer. */
+    data class BrokerTexts(val hour: String, val total: String, val last: String?)
+
+    fun brokerTexts(r: FetchResult?, compact: Boolean): BrokerTexts = when (r) {
+        is FetchResult.Ok -> {
+            val s = r.snapshot
+            BrokerTexts(
+                hour = if (compact) "${s.packetsPerHour}/h" else s.packetsPerHour.toString(),
+                total = Status.formatCount(s.totalPackets).let { if (compact) "$it pkt" else it },
+                last = if (s.lastPacketMs == null) "brak" else null
+            )
+        }
+        // API niedostępne: nigdy nie udajemy LIVE
+        else -> BrokerTexts("—", "—", if (r == null) "…" else "API ✕")
+    }
+
+    private fun broker(
+        v: RemoteViews, d: WidgetData, r: FetchResult?, nowMs: Long, layout: WidgetLayout,
+        hourId: Int, totalId: Int, lastId: Int
+    ) {
+        val t = brokerTexts(r, layout.compact)
+        v.setTextViewText(hourId, t.hour)
+        v.setTextViewText(totalId, t.total)
+        when {
+            r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
+                val age = nowMs - r.snapshot.lastPacketMs
+                v.setChronometer(lastId, SystemClock.elapsedRealtime() - age.coerceAtLeast(0), "%s", true)
+                v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
+                    Level.GREEN -> R.drawable.pill_green
+                    Level.ORANGE -> R.drawable.pill_orange
+                    else -> R.drawable.pill_red
+                })
             }
             else -> {
-                // API niedostępne: nigdy nie udajemy LIVE
-                v.setTextViewText(hourId, "—")
-                v.setTextViewText(totalId, "—")
-                v.setTextViewText(lastId, if (r == null) "…" else "API ✕")
-                v.setInt(lastId, "setBackgroundResource", if (r == null) R.drawable.pill_gray else R.drawable.pill_red)
+                v.setTextViewText(lastId, t.last)
+                v.setInt(lastId, "setBackgroundResource", when {
+                    r is FetchResult.Ok -> R.drawable.pill_gray
+                    r == null -> R.drawable.pill_gray
+                    else -> R.drawable.pill_red
+                })
             }
         }
     }
