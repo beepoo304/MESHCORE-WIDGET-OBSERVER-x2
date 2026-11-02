@@ -48,7 +48,9 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
         // Count down from the configured refresh interval to zero.
-        val countdownBase = SystemClock.elapsedRealtime() + d.intervalSec * 1_000L
+        val nowElapsed = SystemClock.elapsedRealtime()
+        val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
+        val countdownBase = maxOf(nowElapsed, scheduledAt)
         v.setChronometer(R.id.interval_text, countdownBase, "%s", true)
         if (android.os.Build.VERSION.SDK_INT >= 24) {
             v.setChronometerCountDown(R.id.interval_text, true)
@@ -121,7 +123,7 @@ object WidgetRenderer {
     }
 
     private fun healthColor(health: Health): Int = when (health) {
-        Health.GOOD -> android.graphics.Color.WHITE
+        Health.GOOD -> GREEN
         Health.BAD -> RED
         Health.UNKNOWN -> GRAY
     }

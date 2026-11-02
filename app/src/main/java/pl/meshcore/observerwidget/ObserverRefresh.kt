@@ -30,6 +30,9 @@ object ObserverRefresh {
     @Volatile
     private var lastData: WidgetData? = null
 
+    @Volatile
+    private var nextRefreshElapsedRealtime: Long = SystemClock.elapsedRealtime()
+
     fun pendingIntent(ctx: Context): PendingIntent {
         val i = Intent(ctx, ObserverWidgetProvider::class.java).setAction(ACTION_REFRESH)
         return PendingIntent.getBroadcast(ctx, 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -45,12 +48,17 @@ object ObserverRefresh {
      * po każdym odświeżeniu planujemy następne. Nie wymaga uprawnień (inexact, działa też w Doze, choć rzadziej).
      * WorkManager zostaje jako zapas, który wznawia łańcuch po zabiciu procesu.
      */
+    fun nextRefreshElapsedRealtime(intervalSec: Int): Long =
+        nextRefreshElapsedRealtime.takeIf { it > 0L }
+            ?: (SystemClock.elapsedRealtime() + intervalSec.coerceAtLeast(1) * 1_000L)
+
     fun scheduleNext(ctx: Context) {
         val app = ctx.applicationContext
         if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
         try {
             val am = app.getSystemService(AlarmManager::class.java)
             val at = SystemClock.elapsedRealtime() + Config(app).intervalSec * 1000L
+            nextRefreshElapsedRealtime = at
             am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, alarmIntent(app))
         } catch (e: Exception) {
             Log.w(TAG, "scheduleNext failed", e)
@@ -146,6 +154,7 @@ object ObserverRefresh {
     }
 
     private suspend fun cycle(app: Context) {
+        nextRefreshElapsedRealtime = SystemClock.elapsedRealtime() + Config(app).intervalSec * 1_000L
         val ids = widgetIds(app)
         if (ids.isEmpty()) return
         // 1) od razu pokazujemy ostatnie dane (albo stan ładowania) ze znacznikiem "odświeżanie"
