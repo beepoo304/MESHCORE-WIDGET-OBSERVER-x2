@@ -16,28 +16,14 @@ enum class AlertAction { NONE, NOTIFY, CLEAR }
 /** Czysta logika alarmów: brak zależności od Androida, w pełni testowalna. */
 object AlertEngine {
 
-    /**
-     * Rozróżnia nieaktywnego Observera od padniętego brokera:
-     *  - Observer BAD, gdy NAJŚWIEŻSZY pakiet ze wszystkich źródeł jest starszy niż redMin.
-     *  - Broker BAD tylko wtedy, gdy jego pakiet jest stary, a Observer jest aktywny (inne źródło ma świeże dane).
-     *  - Brak danych z API = UNKNOWN (niedostępność API to nie awaria Observera ani brokera).
-     */
-    fun assess(last1: Long?, last2: Long?, observerLast: Long?, nowMs: Long, redMin: Int): Assessment {
-        val redMs = redMin * 60_000L
-        fun stale(t: Long) = (nowMs - t) > redMs
-        val obs = when {
+    /** Observer packet age and MQTT service availability are separate signals. */
+    fun assess(observerLast: Long?, nowMs: Long, redMin: Int, mqtt1: Health, mqtt2: Health): Assessment {
+        val observer = when {
             observerLast == null -> Health.UNKNOWN
-            stale(observerLast) -> Health.BAD
+            nowMs - observerLast > redMin * 60_000L -> Health.BAD
             else -> Health.GOOD
         }
-        fun broker(last: Long?) = when {
-            last == null -> Health.UNKNOWN
-            obs == Health.BAD -> Health.UNKNOWN   // winny Observer, nie broker
-            obs == Health.UNKNOWN -> Health.UNKNOWN
-            stale(last) -> Health.BAD
-            else -> Health.GOOD
-        }
-        return Assessment(obs, broker(last1), broker(last2))
+        return Assessment(observer, mqtt1, mqtt2)
     }
 
     /**

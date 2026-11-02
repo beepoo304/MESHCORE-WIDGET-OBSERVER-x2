@@ -30,20 +30,27 @@ object Alerts {
     }
 
     fun evaluate(ctx: Context, data: WidgetData, nowMs: Long = System.currentTimeMillis()) {
-        if (!data.configured) return
+        if (!Config(ctx).monitoringEnabled || !data.configured) return
         val cfg = Config(ctx)
-        val last1 = (data.broker1 as? FetchResult.Ok)?.snapshot?.lastPacketMs
-        val last2 = (data.broker2 as? FetchResult.Ok)?.snapshot?.lastPacketMs
-        val freshest = listOfNotNull(last1, last2, data.observer?.lastPacketMs).maxOrNull()
-        val assessment = AlertEngine.assess(last1, last2, freshest, nowMs, cfg.redMin)
+        val assessment = AlertEngine.assess(data.observer?.lastPacketMs, nowMs, cfg.redMin, data.mqtt1Health, data.mqtt2Health)
         val delayMs = cfg.alertDelayMin * 60_000L
         val cooldownMs = cfg.alertCooldownMin * 60_000L
         step(ctx, Kind.OBSERVER, assessment.observer, cfg.alertObserver, nowMs, delayMs, cooldownMs)
-        step(ctx, Kind.MQTT1, assessment.mqtt1, cfg.alertMqtt1, nowMs, delayMs, cooldownMs)
-        step(ctx, Kind.MQTT2, assessment.mqtt2, cfg.alertMqtt2, nowMs, delayMs, cooldownMs)
+        step(ctx, Kind.MQTT1, assessment.mqtt1, cfg.alertMqtt1, nowMs, delayMs, cooldownMs, cfg.mqtt1Host)
+        step(ctx, Kind.MQTT2, assessment.mqtt2, cfg.alertMqtt2, nowMs, delayMs, cooldownMs, cfg.mqtt2Host)
     }
 
-    private fun step(ctx: Context, kind: Kind, health: Health, enabled: Boolean, nowMs: Long, delayMs: Long, cooldownMs: Long) {
+    fun clearAll(ctx: Context) {
+        val app = ctx.applicationContext
+        app.getSharedPreferences("alert_state", Context.MODE_PRIVATE).edit().clear().apply()
+        NotificationManagerCompat.from(app).apply {
+            cancel(1001)
+            cancel(1002)
+            cancel(1003)
+        }
+    }
+
+    private fun step(ctx: Context, kind: Kind, health: Health, enabled: Boolean, nowMs: Long, delayMs: Long, cooldownMs: Long, host: String? = null) {
         synchronized(lock) {
             val prefs = ctx.applicationContext.getSharedPreferences("alert_state", Context.MODE_PRIVATE)
             val key = kind.key
@@ -58,7 +65,7 @@ object Alerts {
             var stateToPersist = next
             when (action) {
                 AlertAction.NOTIFY -> {
-                    if (!notify(ctx, kind, next.badSinceMs, nowMs)) {
+                    if (!notify(ctx, kind, next.badSinceMs, nowMs, host)) {
                         // Keep the alert pending; a later refresh can retry after permission is granted.
                         stateToPersist = next.copy(notified = false, lastNotifiedMs = previous.lastNotifiedMs)
                     }
@@ -76,7 +83,7 @@ object Alerts {
         }
     }
 
-    private fun notify(ctx: Context, kind: Kind, sinceMs: Long, nowMs: Long): Boolean {
+    private fun notify(ctx: Context, kind: Kind, sinceMs: Long, nowMs: Long, host: String?): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return false
@@ -90,7 +97,7 @@ object Alerts {
         val notification = NotificationCompat.Builder(ctx, kind.channel)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle(kind.title)
-            .setContentText("Stan trwa od ok. $elapsedMinutes min. Dotknij, aby otworzyć.")
+            .setContentText(if (host == null) "Brak pakietów od ok. $elapsedMinutes min." else "${Config.displayHost(host)}: brak połączenia MQTT od ok. $elapsedMinutes min.")
             .setContentIntent(openIntent)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
