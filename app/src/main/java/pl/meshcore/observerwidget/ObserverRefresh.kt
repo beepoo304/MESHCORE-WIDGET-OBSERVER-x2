@@ -47,7 +47,7 @@ object ObserverRefresh {
      */
     fun scheduleNext(ctx: Context) {
         val app = ctx.applicationContext
-        if (widgetIds(app).isEmpty()) return
+        if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
         try {
             val am = app.getSystemService(AlarmManager::class.java)
             val at = SystemClock.elapsedRealtime() + Config(app).intervalSec * 1000L
@@ -63,6 +63,24 @@ object ObserverRefresh {
         } catch (e: Exception) {
             Log.w(TAG, "cancelAlarm failed", e)
         }
+    }
+
+    fun stop(ctx: Context) {
+        val app = ctx.applicationContext
+        Config(app).monitoringEnabled = false
+        cancelAlarm(app)
+        RefreshWorker.sync(app)
+        Alerts.clearAll(app)
+        lastData = lastData?.copy(busy = false)
+        val ids = widgetIds(app)
+        if (ids.isNotEmpty()) pushAll(app, ids, lastData ?: emptyData(app))
+    }
+
+    fun start(ctx: Context) {
+        val app = ctx.applicationContext
+        Config(app).monitoringEnabled = true
+        RefreshWorker.sync(app)
+        refreshAll(app)
     }
 
     private fun widgetIds(ctx: Context): IntArray =
@@ -99,6 +117,11 @@ object ObserverRefresh {
      * Gdy odświeżanie już trwa, żądanie jest zapamiętane i wykonane po bieżącym cyklu (nie ginie).
      */
     fun refreshAll(ctx: Context, pending: BroadcastReceiver.PendingResult? = null) {
+        if (!Config(ctx).monitoringEnabled) {
+            cancelAlarm(ctx)
+            pending?.finish()
+            return
+        }
         if (!gate.request()) {
             pending?.finish()
             return
@@ -134,6 +157,7 @@ object ObserverRefresh {
             job.cancel()
             Log.w(TAG, "Refresh timed out after ${HARD_TIMEOUT_MS} ms")
         }
+        if (!Config(app).monitoringEnabled) return
         val result = data ?: lastData?.copy(busy = false) ?: emptyData(app)
         if (data != null) {
             lastData = data
@@ -148,7 +172,9 @@ object ObserverRefresh {
     /** Wersja dla WorkManagera: wykonuje się synchronicznie w korutynie workera. */
     suspend fun refreshOnce(ctx: Context) {
         val app = ctx.applicationContext
+        if (!Config(app).monitoringEnabled) return
         val data = collect(app)
+        if (!Config(app).monitoringEnabled) return
         lastData = data
         val ids = widgetIds(app)
         if (ids.isNotEmpty()) pushAll(app, ids, data)

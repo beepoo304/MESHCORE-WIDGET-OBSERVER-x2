@@ -12,6 +12,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ScrollView
@@ -37,11 +38,14 @@ class MainActivity : Activity() {
     private lateinit var liveHeader: TextView
     private lateinit var liveList: ListView
     private val adapter = PacketAdapter()
+    private var dashboardData: WidgetData? = null
 
     private val ticker = object : Runnable {
         override fun run() {
+            val config = Config(this@MainActivity)
+            if (!config.monitoringEnabled) return
             refresh()
-            handler.postDelayed(this, Config(this@MainActivity).intervalSec * 1000L)
+            handler.postDelayed(this, config.intervalSec * 1000L)
         }
     }
 
@@ -90,7 +94,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         handler.removeCallbacks(ticker)
-        handler.post(ticker)
+        if (Config(this).monitoringEnabled) handler.post(ticker)
     }
 
     override fun onPause() {
@@ -155,7 +159,13 @@ class MainActivity : Activity() {
 
     private fun renderDashboard(d: WidgetData) {
         dash.removeAllViews()
+        dashboardData = d
         val now = System.currentTimeMillis()
+        dash.addView(monitoringControl())
+        if (!Config(this).monitoringEnabled) {
+            dash.addView(line("Monitoring zatrzymany. Dane nie są odświeżane, alarmy są wyłączone.", 14f, WidgetRenderer.ORANGE))
+            dash.addView(spacer())
+        }
         if (!d.configured) {
             dash.addView(line("Wejdź w Settings i wpisz pełny hash Observera (64 znaki).", 18f, WidgetRenderer.ORANGE))
             return
@@ -175,6 +185,26 @@ class MainActivity : Activity() {
         dash.addView(brokerCard("MQTT2", d.mqtt2Host, d.broker2, d, now))
         dash.addView(spacer())
         dash.addView(line("Odświeżono ${DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()))}, co ${d.intervalSec} s", 12f, WidgetRenderer.GRAY))
+    }
+
+    private fun monitoringControl(): View = Button(this).apply {
+        val config = Config(this@MainActivity)
+        text = if (config.monitoringEnabled) "ZATRZYMAJ MONITORING" else "URUCHOM MONITORING"
+        setTextColor(Color.WHITE)
+        setBackgroundColor(if (config.monitoringEnabled) 0xFF8E2525.toInt() else 0xFF246B2B.toInt())
+        setOnClickListener {
+            val wasEnabled = Config(this@MainActivity).monitoringEnabled
+            if (wasEnabled) {
+                ObserverRefresh.stop(this@MainActivity)
+                handler.removeCallbacks(ticker)
+            } else {
+                ObserverRefresh.start(this@MainActivity)
+                handler.removeCallbacks(ticker)
+                handler.post(ticker)
+            }
+            renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this@MainActivity))
+            if (!wasEnabled) refresh()
+        }
     }
 
     private fun brokerCard(title: String, host: String, r: FetchResult?, d: WidgetData, now: Long): View {
