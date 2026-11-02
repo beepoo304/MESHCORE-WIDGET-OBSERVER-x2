@@ -47,12 +47,9 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
-        // Countdown runs locally in RemoteViews between API refreshes.
-        val countdown = SystemClock.elapsedRealtime() + d.intervalSec * 1000L
-        v.setChronometer(R.id.interval_text, countdown, "%s", true)
-        if (android.os.Build.VERSION.SDK_INT >= 24) {
-            v.setChronometerCountDown(R.id.interval_text, true)
-        }
+        // A RemoteViews Chronometer can continue below zero when Android delays an alarm.
+        // Display the configured polling interval instead of a misleading negative countdown.
+        v.setTextViewText(R.id.interval_text, "co ${d.intervalSec}s")
         v.setImageViewResource(R.id.refresh_icon, if (d.busy) R.drawable.ic_refresh_busy else R.drawable.ic_refresh)
 
         v.setTextViewText(R.id.m1_host, Config.displayHost(d.mqtt1Host))
