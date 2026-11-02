@@ -15,14 +15,14 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="MESH" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="26sp" android:maxLines="1"/>
+            android:text="MESH" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="30sp" android:maxLines="1"/>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:text="CORE" android:textColor="#6EF015" android:textStyle="bold" android:textSize="26sp" android:maxLines="1"/>
         <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
         <ImageView android:id="@+id/refresh_icon" android:layout_width="26dp" android:layout_height="26dp"
             android:src="@drawable/ic_refresh" android:contentDescription="@null"/>
         <TextView android:id="@+id/interval_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="6dp" android:text="15 s" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="20sp" android:maxLines="1"/>
+            android:layout_marginStart="6dp" android:text="15 s" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp" android:maxLines="1"/>
     </LinearLayout>
 
     <FrameLayout android:layout_width="match_parent" android:layout_height="1dp" android:background="#FFFFFF"/>
@@ -35,16 +35,16 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingTop="4dp" android:paddingBottom="4dp">
-        <ImageView android:layout_width="40dp" android:layout_height="40dp"
+        <ImageView android:layout_width="34dp" android:layout_height="34dp"
             android:src="@drawable/ic_tower" android:contentDescription="@null"/>
         <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:layout_marginStart="6dp" android:layout_marginEnd="8dp" android:background="#FFFFFF"/>
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
             <TextView android:id="@+id/obs_name" android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="—" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="19sp" android:maxLines="1" android:ellipsize="end"/>
+                android:text="—" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="16sp" android:maxLines="1" android:ellipsize="end"/>
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginTop="3dp">
                 <TextView android:id="@+id/obs_hash" android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:background="@drawable/badge_outline" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="1dp" android:paddingBottom="1dp"
-                    android:text="----" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="17sp" android:maxLines="1"/>
+                    android:text="----" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp" android:maxLines="1"/>
                 <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
                 <TextView android:id="@+id/obs_live" android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:background="@drawable/live_gray" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="1dp" android:paddingBottom="1dp"
@@ -59,27 +59,27 @@
     <LinearLayout
         android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="3"
         android:orientation="horizontal" android:gravity="center_vertical"
-        android:background="@drawable/card_outline" android:padding="6dp">
+        android:background="@drawable/card_outline" android:padding="8dp">
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="4" android:orientation="vertical">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="MQTT1" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="19sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="11sp" android:autoSizeMaxTextSize="19sp" android:autoSizeStepGranularity="1sp"/>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="MQTT1" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="14sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="14sp" android:autoSizeStepGranularity="1sp"/>
             <TextView android:id="@+id/m1_host" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#FFFFFF" android:textSize="10sp" android:maxLines="1" android:ellipsize="end" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
         </LinearLayout>
         <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="2" android:orientation="vertical" android:gravity="center_horizontal">
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Packets/h" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m1_hour" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#6EF015" android:textStyle="bold" android:gravity="center" android:textSize="24sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="14sp" android:autoSizeMaxTextSize="24sp" android:autoSizeStepGranularity="1sp"/>
+            <TextView android:id="@+id/m1_hour" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#6EF015" android:textStyle="bold" android:gravity="center" android:textSize="18sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="14sp" android:autoSizeMaxTextSize="24sp" android:autoSizeStepGranularity="1sp"/>
         </LinearLayout>
         <LinearLayout android:id="@+id/m1_total_col" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="3" android:orientation="horizontal" android:gravity="center_vertical">
         <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center_horizontal">
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Total packets" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m1_total" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="15sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="15sp" android:autoSizeStepGranularity="1sp"/>
+            <TextView android:id="@+id/m1_total" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="12sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="15sp" android:autoSizeStepGranularity="1sp"/>
         </LinearLayout>
         </LinearLayout>
         <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical" android:gravity="center_horizontal">
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Last packet" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <Chronometer android:id="@+id/m1_last" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:background="@drawable/pill_gray" android:text="—" android:textColor="#000000" android:textStyle="bold" android:textSize="17sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="17sp" android:autoSizeStepGranularity="1sp"/>
+            <Chronometer android:id="@+id/m1_last" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:background="@drawable/pill_gray" android:text="—" android:textColor="#000000" android:textStyle="bold" android:textSize="13sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
         </LinearLayout>
     </LinearLayout>
 
