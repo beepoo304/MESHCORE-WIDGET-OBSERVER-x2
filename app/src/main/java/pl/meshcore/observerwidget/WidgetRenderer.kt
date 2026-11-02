@@ -17,6 +17,7 @@ object WidgetRenderer {
         val obs = d.observer
         return when {
             !d.configured -> "SETUP" to ORANGE
+            obs == null && d.busy -> "…" to GRAY
             obs == null -> "API ✕" to RED
             obs.lastPacketMs == null -> "NO DATA" to GRAY
             else -> when (Status.level(nowMs - obs.lastPacketMs, d.orangeMin, d.redMin)) {

@@ -19,7 +19,17 @@ import java.time.ZoneOffset
  */
 object ObserverApi {
 
+    /** Próbuje ID wielkimi literami, a przy 404 także małymi (serwery rozróżniają wielkość liter). */
     fun fetch(host: String, id: String, timeoutMs: Int): FetchResult {
+        var last: FetchResult = FetchResult.Fail(host, "Brak identyfikatora")
+        for (variant in Config.idVariants(id)) {
+            last = fetchOne(host, variant, timeoutMs)
+            if (last is FetchResult.Ok || !(last is FetchResult.Fail && last.reason.contains("404"))) return last
+        }
+        return last
+    }
+
+    private fun fetchOne(host: String, id: String, timeoutMs: Int): FetchResult {
         val url = try {
             URL("${Config.baseUrl(host)}/api/observers/${URLEncoder.encode(id, "UTF-8")}")
         } catch (e: Exception) {

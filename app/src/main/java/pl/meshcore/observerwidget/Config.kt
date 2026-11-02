@@ -6,10 +6,13 @@ import android.content.Context
 class Config(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("config", Context.MODE_PRIVATE)
 
-    /** Pełny hash Observera (64 znaki hex). Puste, dopóki użytkownik go nie poda. */
+    /**
+     * Pełny hash Observera (64 znaki hex), zapisywany WIELKIMI literami: tak zwracają go serwery CoreScope,
+     * a wyszukiwanie po ID rozróżnia wielkość liter (małe litery dają 404 / pustą listę pakietów).
+     */
     var observerId: String
-        get() = prefs.getString("observer_id", "").orEmpty().trim().lowercase()
-        set(v) = prefs.edit().putString("observer_id", v.trim().lowercase()).apply()
+        get() = normalizeId(prefs.getString("observer_id", "").orEmpty())
+        set(v) = prefs.edit().putString("observer_id", normalizeId(v)).apply()
 
     var mqtt1Host: String
         get() = prefs.getString("mqtt1_host", DEFAULT_MQTT1).orEmpty().ifBlank { DEFAULT_MQTT1 }
@@ -75,6 +78,11 @@ class Config(context: Context) {
 
         private val HEX64 = Regex("^[0-9a-fA-F]{64}$")
         fun isValidId(id: String) = HEX64.matches(id.trim())
+
+        fun normalizeId(id: String) = id.trim().uppercase()
+
+        /** Warianty ID do wypróbowania: najpierw wielkie litery (format serwerów), potem małe. */
+        fun idVariants(id: String): List<String> = listOf(normalizeId(id), id.trim().lowercase()).distinct()
 
         fun baseUrl(host: String): String {
             val h = host.trim().trimEnd('/')
