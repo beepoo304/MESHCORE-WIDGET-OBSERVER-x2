@@ -41,7 +41,10 @@ object ObserverApi {
                 c.connectTimeout = timeoutMs
                 c.readTimeout = timeoutMs
                 c.requestMethod = "GET"
+                c.useCaches = false
                 c.setRequestProperty("Accept", "application/json")
+                c.setRequestProperty("Cache-Control", "no-cache, no-store")
+                c.setRequestProperty("Pragma", "no-cache")
                 val code = c.responseCode
                 when {
                     code == 404 -> FetchResult.Fail(host, "Observer nieznany na serwerze (404)")
