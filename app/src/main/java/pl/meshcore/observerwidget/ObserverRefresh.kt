@@ -241,8 +241,12 @@ object ObserverRefresh {
         return coroutineScope {
             val a1 = async(Dispatchers.IO) { ObserverApi.fetch(c.mqtt1Host, c.observerId, timeout) }
             val a2 = async(Dispatchers.IO) { ObserverApi.fetch(c.mqtt2Host, c.observerId, timeout) }
-            val h1 = async(Dispatchers.IO) { MqttStatusApi.fetch(c.mqtt1Host, timeout) }
-            val h2 = async(Dispatchers.IO) { MqttStatusApi.fetch(c.mqtt2Host, timeout) }
+            // Website reachability is checked independently from MQTT telemetry.
+            // Each probe is short; intervalSec controls when the next cycle starts,
+            // not how long an HTTP request is allowed to run.
+            val websiteTimeout = minOf(c.intervalSec * 1_000, 5_000)
+            val h1 = async(Dispatchers.IO) { MqttStatusApi.checkWebsite(c.mqtt1Host, websiteTimeout) }
+            val h2 = async(Dispatchers.IO) { MqttStatusApi.checkWebsite(c.mqtt2Host, websiteTimeout) }
             val hf = async(Dispatchers.IO) { if (c.fallbackHost.isBlank()) Health.UNKNOWN else MqttStatusApi.fetch(c.fallbackHost, timeout) }
             val r1 = a1.await()
             val r2 = a2.await()
