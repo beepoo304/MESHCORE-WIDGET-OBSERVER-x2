@@ -134,8 +134,13 @@ object ObserverRefresh {
             job.cancel()
             Log.w(TAG, "Refresh timed out after ${HARD_TIMEOUT_MS} ms")
         }
-        val result = data ?: emptyData(app)
-        lastData = result
+        val result = data ?: lastData?.copy(busy = false) ?: emptyData(app)
+        if (data != null) {
+            lastData = data
+            Log.i(TAG, "Refresh OK: mqtt1=${(data.broker1 as? FetchResult.Ok)?.snapshot?.totalPackets}, mqtt2=${(data.broker2 as? FetchResult.Ok)?.snapshot?.totalPackets}")
+        } else {
+            Log.w(TAG, "Refresh timed out; keeping last successful counters")
+        }
         pushAll(app, widgetIds(app), result)
         evaluateAlerts(app, result)
     }
@@ -214,7 +219,7 @@ object ObserverRefresh {
             val r2 = a2.await()
             var obs = (r1 as? FetchResult.Ok)?.snapshot ?: (r2 as? FetchResult.Ok)?.snapshot
             if (obs == null && c.fallbackHost.isNotBlank()) {
-                obs = (ObserverApi.fetch(c.fallbackHost, c.observerId, timeout) as? FetchResult.Ok)?.snapshot
+                obs = (ObserverApi.fetch(c.fallbackHost, c.observerId, minOf(timeout, 2_000)) as? FetchResult.Ok)?.snapshot
             }
             base.copy(observer = obs, broker1 = r1, broker2 = r2)
         }
