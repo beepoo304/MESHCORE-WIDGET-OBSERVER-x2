@@ -54,7 +54,8 @@ object WidgetRenderer {
         val remainingSeconds = (remainingMs + 999L) / 1_000L
         val minutes = remainingSeconds / 60L
         val seconds = remainingSeconds % 60L
-        v.setTextViewText(R.id.interval_text, "${remainingSeconds}s")
+        v.setChronometer(R.id.interval_text, scheduledAt, "%s", false)
+        v.setChronometerCountDown(R.id.interval_text, true)
         v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
         v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
@@ -63,7 +64,7 @@ object WidgetRenderer {
 
         // Wiersz Observera
         val obs = d.observer
-        v.setTextViewText(R.id.obs_hash, "${d.observerId.ifBlank { "----" }.uppercase()}")
+        v.setTextViewText(R.id.obs_hash, d.observerId.ifBlank { "----" }.uppercase())
         v.setTextColor(R.id.obs_hash, GRAY)
         v.setTextViewText(R.id.obs_name, when {
             !d.configured -> "Ustaw hash w aplikacji"
@@ -104,7 +105,8 @@ object WidgetRenderer {
         when {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
                 val age = nowMs - r.snapshot.lastPacketMs
-                v.setTextViewText(lastId, formatPacketAge(age))
+                val base = SystemClock.elapsedRealtime() - age.coerceAtLeast(0L)
+                v.setChronometer(lastId, base, "%s", true)
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
