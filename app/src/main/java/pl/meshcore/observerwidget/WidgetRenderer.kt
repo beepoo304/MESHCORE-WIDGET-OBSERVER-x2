@@ -64,7 +64,7 @@ object WidgetRenderer {
 
         // Wiersz Observera
         val obs = d.observer
-        v.setTextViewText(R.id.obs_hash, d.observerId.ifBlank { "----" }.uppercase())
+        v.setTextViewText(R.id.obs_hash, "Key: ${d.observerId.ifBlank { "----" }.uppercase()}")
         v.setTextColor(R.id.obs_hash, GRAY)
         v.setTextViewText(R.id.obs_name, when {
             !d.configured -> "Ustaw hash w aplikacji"
