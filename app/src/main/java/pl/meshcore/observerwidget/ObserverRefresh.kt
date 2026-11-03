@@ -284,8 +284,8 @@ object ObserverRefresh {
             val first = async(Dispatchers.IO) { ObserverApi.fetch(config.mqtt1Host, config.observerId, timeout) }
             val second = async(Dispatchers.IO) { ObserverApi.fetch(config.mqtt2Host, config.observerId, timeout) }
             val websiteTimeout = minOf(config.intervalSec * 1_000, 5_000)
-            val firstHealth = async(Dispatchers.IO) { MqttStatusApi.checkWebsite(config.mqtt1Host, websiteTimeout) }
-            val secondHealth = async(Dispatchers.IO) { MqttStatusApi.checkWebsite(config.mqtt2Host, websiteTimeout) }
+            val firstHealth = async(Dispatchers.IO) { MqttStatusApi.fetch(config.mqtt1Host, websiteTimeout) }
+            val secondHealth = async(Dispatchers.IO) { MqttStatusApi.fetch(config.mqtt2Host, websiteTimeout) }
             val fallbackHealth = async(Dispatchers.IO) {
                 if (config.fallbackHost.isBlank()) Health.UNKNOWN
                 else MqttStatusApi.fetch(config.fallbackHost, timeout)
