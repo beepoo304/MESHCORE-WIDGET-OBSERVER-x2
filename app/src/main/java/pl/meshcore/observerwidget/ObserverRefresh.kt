@@ -54,7 +54,7 @@ object ObserverRefresh {
         if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
         try {
             val at = SystemClock.elapsedRealtime() + 1_000L
-            app.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(
+            app.getSystemService(AlarmManager::class.java).setExactAndAllowWhileIdle(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP, at, tickIntent(app)
             )
         } catch (e: Exception) {
