@@ -19,6 +19,7 @@ object AlertEngine {
     /** Observer packet age and MQTT service availability are separate signals. */
     fun assess(observerLast: Long?, nowMs: Long, redMin: Int, mqtt1: Health, mqtt2: Health): Assessment {
         val observer = when {
+            mqtt1 != Health.GOOD || mqtt2 != Health.GOOD -> Health.UNKNOWN
             observerLast == null -> Health.UNKNOWN
             nowMs - observerLast > redMin * 60_000L -> Health.BAD
             else -> Health.GOOD
