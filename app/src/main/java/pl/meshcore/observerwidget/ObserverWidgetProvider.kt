@@ -9,8 +9,8 @@ import android.os.Bundle
 class ObserverWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        // Natychmiastowy widok (ostatnie dane albo stan ładowania), potem dane z API.
         ObserverRefresh.renderNow(context, ids)
+        ObserverRefresh.scheduleTick(context)
         ObserverRefresh.refreshAll(context, goAsync())
     }
 
@@ -26,6 +26,7 @@ class ObserverWidgetProvider : AppWidgetProvider() {
             ObserverRefresh.ACTION_TICK -> ObserverRefresh.tick(context)
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 RefreshWorker.sync(context)
+                ObserverRefresh.scheduleTick(context)
                 ObserverRefresh.refreshAll(context)
             }
             else -> super.onReceive(context, intent)
@@ -34,6 +35,7 @@ class ObserverWidgetProvider : AppWidgetProvider() {
 
     override fun onEnabled(context: Context) {
         RefreshWorker.sync(context)
+        ObserverRefresh.scheduleTick(context)
     }
 
     override fun onDisabled(context: Context) {
