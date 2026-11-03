@@ -61,9 +61,6 @@ object WidgetRenderer {
         )
         v.setViewVisibility(R.id.refresh_spinner, android.view.View.GONE)
 
-        v.setViewVisibility(R.id.m1_host, android.view.View.GONE)
-        v.setViewVisibility(R.id.m2_host, android.view.View.GONE)
-
         // Wiersz Observera
         val obs = d.observer
         v.setTextViewText(R.id.obs_hash, d.observerId.ifBlank { "----" }.uppercase())
