@@ -47,8 +47,11 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
+        val monitoringEnabled = Config(ctx).monitoringEnabled
         val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        val remainingSec = ((scheduledAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L) + 999L) / 1_000L
+        val remainingSec = if (monitoringEnabled) {
+            ((scheduledAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L) + 999L) / 1_000L
+        } else 0L
         v.setTextViewText(R.id.interval_text, String.format("%02ds", remainingSec))
         v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
         v.setImageViewResource(
@@ -69,8 +72,10 @@ object WidgetRenderer {
         v.setTextColor(R.id.m1_title, healthColor(d.mqtt1Health))
         v.setTextColor(R.id.m2_title, healthColor(d.mqtt2Health))
 
-        broker(v, d, d.broker1, nowMs, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
-        broker(v, d, d.broker2, nowMs, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
+        val effectiveNowMs = if (monitoringEnabled) nowMs
+            else Config(ctx).monitoringStoppedAtMs.takeIf { it > 0L } ?: nowMs
+        broker(v, d, d.broker1, effectiveNowMs, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
+        broker(v, d, d.broker2, effectiveNowMs, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
         return v
     }
 
