@@ -109,7 +109,9 @@ object WidgetRenderer {
         when {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
                 val age = nowMs - r.snapshot.lastPacketMs
-                v.setTextViewText(lastId, formatPacketAge(age))
+                val packetAgeSeconds = age.coerceAtLeast(0L) / 1_000L
+                val packetAgeBase = SystemClock.elapsedRealtime() - packetAgeSeconds * 1_000L
+                v.setChronometer(lastId, packetAgeBase, "%s", true)
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
