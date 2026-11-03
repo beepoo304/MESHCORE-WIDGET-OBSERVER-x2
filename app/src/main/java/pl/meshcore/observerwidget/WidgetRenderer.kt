@@ -55,8 +55,12 @@ object WidgetRenderer {
         val minutes = remainingSeconds / 60L
         val seconds = remainingSeconds % 60L
         v.setTextViewText(R.id.interval_text, String.format("%02d", remainingSeconds))
-        v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
-        v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
+        v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
+        v.setImageViewResource(
+            R.id.refresh_icon,
+            if (d.busy) R.drawable.ic_refresh_animated else R.drawable.ic_refresh
+        )
+        v.setViewVisibility(R.id.refresh_spinner, android.view.View.GONE)
 
         v.setViewVisibility(R.id.m1_host, android.view.View.GONE)
         v.setViewVisibility(R.id.m2_host, android.view.View.GONE)
