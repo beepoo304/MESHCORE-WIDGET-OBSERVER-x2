@@ -49,11 +49,13 @@ object WidgetRenderer {
 
         val nowElapsed = SystemClock.elapsedRealtime()
         val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        val remainingMs = (scheduledAt - nowElapsed).coerceAtLeast(0L)
-        val remainingSeconds = (remainingMs + 999L) / 1_000L
-        val minutes = remainingSeconds / 60L
-        val seconds = remainingSeconds % 60L
-        v.setTextViewText(R.id.interval_text, String.format("%02d", remainingSeconds))
+        v.setChronometer(
+            R.id.interval_text,
+            scheduledAt,
+            "%s",
+            true
+        )
+        v.setChronometerCountDown(R.id.interval_text, true)
         v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
         v.setImageViewResource(
             R.id.refresh_icon,
@@ -103,8 +105,10 @@ object WidgetRenderer {
         v.setTextViewText(totalId, t.total)
         when {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
-                val age = nowMs - r.snapshot.lastPacketMs
-                v.setTextViewText(lastId, formatPacketAge(age))
+                val age = (nowMs - r.snapshot.lastPacketMs).coerceAtLeast(0L)
+                val chronometerBase = SystemClock.elapsedRealtime() - age
+                v.setChronometer(lastId, chronometerBase, "%s", true)
+                v.setChronometerCountDown(lastId, false)
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
@@ -120,11 +124,6 @@ object WidgetRenderer {
                 })
             }
         }
-    }
-
-    private fun formatPacketAge(ageMs: Long): String {
-        val seconds = ageMs.coerceAtLeast(0L) / 1_000L
-        return if (seconds < 60L) "${seconds} s" else "${seconds / 60L} min"
     }
 
     private fun healthColor(health: Health): Int = when (health) {
