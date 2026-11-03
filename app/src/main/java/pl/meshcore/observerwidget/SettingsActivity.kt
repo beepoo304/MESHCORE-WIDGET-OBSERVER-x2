@@ -27,7 +27,6 @@ class SettingsActivity : Activity() {
     private lateinit var intervalBar: SeekBar
     private lateinit var intervalLabel: TextView
     private lateinit var info: TextView
-    private lateinit var alertObs: CheckBox
     private lateinit var alertM1: CheckBox
     private lateinit var alertM2: CheckBox
     private lateinit var delayField: EditText
@@ -78,14 +77,13 @@ class SettingsActivity : Activity() {
         redField = field(cfg.redMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(redField)
 
         root.addView(title("Powiadomienia PUSH"))
-        alertObs = check("Observer nie odbiera pakietów", cfg.alertObserver); root.addView(alertObs)
         alertM1 = check("MQTT1 nie działa", cfg.alertMqtt1); root.addView(alertM1)
         alertM2 = check("MQTT2 nie działa", cfg.alertMqtt2); root.addView(alertM2)
         root.addView(label("Opóźnienie alarmu (min)"))
         delayField = field(cfg.alertDelayMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(delayField)
         root.addView(label("Cooldown między powiadomieniami (min, min. 1)"))
         cooldownField = field(cfg.alertCooldownMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(cooldownField)
-        root.addView(label("Sprawdzanie w tle co ok. 15 min (ograniczenie Androida). Powiadomienie tylko po zmianie stanu."))
+        root.addView(label("Alarmy dotyczą wyłącznie statusu MQTT1 i MQTT2. Sprawdzanie w tle co ok. 15 min (ograniczenie Androida). Powiadomienie po potwierdzonej awarii i opóźnieniu."))
 
         info = label("").apply { setTextColor(Color.parseColor("#6EF015")) }
         root.addView(info)
@@ -157,7 +155,6 @@ class SettingsActivity : Activity() {
         cfg.intervalSec = intervalBar.progress + Config.MIN_INTERVAL
         cfg.orangeMin = orange
         cfg.redMin = red
-        cfg.alertObserver = alertObs.isChecked
         cfg.alertMqtt1 = alertM1.isChecked
         cfg.alertMqtt2 = alertM2.isChecked
         cfg.alertDelayMin = delay
