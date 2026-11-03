@@ -112,7 +112,7 @@ object ObserverRefresh {
     fun stop(ctx: Context) {
         val app = ctx.applicationContext
         val config = Config(app)
-        if (config.monitoringEnabled) config.monitoringStoppedAtMs = System.currentTimeMillis()
+        if (config.monitoringStoppedAtMs <= 0L) config.monitoringStoppedAtMs = System.currentTimeMillis()
         config.monitoringEnabled = false
         cancelAlarm(app)
         RefreshWorker.sync(app)
