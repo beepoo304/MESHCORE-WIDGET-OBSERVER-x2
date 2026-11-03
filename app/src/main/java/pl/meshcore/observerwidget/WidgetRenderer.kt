@@ -49,12 +49,12 @@ object WidgetRenderer {
 
         val nowElapsed = SystemClock.elapsedRealtime()
         val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        val countdownMs = (scheduledAt - nowElapsed).takeIf { it > 0L }
+        val remainingMs = (scheduledAt - nowElapsed).takeIf { it > 0L }
             ?: d.intervalSec.coerceAtLeast(1) * 1_000L
-        v.setChronometer(R.id.interval_text, nowElapsed + countdownMs, "%s", true)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            v.setChronometerCountDown(R.id.interval_text, true)
-        }
+        val remainingSeconds = (remainingMs + 999L) / 1_000L
+        val minutes = remainingSeconds / 60L
+        val seconds = remainingSeconds % 60L
+        v.setTextViewText(R.id.interval_text, "%02d:%02d".format(minutes, seconds))
         v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
         v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
