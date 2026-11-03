@@ -58,8 +58,8 @@ object WidgetRenderer {
         v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
         v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
-        v.setTextViewText(R.id.m1_host, Config.displayHost(d.mqtt1Host))
-        v.setTextViewText(R.id.m2_host, Config.displayHost(d.mqtt2Host))
+        v.setViewVisibility(R.id.m1_host, android.view.View.GONE)
+        v.setViewVisibility(R.id.m2_host, android.view.View.GONE)
 
         // Wiersz Observera
         val obs = d.observer
