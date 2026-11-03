@@ -49,8 +49,7 @@ object WidgetRenderer {
 
         val nowElapsed = SystemClock.elapsedRealtime()
         val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        val remainingMs = (scheduledAt - nowElapsed).takeIf { it > 0L }
-            ?: d.intervalSec.coerceAtLeast(1) * 1_000L
+        val remainingMs = (scheduledAt - nowElapsed).coerceAtLeast(0L)
         val remainingSeconds = (remainingMs + 999L) / 1_000L
         val minutes = remainingSeconds / 60L
         val seconds = remainingSeconds % 60L
