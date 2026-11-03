@@ -14,6 +14,10 @@ class Config(context: Context) {
         get() = prefs.getBoolean("monitoring_enabled", true)
         set(value) = prefs.edit().putBoolean("monitoring_enabled", value).apply()
 
+    var monitoringStoppedAtMs: Long
+        get() = prefs.getLong("monitoring_stopped_at_ms", 0L)
+        set(value) = prefs.edit().putLong("monitoring_stopped_at_ms", value.coerceAtLeast(0L)).apply()
+
     var observerId: String
         get() = normalizeId(prefs.getString("observer_id", "").orEmpty())
         set(v) = prefs.edit().putString("observer_id", normalizeId(v)).apply()
