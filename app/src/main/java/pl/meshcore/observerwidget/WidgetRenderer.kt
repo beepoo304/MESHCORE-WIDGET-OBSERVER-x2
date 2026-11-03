@@ -73,7 +73,7 @@ object WidgetRenderer {
         v.setTextColor(R.id.m2_title, healthColor(d.mqtt2Health))
 
         val effectiveNowMs = if (monitoringEnabled) nowMs
-            else Config(ctx).monitoringStoppedAtMs.takeIf { it > 0L } ?: nowMs
+            else Config(ctx).monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
         broker(v, d, d.broker1, effectiveNowMs, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
         broker(v, d, d.broker2, effectiveNowMs, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
         return v
