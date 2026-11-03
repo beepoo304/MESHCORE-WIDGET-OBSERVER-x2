@@ -47,15 +47,14 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
-        // Count down from the configured refresh interval to zero.
         val nowElapsed = SystemClock.elapsedRealtime()
         val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        val remainingMs = (scheduledAt - nowElapsed).takeIf { it > 0L }
+        val countdownMs = (scheduledAt - nowElapsed).takeIf { it > 0L }
             ?: d.intervalSec.coerceAtLeast(1) * 1_000L
-        val remainingSeconds = (remainingMs + 999L) / 1_000L
-        val minutes = remainingSeconds / 60L
-        val seconds = remainingSeconds % 60L
-        v.setTextViewText(R.id.interval_text, "%02d:%02d".format(minutes, seconds))
+        v.setChronometer(R.id.interval_text, nowElapsed + countdownMs, "%s", true)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            v.setChronometerCountDown(R.id.interval_text, true)
+        }
         v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
         v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
