@@ -29,15 +29,7 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val busy = AtomicBoolean(false)
-    private var tab = 0
-
-    private lateinit var tabViews: List<TextView>
-    private lateinit var dashScroll: ScrollView
     private lateinit var dash: LinearLayout
-    private lateinit var liveBox: LinearLayout
-    private lateinit var liveHeader: TextView
-    private lateinit var liveList: ListView
-    private val adapter = PacketAdapter()
     private var dashboardData: WidgetData? = null
 
     private val ticker = object : Runnable {
@@ -57,38 +49,39 @@ class MainActivity : Activity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
 
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.BLACK) }
-
-        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        tabViews = listOf("Dashboard", "LIVE", "Settings").mapIndexed { i, t ->
-            TextView(this).apply {
-                text = t; textSize = 18f; gravity = android.view.Gravity.CENTER
-                setPadding(0, dp(14), 0, dp(14))
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                setOnClickListener {
-                    if (i == 2) startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) else select(i)
-                }
-            }
-        }
-        tabViews.forEach { bar.addView(it) }
-        root.addView(bar)
-
-        dash = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(8), dp(14), dp(14)) }
-        dashScroll = ScrollView(this).apply { addView(dash) }
-
-        liveHeader = TextView(this).apply { textSize = 13f; setTextColor(Color.WHITE); setPadding(dp(14), dp(6), dp(14), dp(6)) }
-        liveList = ListView(this).apply { this.adapter = this@MainActivity.adapter; divider = null; setBackgroundColor(Color.BLACK) }
-        liveBox = LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(liveHeader)
-            addView(liveList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            setBackgroundColor(Color.BLACK)
         }
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+        }
+        toolbar.addView(TextView(this).apply {
+            text = "Observer"
+            textSize = 20f
+            setTextColor(WidgetRenderer.GREEN)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        toolbar.addView(Button(this).apply {
+            text = "Settings"
+            setTextColor(Color.WHITE)
+            setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
+        })
+        root.addView(toolbar)
 
-        root.addView(dashScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(liveBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        dash = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(8), dp(14), dp(14))
+        }
+        root.addView(dash, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
         setContentView(root)
         root.applySystemBarsPadding()
-        select(0)
+        refresh()
     }
 
     override fun onResume() {
@@ -102,64 +95,21 @@ class MainActivity : Activity() {
         handler.removeCallbacks(ticker)
     }
 
-    private fun select(i: Int) {
-        tab = i
-        tabViews.forEachIndexed { idx, v ->
-            v.setTextColor(if (idx == i) WidgetRenderer.GREEN else Color.WHITE)
-            v.setTypeface(null, if (idx == i) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-        }
-        dashScroll.visibility = if (i == 0) View.VISIBLE else View.GONE
-        liveBox.visibility = if (i == 1) View.VISIBLE else View.GONE
-        refresh()
-    }
-
     private fun refresh() {
         if (!Config(this).monitoringEnabled) {
-            if (tab == 0) renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this))
-            else showLive(null, "Monitoring zatrzymany.", emptyList())
+            renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this))
             return
         }
         if (!busy.compareAndSet(false, true)) return
         val app = applicationContext
-        val which = tab
         thread {
             try {
-                if (which == 0) {
-                    val data = runBlocking { ObserverRefresh.collect(app) }
-                    runOnUiThread { renderDashboard(data) }
-                } else {
-                    val c = Config(app)
-                    if (!Config.isValidId(c.observerId)) {
-                        runOnUiThread { showLive(null, "Wpisz hash Observera w Settings.", emptyList()) }
-                    } else {
-                        val t = c.timeoutSec * 1000
-                        val hosts = listOf(c.mqtt1Host, c.mqtt2Host, c.fallbackHost).filter { it.isNotBlank() }
-                        var ok: PacketsResult.Ok? = null
-                        val errors = ArrayList<String>()
-                        for (h in hosts) {
-                            when (val r = PacketApi.fetch(h, c.observerId, t)) {
-                                is PacketsResult.Ok -> { ok = r; break }
-                                is PacketsResult.Fail -> errors.add("${Config.displayHost(h)}: ${r.reason}")
-                            }
-                        }
-                        val found = ok
-                        runOnUiThread {
-                            if (found != null) showLive(found.host, if (found.packets.isEmpty()) "Brak pakietów dla tego Observera." else null, found.packets, errors)
-                            else showLive(null, "Nie można pobrać pakietów:\n" + errors.joinToString("\n"), emptyList())
-                        }
-                    }
-                }
+                val data = runBlocking { ObserverRefresh.collect(app) }
+                runOnUiThread { renderDashboard(data) }
             } finally {
                 busy.set(false)
             }
         }
-    }
-
-    private fun showLive(host: String?, msg: String?, packets: List<LivePacket>, errors: List<String> = emptyList()) {
-        val src = host?.let { "Źródło: ${Config.displayHost(it)}" + if (errors.isNotEmpty()) " (zapasowe, bo: ${errors.joinToString("; ")})" else "" }
-        liveHeader.text = listOfNotNull(src, "${packets.size} pakietów".takeIf { packets.isNotEmpty() }, msg).joinToString("  •  ")
-        liveHeader.setTextColor(if (msg != null && host == null) WidgetRenderer.RED else Color.WHITE)
-        adapter.set(packets)
     }
 
     private fun renderDashboard(d: WidgetData) {
