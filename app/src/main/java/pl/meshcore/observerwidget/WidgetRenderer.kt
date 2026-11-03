@@ -56,11 +56,10 @@ object WidgetRenderer {
         val seconds = remainingSeconds % 60L
         v.setChronometer(
             R.id.interval_text,
-            nowElapsed + remainingSeconds * 1_000L,
+            scheduledAt,
             "%s",
-            true
+            false
         )
-        v.setChronometerCountDown(R.id.interval_text, true)
         v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
         v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
