@@ -50,11 +50,12 @@ object WidgetRenderer {
         // Count down from the configured refresh interval to zero.
         val nowElapsed = SystemClock.elapsedRealtime()
         val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        val countdownBase = if (scheduledAt > nowElapsed) scheduledAt else nowElapsed + d.intervalSec.coerceAtLeast(1) * 1_000L
-        v.setChronometer(R.id.interval_text, countdownBase, "%s", true)
-        if (android.os.Build.VERSION.SDK_INT >= 24) {
-            v.setChronometerCountDown(R.id.interval_text, true)
-        }
+        val remainingMs = (scheduledAt - nowElapsed).takeIf { it > 0L }
+            ?: d.intervalSec.coerceAtLeast(1) * 1_000L
+        val remainingSeconds = (remainingMs + 999L) / 1_000L
+        val minutes = remainingSeconds / 60L
+        val seconds = remainingSeconds % 60L
+        v.setTextViewText(R.id.interval_text, "%02d:%02d".format(minutes, seconds))
         v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
         v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
@@ -78,7 +79,7 @@ object WidgetRenderer {
         return v
     }
 
-    /** Teksty karty brokera. last == null oznacza, że czas ostatniego pakietu pokazuje Chronometer. */
+    /** Teksty karty brokera. */
     data class BrokerTexts(val hour: String, val total: String, val last: String?)
 
     fun brokerTexts(r: FetchResult?, compact: Boolean): BrokerTexts = when (r) {
