@@ -49,6 +49,10 @@ class Config(context: Context) {
         get() = prefs.getInt("red_min", 5).coerceAtLeast(1)
         set(v) = prefs.edit().putInt("red_min", v.coerceAtLeast(1)).apply()
 
+    var alertObserver: Boolean
+        get() = prefs.getBoolean("alert_observer", false)
+        set(v) = prefs.edit().putBoolean("alert_observer", v).apply()
+
     var alertMqtt1: Boolean
         get() = prefs.getBoolean("alert_mqtt1", false)
         set(v) = prefs.edit().putBoolean("alert_mqtt1", v).apply()
@@ -67,7 +71,7 @@ class Config(context: Context) {
         get() = prefs.getInt("alert_cooldown_min", 15).coerceAtLeast(1)
         set(v) = prefs.edit().putInt("alert_cooldown_min", v.coerceAtLeast(1)).apply()
 
-    val anyAlertEnabled: Boolean get() = alertMqtt1 || alertMqtt2
+    val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2
 
     companion object {
         const val DEFAULT_MQTT1 = "live.meshcorekk.xyz"
