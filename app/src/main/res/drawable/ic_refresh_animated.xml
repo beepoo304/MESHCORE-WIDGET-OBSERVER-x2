@@ -2,6 +2,4 @@
 <animated-rotate xmlns:android="http://schemas.android.com/apk/res/android"
     android:drawable="@drawable/ic_refresh"
     android:pivotX="50%"
-    android:pivotY="50%"
-    android:framesCount="24"
-    android:frameDuration="70" />
+    android:pivotY="50%" />
