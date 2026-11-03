@@ -47,15 +47,9 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
-        val nowElapsed = SystemClock.elapsedRealtime()
         val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        v.setChronometer(
-            R.id.interval_text,
-            scheduledAt,
-            "%s",
-            true
-        )
-        v.setChronometerCountDown(R.id.interval_text, true)
+        val remainingSec = ((scheduledAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L) + 999L) / 1_000L
+        v.setTextViewText(R.id.interval_text, String.format("%02ds", remainingSec))
         v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
         v.setImageViewResource(
             R.id.refresh_icon,
@@ -107,8 +101,7 @@ object WidgetRenderer {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
                 val age = (nowMs - r.snapshot.lastPacketMs).coerceAtLeast(0L)
                 val chronometerBase = SystemClock.elapsedRealtime() - age
-                v.setChronometer(lastId, chronometerBase, "%s", true)
-                v.setChronometerCountDown(lastId, false)
+                v.setTextViewText(lastId, formatLastPacketAge(age))
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
@@ -123,6 +116,17 @@ object WidgetRenderer {
                     else -> R.drawable.pill_red
                 })
             }
+        }
+    }
+
+    private fun formatLastPacketAge(ageMs: Long): String {
+        val totalSeconds = ageMs / 1_000L
+        return if (totalSeconds < 60L) {
+            String.format("%02d", totalSeconds)
+        } else {
+            val minutes = totalSeconds / 60L
+            val seconds = totalSeconds % 60L
+            String.format("%02d:%02d", minutes, seconds)
         }
     }
 
