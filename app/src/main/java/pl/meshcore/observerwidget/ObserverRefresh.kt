@@ -19,6 +19,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 object ObserverRefresh {
     const val ACTION_REFRESH = "pl.meshcore.observerwidget.ACTION_REFRESH"
+    const val ACTION_TICK = "pl.meshcore.observerwidget.ACTION_TICK"
     private const val TAG = "ObserverWidget"
 
     /** Poniżej limitu ~10 s dla odbiorników z goAsync(), po którym system uznaje aplikację za zawieszoną. */
@@ -41,6 +42,33 @@ object ObserverRefresh {
     private fun alarmIntent(ctx: Context): PendingIntent {
         val i = Intent(ctx, ObserverWidgetProvider::class.java).setAction(ACTION_REFRESH)
         return PendingIntent.getBroadcast(ctx, 2, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun tickIntent(ctx: Context): PendingIntent {
+        val i = Intent(ctx, ObserverWidgetProvider::class.java).setAction(ACTION_TICK)
+        return PendingIntent.getBroadcast(ctx, 3, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    fun scheduleTick(ctx: Context) {
+        val app = ctx.applicationContext
+        if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
+        try {
+            val at = SystemClock.elapsedRealtime() + 1_000L
+            app.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP, at, tickIntent(app)
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleTick failed", e)
+        }
+    }
+
+    fun tick(ctx: Context) {
+        val app = ctx.applicationContext
+        if (!Config(app).monitoringEnabled) return
+        val data = lastData ?: emptyData(app)
+        val ids = widgetIds(app)
+        if (ids.isNotEmpty()) pushAll(app, ids, data.copy(busy = false))
+        scheduleTick(app)
     }
 
     /**
@@ -67,7 +95,10 @@ object ObserverRefresh {
 
     fun cancelAlarm(ctx: Context) {
         try {
-            ctx.applicationContext.getSystemService(AlarmManager::class.java).cancel(alarmIntent(ctx.applicationContext))
+            val app = ctx.applicationContext
+            val am = app.getSystemService(AlarmManager::class.java)
+            am.cancel(alarmIntent(app))
+            am.cancel(tickIntent(app))
         } catch (e: Exception) {
             Log.w(TAG, "cancelAlarm failed", e)
         }
@@ -148,6 +179,7 @@ object ObserverRefresh {
                 } while (gate.finish())
             } finally {
                 scheduleNext(app)
+                scheduleTick(app)
                 pending?.finish()
             }
         }
