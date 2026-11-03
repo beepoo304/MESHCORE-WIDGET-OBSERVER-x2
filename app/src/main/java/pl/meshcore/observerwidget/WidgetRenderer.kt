@@ -54,12 +54,7 @@ object WidgetRenderer {
         val remainingSeconds = (remainingMs + 999L) / 1_000L
         val minutes = remainingSeconds / 60L
         val seconds = remainingSeconds % 60L
-        v.setChronometer(
-            R.id.interval_text,
-            scheduledAt,
-            "%s",
-            false
-        )
+        v.setTextViewText(R.id.interval_text, "${remainingSeconds}s")
         v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
         v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
@@ -109,9 +104,7 @@ object WidgetRenderer {
         when {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
                 val age = nowMs - r.snapshot.lastPacketMs
-                val packetAgeSeconds = age.coerceAtLeast(0L) / 1_000L
-                val packetAgeBase = SystemClock.elapsedRealtime() - packetAgeSeconds * 1_000L
-                v.setChronometer(lastId, packetAgeBase, "%s", true)
+                v.setTextViewText(lastId, formatPacketAge(age))
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
