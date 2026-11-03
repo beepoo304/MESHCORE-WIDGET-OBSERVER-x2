@@ -114,7 +114,7 @@ class MainActivity : Activity() {
         dashboardData = d
         val wallClockNow = System.currentTimeMillis()
         val now = if (Config(this).monitoringEnabled) wallClockNow
-            else Config(this).monitoringStoppedAtMs.takeIf { it > 0L } ?: wallClockNow
+            else Config(this).monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
         dash.addView(monitoringControl())
         if (!Config(this).monitoringEnabled) {
             dash.addView(line("Monitoring zatrzymany. Dane nie są odświeżane, alarmy są wyłączone.", 14f, WidgetRenderer.ORANGE))
