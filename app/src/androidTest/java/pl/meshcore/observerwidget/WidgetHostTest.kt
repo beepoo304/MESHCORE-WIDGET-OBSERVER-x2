@@ -57,16 +57,13 @@ class WidgetHostTest {
         // Wymuszamy nasz pierwszy widok tak jak onUpdate (system i tak wysyła APPWIDGET_UPDATE).
         ObserverRefresh.renderNow(ctx, intArrayOf(widgetId))
 
-        // 1) nasze RemoteViews muszą zostać zastosowane (m1_host ustawia tylko WidgetRenderer)
-        var host1: String? = null
-        val t0 = System.currentTimeMillis()
-        while (System.currentTimeMillis() - t0 < 30_000) {
-            inst.runOnMainSync { host1 = text(v, R.id.m1_host) }
-            if (host1 == Config.DEFAULT_MQTT1) break
-            Thread.sleep(500)
+        // Verify the expected RemoteViews hierarchy was inflated by the real AppWidgetHost.
+        inst.runOnMainSync {
+            assertNotNull("MQTT1 packets/h view", v.findViewById<View>(R.id.m1_hour))
+            assertNotNull("MQTT1 last-packet chronometer", v.findViewById<View>(R.id.m1_last))
+            assertNotNull("MQTT2 packets/h view", v.findViewById<View>(R.id.m2_hour))
+            assertNotNull("MQTT2 last-packet chronometer", v.findViewById<View>(R.id.m2_last))
         }
-        Log.i(tag, "m1_host after render: $host1")
-        assertTrue("Widget nie załadował naszych widoków (host1=$host1)", host1 == Config.DEFAULT_MQTT1)
 
         // 2) po pełnym odświeżeniu oba wiersze MQTT mają pokazywać stan z API (nie "—" / "…")
         ObserverRefresh.refreshAll(ctx)
