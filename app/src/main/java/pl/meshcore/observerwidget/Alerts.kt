@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 
 object Alerts {
     private enum class Kind(val key: String, val channel: String, val title: String, val id: Int) {
+        OBSERVER("obs", "alerts_observer", "Observer nie wysyła pakietów", 1001),
         MQTT1("m1", "alerts_mqtt1", "MQTT1 nie działa", 1002),
         MQTT2("m2", "alerts_mqtt2", "MQTT2 nie działa", 1003)
     }
@@ -23,6 +24,7 @@ object Alerts {
     fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel("alerts_observer", "Brak pakietów Observera", NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel("alerts_mqtt1", "Awaria MQTT1", NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel("alerts_mqtt2", "Awaria MQTT2", NotificationManager.IMPORTANCE_HIGH))
     }
@@ -30,8 +32,10 @@ object Alerts {
     fun evaluate(ctx: Context, data: WidgetData, nowMs: Long = System.currentTimeMillis()) {
         if (!Config(ctx).monitoringEnabled || !data.configured) return
         val cfg = Config(ctx)
+        val assessment = AlertEngine.assess(data.observer?.lastPacketMs, nowMs, cfg.redMin, data.mqtt1Health, data.mqtt2Health)
         val delayMs = cfg.alertDelayMin * 60_000L
         val cooldownMs = cfg.alertCooldownMin * 60_000L
+        step(ctx, Kind.OBSERVER, assessment.observer, cfg.alertObserver, nowMs, delayMs, cooldownMs)
         step(ctx, Kind.MQTT1, data.mqtt1Health, cfg.alertMqtt1, nowMs, delayMs, cooldownMs, cfg.mqtt1Host)
         step(ctx, Kind.MQTT2, data.mqtt2Health, cfg.alertMqtt2, nowMs, delayMs, cooldownMs, cfg.mqtt2Host)
     }
@@ -40,6 +44,7 @@ object Alerts {
         val app = ctx.applicationContext
         app.getSharedPreferences("alert_state", Context.MODE_PRIVATE).edit().clear().apply()
         NotificationManagerCompat.from(app).apply {
+            cancel(1001)
             cancel(1002)
             cancel(1003)
         }
