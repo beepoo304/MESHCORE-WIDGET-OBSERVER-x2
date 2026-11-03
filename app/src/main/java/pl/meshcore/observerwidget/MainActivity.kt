@@ -11,15 +11,12 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
-import android.widget.BaseAdapter
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ListView
 import android.widget.ScrollView
 import android.widget.TextView
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
@@ -195,27 +192,4 @@ class MainActivity : Activity() {
     private fun spacer() = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(10)) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private inner class PacketAdapter : BaseAdapter() {
-        private var items: List<LivePacket> = emptyList()
-        private val hms = DateTimeFormatter.ofPattern("HH:mm:ss")
-        private val dmhms = DateTimeFormatter.ofPattern("dd.MM HH:mm:ss")
-
-        fun set(p: List<LivePacket>) { items = p; notifyDataSetChanged() }
-        override fun getCount() = items.size
-        override fun getItem(i: Int) = items[i]
-        override fun getItemId(i: Int) = i.toLong()
-        override fun getView(i: Int, convert: View?, parent: ViewGroup): View {
-            val tv = (convert as? TextView) ?: TextView(this@MainActivity).apply {
-                setPadding(dp(14), dp(6), dp(14), dp(6)); textSize = 15f; setTextColor(Color.WHITE)
-            }
-            val p = items[i]
-            val ts = p.timeMs?.let {
-                val z = Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())
-                (if (z.toLocalDate() == LocalDate.now()) hms else dmhms).format(z)
-            } ?: "—"
-            val rf = listOfNotNull(p.snr?.let { "SNR ${"%.1f".format(java.util.Locale.US, it)}" }, p.rssi?.let { "RSSI ${it.toInt()}" }).joinToString("  ")
-            tv.text = "$ts   ${p.type}\n${p.sender}   $rf   ${p.hash}"
-            return tv
-        }
-    }
 }
