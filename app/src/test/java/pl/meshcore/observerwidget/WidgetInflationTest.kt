@@ -3,9 +3,11 @@ package pl.meshcore.observerwidget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.RemoteViews
 import androidx.work.Configuration
 import androidx.work.WorkManager
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
@@ -60,6 +62,13 @@ class WidgetInflationTest {
                 throw AssertionError("render failed: layout=$l state=#$i: ${e}", e)
             }
         }
+    }
+
+    @Test fun compactBrokerCellsKeepTheirSeparateTitles() {
+        val root = android.view.LayoutInflater.from(ctx)
+            .inflate(R.layout.widget_observer_compact, FrameLayout(ctx), false)
+        assertEquals("MQTT1", root.findViewById<TextView>(R.id.m1_title).text.toString())
+        assertEquals("MQTT2", root.findViewById<TextView>(R.id.m2_title).text.toString())
     }
 
     @Test fun safeLayoutInflates() = assertNotNull(inflate(WidgetRenderer.safe(ctx, "Błąd")))
