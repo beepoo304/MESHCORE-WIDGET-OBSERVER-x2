@@ -56,13 +56,10 @@
         android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="3"
         android:orientation="horizontal" android:gravity="center_vertical"
         android:background="@drawable/card_outline" android:padding="8dp">
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="horizontal" android:gravity="center_vertical">
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="6" android:orientation="horizontal" android:gravity="center_vertical">
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:id="@+id/m1_title" android:text="MQTT1" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="12sp" android:maxLines="1"/>
-        </LinearLayout>
-        <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical" android:gravity="center_horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Packets/h" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m1_hour" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#6EF015" android:textStyle="bold" android:gravity="center" android:textSize="18sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="14sp" android:autoSizeMaxTextSize="24sp" android:autoSizeStepGranularity="1sp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="  packet/h " android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1"/>
+            <TextView android:id="@+id/m1_hour" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="—" android:textColor="#6EF015" android:textStyle="bold" android:gravity="center" android:textSize="18sp" android:maxLines="1"/>
         </LinearLayout>
         <LinearLayout android:id="@+id/m1_total_col" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="3" android:orientation="horizontal" android:gravity="center_vertical">
         <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
