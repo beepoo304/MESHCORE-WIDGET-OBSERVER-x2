@@ -112,7 +112,6 @@ object WidgetRenderer {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
                 val age = (nowMs - r.snapshot.lastPacketMs).coerceAtLeast(0L)
                 val chronometerBase = SystemClock.elapsedRealtime() - age
-                val chronometerBase = SystemClock.elapsedRealtime() - age
                 v.setChronometer(lastId, chronometerBase, "%s", true)
                 v.setChronometerCountDown(lastId, false)
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
