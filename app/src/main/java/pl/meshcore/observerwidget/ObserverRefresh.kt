@@ -32,6 +32,9 @@ object ObserverRefresh {
     @Volatile
     private var nextRefreshElapsedRealtime: Long = 0L
 
+    @Volatile
+    private var refreshInProgress: Boolean = false
+
     fun pendingIntent(ctx: Context): PendingIntent {
         val i = Intent(ctx, ObserverWidgetProvider::class.java).setAction(ACTION_REFRESH)
         return PendingIntent.getBroadcast(ctx, 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -72,7 +75,7 @@ object ObserverRefresh {
         val ids = widgetIds(app)
         if (ids.isNotEmpty()) {
             val data = lastData ?: emptyData(app)
-            pushAll(app, ids, data.copy(busy = false))
+            pushAll(app, ids, data.copy(busy = refreshInProgress))
             scheduleTick(app)
         }
     }
@@ -178,6 +181,7 @@ object ObserverRefresh {
                     }
                 } while (gate.finish())
             } finally {
+                refreshInProgress = false
                 scheduleNext(app)
                 scheduleTick(app)
                 pending?.finish()
@@ -186,6 +190,7 @@ object ObserverRefresh {
     }
 
     private suspend fun cycle(app: Context) {
+        refreshInProgress = true
         nextRefreshElapsedRealtime = SystemClock.elapsedRealtime() + Config(app).intervalSec * 1_000L
         val ids = widgetIds(app)
         if (ids.isEmpty()) return
