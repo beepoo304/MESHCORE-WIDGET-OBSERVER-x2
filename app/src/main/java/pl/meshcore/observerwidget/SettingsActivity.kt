@@ -78,14 +78,14 @@ class SettingsActivity : Activity() {
         redField = field(cfg.redMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(redField)
 
         root.addView(title("Powiadomienia PUSH"))
-        alertObs = check("Observer: brak pakietów (gdy MQTT1 i MQTT2 działają)", cfg.alertObserver); root.addView(alertObs)
+        alertObs = check("Observer: brak pakietów (niezależnie od MQTT)", cfg.alertObserver); root.addView(alertObs)
         alertM1 = check("MQTT1: brak połączenia / brak odbioru", cfg.alertMqtt1); root.addView(alertM1)
         alertM2 = check("MQTT2: brak połączenia / brak odbioru", cfg.alertMqtt2); root.addView(alertM2)
         root.addView(label("Opóźnienie alarmu (min)"))
         delayField = field(cfg.alertDelayMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(delayField)
         root.addView(label("Cooldown między powiadomieniami (min, min. 1)"))
         cooldownField = field(cfg.alertCooldownMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(cooldownField)
-        root.addView(label("Alarm Observera jest oceniany tylko wtedy, gdy oba MQTT mają status CONNECTED. Awaria MQTT nie wywołuje alarmu Observera. Opóźnienie alarmu (min) dotyczy każdego włączonego alarmu; 0 = natychmiast. Sprawdzanie w tle co ok. 15 min (ograniczenie Androida)."))
+        root.addView(label("Alarm Observera jest niezależny od statusów MQTT. Opóźnienie alarmu (min) dotyczy każdego włączonego alarmu; 0 = natychmiast. Sprawdzanie w tle co ok. 15 min (ograniczenie Androida). Opóźnienie alarmu (min) dotyczy każdego włączonego alarmu; 0 = natychmiast. Sprawdzanie w tle co ok. 15 min (ograniczenie Androida)."))
 
         info = label("").apply { setTextColor(Color.parseColor("#6EF015")) }
         root.addView(info)
