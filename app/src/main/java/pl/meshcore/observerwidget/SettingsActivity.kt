@@ -1,6 +1,11 @@
 package pl.meshcore.observerwidget
 
 import android.app.Activity
+import android.app.AlarmManager
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
@@ -70,6 +75,11 @@ class SettingsActivity : Activity() {
         }
         root.addView(intervalBar)
         updateIntervalLabel()
+        root.addView(label("Licznik sekund wymaga uprawnienia Androida „Dokładne alarmy i przypomnienia”."))
+        root.addView(Button(this).apply {
+            text = "Włącz dokładne odliczanie"
+            setOnClickListener { openExactAlarmSettings() }
+        })
 
         root.addView(title("Progi koloru czasu pakietu"))
         root.addView(label("Pomarańczowy po (min)"))
@@ -108,6 +118,19 @@ class SettingsActivity : Activity() {
 
     private fun updateIntervalLabel() {
         intervalLabel.text = "Interwał odświeżania: ${intervalBar.progress + Config.MIN_INTERVAL} s (tylko przy aktywnej aplikacji, w tle co 15 min)"
+    }
+
+    private fun openExactAlarmSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val manager = getSystemService(AlarmManager::class.java)
+        if (manager.canScheduleExactAlarms()) {
+            ObserverRefresh.scheduleTick(this)
+        } else {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                    .setData(Uri.parse("package:$packageName"))
+            )
+        }
     }
 
     private fun save() {
