@@ -15,9 +15,10 @@
         <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
         <ImageView android:id="@+id/refresh_icon" android:layout_width="16dp" android:layout_height="16dp" android:layout_marginStart="6dp"
             android:src="@drawable/ic_refresh" android:contentDescription="@null"/>
-        <ProgressBar android:id="@+id/refresh_spinner" style="?android:attr/progressBarStyleSmall"
-            android:layout_width="16dp" android:layout_height="16dp" android:indeterminate="true"
-            android:indeterminateTint="#FFFF9500" android:visibility="gone"/>
+        <ProgressBar android:id="@+id/refresh_spinner"
+            android:layout_width="16dp" android:layout_height="16dp" android:layout_marginStart="6dp" android:indeterminate="true"
+            android:indeterminateOnly="true" android:indeterminateDrawable="@drawable/ic_refresh_spin"
+            android:indeterminateDuration="900" android:visibility="gone"/>
         <TextView android:id="@+id/interval_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:layout_marginStart="3dp" android:text="00s" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="9sp" android:maxLines="1"/>
     </LinearLayout>

@@ -7,7 +7,6 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import android.widget.RemoteViews
@@ -15,26 +14,40 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
+/**
+ * Pobieranie danych i rysowanie widgetu.
+ *
+ * Tykanie co sekundę robi [MonitorService] (usługa pierwszoplanowa). AlarmManager nie nadaje się
+ * do tego: Android nie dostarcza alarmów aplikacji częściej niż co ~5 s (MIN_FUTURITY), a bez
+ * uprawnienia „Dokładne alarmy” (domyślnie wyłączone od Androida 14) – jeszcze rzadziej.
+ * Alarm zostaje tylko jako rezerwa, gdy systemowi nie uda się uruchomić usługi.
+ */
 object ObserverRefresh {
     const val ACTION_REFRESH = "pl.meshcore.observerwidget.ACTION_REFRESH"
     const val ACTION_TICK = "pl.meshcore.observerwidget.ACTION_TICK"
     private const val TAG = "ObserverWidget"
     private const val HARD_TIMEOUT_MS = 8_500L
-    private const val TICK_INTERVAL_MS = 1_000L
+    private const val FALLBACK_TICK_MS = 1_000L
+    private const val MIN_SPIN_MS = 900L
 
     private val gate = RefreshGate()
 
     @Volatile
     private var lastData: WidgetData? = null
 
+    /** Czas (zegar ścienny, ms) następnego odświeżenia; wyrównany do pełnej sekundy. */
     @Volatile
-    private var nextRefreshElapsedRealtime: Long = 0L
+    private var nextRefreshAtMs: Long = 0L
 
     @Volatile
-    private var refreshInProgress: Boolean = false
+    var refreshInProgress: Boolean = false
+        private set
+
+    fun latest(): WidgetData? = lastData
 
     fun pendingIntent(ctx: Context): PendingIntent {
         val i = Intent(ctx, ObserverWidgetProvider::class.java).setAction(ACTION_REFRESH)
@@ -51,52 +64,58 @@ object ObserverRefresh {
         return PendingIntent.getBroadcast(ctx, 3, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    /** Update countdown and packet-age text once per second while the device is awake. */
+    // ---------- harmonogram ----------
+
+    private fun alignUp(ms: Long): Long = ((ms + 999L) / 1_000L) * 1_000L
+
+    /** Ustawia kolejne odświeżenie na „teraz + interwał”, wyrównane do pełnej sekundy. */
+    private fun planNext(ctx: Context, nowMs: Long = System.currentTimeMillis()) {
+        nextRefreshAtMs = alignUp(nowMs) + Config(ctx).intervalSec * 1_000L
+    }
+
+    fun nextRefreshAtMs(): Long = nextRefreshAtMs
+
+    fun isRefreshDue(nowMs: Long = System.currentTimeMillis()): Boolean =
+        !refreshInProgress && (nextRefreshAtMs == 0L || nowMs >= nextRefreshAtMs)
+
+    /** Sekundy do odświeżenia pokazywane w widgecie. */
+    fun remainingSeconds(ctx: Context, nowMs: Long = System.currentTimeMillis()): Long {
+        if (refreshInProgress) return 0L
+        val target = nextRefreshAtMs
+        if (target == 0L) return Config(ctx).intervalSec.toLong()
+        return TimeFormat.remainingSeconds(target, nowMs).coerceAtMost(Config(ctx).intervalSec.toLong())
+    }
+
+    /** Rezerwowe tykanie przez AlarmManager – tylko gdy usługa nie działa. */
     fun scheduleTick(ctx: Context) {
         val app = ctx.applicationContext
-        if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
-        val manager = app.getSystemService(AlarmManager::class.java)
-        val triggerAt = SystemClock.elapsedRealtime() + TICK_INTERVAL_MS
-        val pending = tickIntent(app)
+        if (MonitorService.isRunning || !Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
         try {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || manager.canScheduleExactAlarms()) {
-                manager.setExact(AlarmManager.ELAPSED_REALTIME, triggerAt, pending)
-            } else {
-                manager.set(AlarmManager.ELAPSED_REALTIME, triggerAt, pending)
-            }
-        } catch (exception: SecurityException) {
-            Log.w(TAG, "Exact alarm permission unavailable; using inexact tick", exception)
-            manager.set(AlarmManager.ELAPSED_REALTIME, triggerAt, pending)
-        } catch (exception: Exception) {
-            Log.w(TAG, "scheduleTick failed", exception)
+            app.getSystemService(AlarmManager::class.java).set(
+                AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + FALLBACK_TICK_MS, tickIntent(app)
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleTick failed", e)
         }
     }
 
+    /** Rezerwowe tyknięcie (alarm): rysuje i ewentualnie odświeża. */
     fun tick(ctx: Context) {
         val app = ctx.applicationContext
         if (!Config(app).monitoringEnabled) return
-        val ids = widgetIds(app)
-        if (ids.isNotEmpty()) {
-            val data = lastData ?: emptyData(app)
-            pushAll(app, ids, data.copy(busy = refreshInProgress))
-            scheduleTick(app)
-        }
+        if (MonitorService.isRunning) return
+        renderAll(app)
+        if (isRefreshDue()) refreshAll(app) else scheduleTick(app)
     }
 
-    fun nextRefreshElapsedRealtime(intervalSec: Int): Long {
-        val scheduled = nextRefreshElapsedRealtime
-        return if (scheduled > 0L) scheduled
-        else SystemClock.elapsedRealtime() + intervalSec.coerceAtLeast(1) * 1_000L
-    }
-
+    /** Rezerwowy alarm odświeżenia (gdy usługa nie działa). */
     fun scheduleNext(ctx: Context) {
         val app = ctx.applicationContext
-        if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
+        if (MonitorService.isRunning || !Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
         try {
-            val at = SystemClock.elapsedRealtime() + Config(app).intervalSec * 1_000L
-            nextRefreshElapsedRealtime = at
+            val delay = (nextRefreshAtMs - System.currentTimeMillis()).coerceAtLeast(1_000L)
             app.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP, at, alarmIntent(app)
+                AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + delay, alarmIntent(app)
             )
         } catch (e: Exception) {
             Log.w(TAG, "scheduleNext failed", e)
@@ -109,11 +128,12 @@ object ObserverRefresh {
             val manager = app.getSystemService(AlarmManager::class.java)
             manager.cancel(alarmIntent(app))
             manager.cancel(tickIntent(app))
-            nextRefreshElapsedRealtime = 0L
         } catch (e: Exception) {
             Log.w(TAG, "cancelAlarm failed", e)
         }
     }
+
+    // ---------- start / stop ----------
 
     fun stop(ctx: Context) {
         val app = ctx.applicationContext
@@ -121,6 +141,8 @@ object ObserverRefresh {
         if (config.monitoringStoppedAtMs <= 0L) config.monitoringStoppedAtMs = System.currentTimeMillis()
         config.monitoringEnabled = false
         cancelAlarm(app)
+        nextRefreshAtMs = 0L
+        MonitorService.stop(app)
         RefreshWorker.sync(app)
         Alerts.clearAll(app)
         lastData = lastData?.copy(busy = false)
@@ -134,8 +156,24 @@ object ObserverRefresh {
         config.monitoringStoppedAtMs = 0L
         config.monitoringEnabled = true
         RefreshWorker.sync(app)
+        ensureTicking(app)
         refreshAll(app)
     }
+
+    /** Uruchamia usługę tykania; jeśli Android na to nie pozwala, włącza rezerwę z alarmów. */
+    fun ensureTicking(ctx: Context) {
+        val app = ctx.applicationContext
+        if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) {
+            MonitorService.stop(app)
+            return
+        }
+        if (!MonitorService.start(app)) {
+            scheduleTick(app)
+            scheduleNext(app)
+        }
+    }
+
+    fun hasWidgets(ctx: Context): Boolean = widgetIds(ctx.applicationContext).isNotEmpty()
 
     private fun widgetIds(ctx: Context): IntArray =
         AppWidgetManager.getInstance(ctx).getAppWidgetIds(ComponentName(ctx, ObserverWidgetProvider::class.java))
@@ -152,14 +190,27 @@ object ObserverRefresh {
         )
     }
 
+    // ---------- rysowanie ----------
+
+    /** Przerysowuje wszystkie widgety z danych w pamięci (liczniki sekund). */
+    fun renderAll(ctx: Context) {
+        val app = ctx.applicationContext
+        val ids = widgetIds(app)
+        if (ids.isEmpty()) return
+        val data = lastData ?: emptyData(app, busy = refreshInProgress)
+        pushAll(app, ids, data.copy(busy = refreshInProgress))
+    }
+
     fun renderNow(ctx: Context, ids: IntArray? = null): Boolean {
         val app = ctx.applicationContext
         val targets = ids ?: widgetIds(app)
         if (targets.isEmpty()) return false
         val cached = lastData
-        pushAll(app, targets, cached?.copy(busy = false) ?: emptyData(app, busy = true))
+        pushAll(app, targets, cached?.copy(busy = refreshInProgress) ?: emptyData(app, busy = true))
         return cached != null
     }
+
+    // ---------- odświeżanie ----------
 
     fun refreshAll(ctx: Context, pending: BroadcastReceiver.PendingResult? = null) {
         if (!Config(ctx).monitoringEnabled) {
@@ -179,12 +230,11 @@ object ObserverRefresh {
                         cycle(app)
                     } catch (e: Exception) {
                         Log.e(TAG, "Refresh cycle failed", e)
-                        val ids = widgetIds(app)
-                        if (ids.isNotEmpty()) pushSafe(app, ids, "Błąd odświeżania")
                     }
                 } while (gate.finish())
             } finally {
                 refreshInProgress = false
+                renderAll(app)
                 scheduleNext(app)
                 scheduleTick(app)
                 pending?.finish()
@@ -194,25 +244,22 @@ object ObserverRefresh {
 
     private suspend fun cycle(app: Context) {
         refreshInProgress = true
-        nextRefreshElapsedRealtime = SystemClock.elapsedRealtime() + Config(app).intervalSec * 1_000L
-        val ids = widgetIds(app)
-        if (ids.isEmpty()) return
-        pushAll(app, ids, (lastData ?: emptyData(app)).copy(busy = true))
+        // Kolejne odświeżenie liczymy od początku pobierania – stały rytm, niezależny od czasu odpowiedzi.
+        planNext(app)
+        renderAll(app)
+        val startedAt = SystemClock.elapsedRealtime()
         val job = CoroutineScope(Dispatchers.IO).async { collect(app) }
         val data = withTimeoutOrNull(HARD_TIMEOUT_MS) { job.await() }
+        // Ikona ma zrobić przynajmniej jeden pełny obrót, nawet gdy serwery odpowiedzą błyskawicznie.
+        val spent = SystemClock.elapsedRealtime() - startedAt
+        if (spent < MIN_SPIN_MS) delay(MIN_SPIN_MS - spent)
         if (data == null) {
             job.cancel()
-            Log.w(TAG, "Refresh timed out after ${HARD_TIMEOUT_MS} ms")
+            Log.w(TAG, "Refresh timed out after $HARD_TIMEOUT_MS ms; keeping last data")
         }
         if (!Config(app).monitoringEnabled) return
-        val result = data ?: lastData?.copy(busy = false) ?: emptyData(app)
-        if (data != null) {
-            lastData = data
-            Log.i(TAG, "Refresh OK: mqtt1=${(data.broker1 as? FetchResult.Ok)?.snapshot?.totalPackets}, mqtt2=${(data.broker2 as? FetchResult.Ok)?.snapshot?.totalPackets}")
-        } else {
-            Log.w(TAG, "Refresh timed out; keeping last successful counters")
-        }
-        pushAll(app, widgetIds(app), result)
+        if (data != null) lastData = data
+        val result = (data ?: lastData ?: emptyData(app)).copy(busy = false)
         evaluateAlerts(app, result)
     }
 
@@ -222,11 +269,9 @@ object ObserverRefresh {
         val data = collect(app)
         if (!Config(app).monitoringEnabled) return
         lastData = data
-        val ids = widgetIds(app)
-        if (ids.isNotEmpty()) pushAll(app, ids, data)
+        renderAll(app)
         evaluateAlerts(app, data)
-        scheduleNext(app)
-        scheduleTick(app)
+        ensureTicking(app)
     }
 
     private fun evaluateAlerts(app: Context, data: WidgetData) {
@@ -259,17 +304,6 @@ object ObserverRefresh {
         }
     }
 
-    private fun pushSafe(ctx: Context, ids: IntArray, message: String) {
-        val manager = AppWidgetManager.getInstance(ctx)
-        for (id in ids) {
-            try {
-                manager.updateAppWidget(id, WidgetRenderer.safe(ctx, message))
-            } catch (e: Exception) {
-                Log.e(TAG, "Safe widget update failed for widget $id", e)
-            }
-        }
-    }
-
     fun emptyData(ctx: Context, busy: Boolean = false): WidgetData {
         val config = Config(ctx)
         return WidgetData(
@@ -287,29 +321,43 @@ object ObserverRefresh {
         )
     }
 
+    /**
+     * Jedno odświeżenie: z każdego brokera pobieramy (równolegle)
+     *  1) /api/observers/{id} – ostatni pakiet wysłany przez Observera,
+     *  2) /api/mqtt/status    – czy broker żyje jako strona agregacyjna.
+     */
     suspend fun collect(ctx: Context): WidgetData {
         val config = Config(ctx)
         val base = emptyData(ctx)
         if (!base.configured) return base
         val timeout = config.timeoutSec * 1_000
+        val statusTimeout = minOf(timeout, 5_000)
         return coroutineScope {
             val first = async(Dispatchers.IO) { ObserverApi.fetch(config.mqtt1Host, config.observerId, timeout) }
             val second = async(Dispatchers.IO) { ObserverApi.fetch(config.mqtt2Host, config.observerId, timeout) }
-            val websiteTimeout = minOf(config.intervalSec * 1_000, 5_000)
-            val firstHealth = async(Dispatchers.IO) { MqttStatusApi.fetch(config.mqtt1Host, websiteTimeout) }
-            val secondHealth = async(Dispatchers.IO) { MqttStatusApi.fetch(config.mqtt2Host, websiteTimeout) }
+            val firstHealth = async(Dispatchers.IO) { MqttStatusApi.probe(config.mqtt1Host, statusTimeout) }
+            val secondHealth = async(Dispatchers.IO) { MqttStatusApi.probe(config.mqtt2Host, statusTimeout) }
             val fallbackHealth = async(Dispatchers.IO) {
-                if (config.fallbackHost.isBlank()) Health.UNKNOWN
-                else MqttStatusApi.fetch(config.fallbackHost, timeout)
+                if (config.fallbackHost.isBlank()) MqttStatusApi.Probe(Health.UNKNOWN, false)
+                else MqttStatusApi.probe(config.fallbackHost, statusTimeout)
             }
             val firstResult = first.await()
             val secondResult = second.await()
-            val health1 = firstHealth.await()
-            val health2 = secondHealth.await()
+            var health1 = firstHealth.await()
+            var health2 = secondHealth.await()
             val healthFallback = fallbackHealth.await()
+
+            // Telefon bez internetu: wszystko pada na poziomie sieci – to nie awaria brokerów.
+            val phoneOffline = health1.networkError && health2.networkError &&
+                (config.fallbackHost.isBlank() || healthFallback.networkError)
+            if (phoneOffline) {
+                health1 = MqttStatusApi.Probe(Health.UNKNOWN, true)
+                health2 = MqttStatusApi.Probe(Health.UNKNOWN, true)
+            }
+
             var observer = (firstResult as? FetchResult.Ok)?.snapshot
                 ?: (secondResult as? FetchResult.Ok)?.snapshot
-            if (observer == null && config.fallbackHost.isNotBlank()) {
+            if (observer == null && config.fallbackHost.isNotBlank() && !phoneOffline) {
                 observer = (ObserverApi.fetch(
                     config.fallbackHost,
                     config.observerId,
@@ -320,9 +368,9 @@ object ObserverRefresh {
                 observer = observer,
                 broker1 = firstResult,
                 broker2 = secondResult,
-                mqtt1Health = health1,
-                mqtt2Health = health2,
-                fallbackHealth = healthFallback
+                mqtt1Health = health1.health,
+                mqtt2Health = health2.health,
+                fallbackHealth = healthFallback.health
             )
         }
     }

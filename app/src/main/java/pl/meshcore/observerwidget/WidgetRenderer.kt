@@ -3,7 +3,6 @@ package pl.meshcore.observerwidget
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.SystemClock
 import android.widget.RemoteViews
 
 object WidgetRenderer {
@@ -48,21 +47,15 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
-        val monitoringEnabled = Config(ctx).monitoringEnabled
-        val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        val remainingSeconds = if (monitoringEnabled) {
-            ((scheduledAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L) + 999L) / 1_000L
-        } else 0L
+        val config = Config(ctx)
+        val monitoringEnabled = config.monitoringEnabled
         v.setTextViewText(
             R.id.interval_text,
-            formatRefreshCountdown(remainingSeconds, monitoringEnabled)
+            formatRefreshCountdown(ObserverRefresh.remainingSeconds(ctx, nowMs), monitoringEnabled)
         )
-        v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
-        v.setImageViewResource(
-            R.id.refresh_icon,
-            if (d.busy) R.drawable.ic_refresh_animated else R.drawable.ic_refresh
-        )
-        v.setViewVisibility(R.id.refresh_spinner, android.view.View.GONE)
+        // Podczas pobierania: statyczna ikona znika, w jej miejscu kręci się ProgressBar z tą samą ikoną.
+        v.setViewVisibility(R.id.refresh_icon, if (d.busy) android.view.View.GONE else android.view.View.VISIBLE)
+        v.setViewVisibility(R.id.refresh_spinner, if (d.busy) android.view.View.VISIBLE else android.view.View.GONE)
 
         // Wiersz Observera
         val obs = d.observer
@@ -77,9 +70,11 @@ object WidgetRenderer {
         v.setTextColor(R.id.m2_title, brokerHealthColor(d.mqtt2Health, d.broker2))
 
         val effectiveNowMs = if (monitoringEnabled) nowMs
-            else Config(ctx).monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
-        broker(v, d, d.broker1, effectiveNowMs, monitoringEnabled, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
-        broker(v, d, d.broker2, effectiveNowMs, monitoringEnabled, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
+            else config.monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
+        // Progi kolorów zawsze z bieżących ustawień (zmiana w Settings działa od razu).
+        val live = d.copy(orangeMin = config.orangeMin, redMin = config.redMin)
+        broker(v, live, d.broker1, effectiveNowMs, monitoringEnabled, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
+        broker(v, live, d.broker2, effectiveNowMs, monitoringEnabled, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
         return v
     }
 
@@ -108,7 +103,7 @@ object WidgetRenderer {
         v.setTextViewText(totalId, t.total)
         when {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
-                val age = (nowMs - r.snapshot.lastPacketMs).coerceAtLeast(0L)
+                val age = r.snapshot.lastPacketAgeMs(nowMs) ?: 0L
                 v.setTextViewText(lastId, formatLastPacketAge(age))
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
@@ -128,21 +123,15 @@ object WidgetRenderer {
     }
 
     internal fun formatRefreshCountdown(remainingSeconds: Long, enabled: Boolean): String =
-        if (!enabled) "00s" else "${remainingSeconds.coerceAtLeast(0L).toString().padStart(2, '0')}s"
+        TimeFormat.countdown(remainingSeconds, enabled)
 
-    internal fun formatLastPacketAge(ageMs: Long): String {
-        val totalSeconds = ageMs.coerceAtLeast(0L) / 1_000L
-        return if (totalSeconds < 60L) {
-            "${totalSeconds.toString().padStart(2, '0')}s"
-        } else {
-            "${(totalSeconds / 60L).toString().padStart(2, '0')}m"
-        }
-    }
+    internal fun formatLastPacketAge(ageMs: Long): String = TimeFormat.packetAge(ageMs)
 
-    internal fun brokerHealthColor(health: Health, result: FetchResult?): Int = when {
-        health == Health.BAD -> RED
-        health == Health.GOOD || result is FetchResult.Ok -> GREEN
-        else -> WHITE
+    /** Tytuł MQTT: zielony = broker żyje, czerwony = broker martwy, szary = nie da się ocenić (np. brak internetu). */
+    internal fun brokerHealthColor(health: Health, result: FetchResult?): Int = when (health) {
+        Health.GOOD -> GREEN
+        Health.BAD -> RED
+        Health.UNKNOWN -> GRAY
     }
 
     private fun healthColor(health: Health): Int = when (health) {

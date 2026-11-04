@@ -32,7 +32,7 @@ object Alerts {
     fun evaluate(ctx: Context, data: WidgetData, nowMs: Long = System.currentTimeMillis()) {
         if (!Config(ctx).monitoringEnabled || !data.configured) return
         val cfg = Config(ctx)
-        val assessment = AlertEngine.assess(data.observer?.lastPacketMs, nowMs, cfg.redMin, data.mqtt1Health, data.mqtt2Health)
+        val assessment = AlertEngine.assess(data.observer?.let { o -> o.lastPacketMs?.minus(o.serverOffsetMs) }, nowMs, cfg.redMin, data.mqtt1Health, data.mqtt2Health)
         val delayMs = cfg.alertDelayMin * 60_000L
         val cooldownMs = cfg.alertCooldownMin * 60_000L
         step(ctx, Kind.OBSERVER, assessment.observer, cfg.alertObserver, nowMs, delayMs, cooldownMs)

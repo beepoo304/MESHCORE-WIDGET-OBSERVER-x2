@@ -44,23 +44,24 @@ class WidgetRendererTest {
         assertEquals("00s", WidgetRenderer.formatRefreshCountdown(30L, false))
     }
 
-    @Test fun lastPacketAgeSwitchesFromSecondsToMinutes() {
+    @Test fun lastPacketAgeUsesSecondsMinutesHoursAndDays() {
+        assertEquals("00s", WidgetRenderer.formatLastPacketAge(0L))
         assertEquals("59s", WidgetRenderer.formatLastPacketAge(59_999L))
-        assertEquals("01m", WidgetRenderer.formatLastPacketAge(60_000L))
-        assertEquals("03m", WidgetRenderer.formatLastPacketAge(3 * 60_000L))
+        assertEquals("01:00s", WidgetRenderer.formatLastPacketAge(60_000L))
+        assertEquals("59:59s", WidgetRenderer.formatLastPacketAge(3_599_000L))
+        assertEquals("01:55:00s", WidgetRenderer.formatLastPacketAge((3600L + 55 * 60) * 1000))
+        assertEquals("23:59:59s", WidgetRenderer.formatLastPacketAge(86_399_000L))
+        assertEquals("1d16h05m", WidgetRenderer.formatLastPacketAge((86_400L + 16 * 3600 + 5 * 60 + 42) * 1000))
     }
 
-    @Test fun unknownBrokerStatusDoesNotGrayTheBrokerTitle() {
-        assertEquals(
-            WidgetRenderer.WHITE,
-            WidgetRenderer.brokerHealthColor(Health.UNKNOWN, FetchResult.Fail("mqtt2", "404"))
-        )
+    @Test fun aliveBrokerIsGreenDeadIsRed() {
+        assertEquals(WidgetRenderer.GREEN, WidgetRenderer.brokerHealthColor(Health.GOOD, FetchResult.Fail("m", "404")))
+        assertEquals(WidgetRenderer.RED, WidgetRenderer.brokerHealthColor(Health.BAD, FetchResult.Ok(snap(1_000L))))
+        assertEquals(WidgetRenderer.GRAY, WidgetRenderer.brokerHealthColor(Health.UNKNOWN, null))
     }
 
-    @Test fun confirmedBrokerFailureRemainsRed() {
-        assertEquals(
-            WidgetRenderer.RED,
-            WidgetRenderer.brokerHealthColor(Health.BAD, FetchResult.Ok(snap(1_000L)))
-        )
+    @Test fun packetAgeUsesServerClockOffset() {
+        val s = snap(10_000L).copy(serverOffsetMs = 120_000L)
+        assertEquals(130_000L, s.lastPacketAgeMs(now))
     }
 }
