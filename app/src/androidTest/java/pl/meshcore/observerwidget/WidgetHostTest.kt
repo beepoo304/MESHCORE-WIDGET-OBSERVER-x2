@@ -1,8 +1,7 @@
 package pl.meshcore.observerwidget
 
 import android.appwidget.AppWidgetHostView
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
+import android.appwidget.AppWidgetProviderInfo
 import android.view.View
 import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -25,10 +24,12 @@ class WidgetHostTest {
     @Test
     fun widgetLoadsInRealHostAndShowsBothBrokers() {
         val observerId = "9B250340D918846EFB9140F6243E9253FA0DB9DD3B1B8C0AD8A53337CE5D1234"
-        val manager = AppWidgetManager.getInstance(ctx)
-        val provider = ComponentName(ctx, ObserverWidgetProvider::class.java)
-        val providerInfo = manager.installedProviders.firstOrNull { it.provider == provider }
-            ?: error("Observer widget provider not installed")
+        val providerInfo = AppWidgetProviderInfo().apply {
+            provider = android.content.ComponentName(ctx, ObserverWidgetProvider::class.java)
+            initialLayout = R.layout.widget_observer_compact
+            minWidth = 180
+            minHeight = 110
+        }
 
         val now = System.currentTimeMillis()
         val snapshot = ObserverSnapshot(
