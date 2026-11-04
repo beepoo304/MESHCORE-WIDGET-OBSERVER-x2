@@ -74,8 +74,8 @@ object WidgetRenderer {
 
         val effectiveNowMs = if (monitoringEnabled) nowMs
             else Config(ctx).monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
-        broker(v, d, d.broker1, effectiveNowMs, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
-        broker(v, d, d.broker2, effectiveNowMs, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
+        broker(v, d, d.broker1, effectiveNowMs, monitoringEnabled, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
+        broker(v, d, d.broker2, effectiveNowMs, monitoringEnabled, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
         return v
     }
 
@@ -96,7 +96,7 @@ object WidgetRenderer {
     }
 
     private fun broker(
-        v: RemoteViews, d: WidgetData, r: FetchResult?, nowMs: Long, layout: WidgetLayout,
+        v: RemoteViews, d: WidgetData, r: FetchResult?, nowMs: Long, monitoringEnabled: Boolean, layout: WidgetLayout,
         hourId: Int, totalId: Int, lastId: Int
     ) {
         val t = brokerTexts(r, layout.compact)
@@ -106,8 +106,12 @@ object WidgetRenderer {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
                 val age = (nowMs - r.snapshot.lastPacketMs).coerceAtLeast(0L)
                 val chronometerBase = SystemClock.elapsedRealtime() - age
-                v.setChronometer(lastId, chronometerBase, "%s", true)
-                v.setChronometerCountDown(lastId, false)
+                if (monitoringEnabled) {
+                    v.setChronometer(lastId, chronometerBase, "%s", true)
+                    v.setChronometerCountDown(lastId, false)
+                } else {
+                    v.setTextViewText(lastId, formatLastPacketAge(age))
+                }
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
