@@ -52,7 +52,13 @@ object WidgetRenderer {
         val remainingSec = if (monitoringEnabled) {
             ((scheduledAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L) + 999L) / 1_000L
         } else 0L
-        v.setTextViewText(R.id.interval_text, String.format("%02ds", remainingSec))
+        if (monitoringEnabled) {
+            v.setChronometer(R.id.interval_text, scheduledAt, "%s", true)
+            v.setChronometerCountDown(R.id.interval_text, true)
+        } else {
+            v.setChronometer(R.id.interval_text, SystemClock.elapsedRealtime(), "%s", false)
+            v.setTextViewText(R.id.interval_text, "00s")
+        }
         v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
         v.setImageViewResource(
             R.id.refresh_icon,
@@ -106,7 +112,9 @@ object WidgetRenderer {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
                 val age = (nowMs - r.snapshot.lastPacketMs).coerceAtLeast(0L)
                 val chronometerBase = SystemClock.elapsedRealtime() - age
-                v.setTextViewText(lastId, formatLastPacketAge(age))
+                val chronometerBase = SystemClock.elapsedRealtime() - age
+                v.setChronometer(lastId, chronometerBase, "%s", true)
+                v.setChronometerCountDown(lastId, false)
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
