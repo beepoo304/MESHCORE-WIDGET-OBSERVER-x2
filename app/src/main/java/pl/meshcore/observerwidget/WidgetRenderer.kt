@@ -54,7 +54,7 @@ object WidgetRenderer {
         } else 0L
         v.setTextViewText(
             R.id.interval_text,
-            if (!monitoringEnabled) "00s" else String.format("%02d:%02d", remainingSeconds / 60L, remainingSeconds % 60L)
+            if (!monitoringEnabled) "00s" else String.format("%02ds", remainingSeconds)
         )
         v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
         v.setImageViewResource(
