@@ -9,9 +9,26 @@ android {
         applicationId = "pl.meshcore.observerwidget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "2.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    // Stały klucz (w repo), żeby każde APK z GitHub Actions instalowało się jako aktualizacja poprzedniego.
+    signingConfigs {
+        create("ci") {
+            storeFile = file("observer-ci.p12")
+            storeType = "pkcs12"
+            storePassword = "observer"
+            keyAlias = "observer"
+            keyPassword = "observer"
+        }
+    }
+    buildTypes {
+        getByName("debug") { signingConfig = signingConfigs.getByName("ci") }
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("ci")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

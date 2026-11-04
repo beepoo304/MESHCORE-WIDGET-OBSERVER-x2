@@ -49,7 +49,16 @@ object ObserverApi {
                 when {
                     code == 404 -> FetchResult.Fail(host, "Observer nieznany na serwerze (404)")
                     code !in 200..299 -> FetchResult.Fail(host, "HTTP $code")
-                    else -> parse(host, c.inputStream.bufferedReader().use { it.readText() })
+                    else -> {
+                        val body = c.inputStream.bufferedReader().use { it.readText() }
+                        val localNow = System.currentTimeMillis()
+                        when (val r = parse(host, body, localNow)) {
+                            is FetchResult.Ok -> FetchResult.Ok(
+                                r.snapshot.copy(serverOffsetMs = clockOffset(c.getHeaderFieldDate("Date", 0L), localNow))
+                            )
+                            else -> r
+                        }
+                    }
                 }
             } finally {
                 c.disconnect()
@@ -96,6 +105,16 @@ object ObserverApi {
                 fetchedAtMs = nowMs
             )
         )
+    }
+
+    /**
+     * Nagłówek Date ma dokładność 1 s, więc drobne różnice ignorujemy (zostawiamy zegar telefonu),
+     * a korygujemy dopiero wyraźnie przestawiony zegar.
+     */
+    fun clockOffset(serverDateMs: Long, localNowMs: Long): Long {
+        if (serverDateMs <= 0L) return 0L
+        val offset = serverDateMs - localNowMs
+        return if (kotlin.math.abs(offset) < 5_000L) 0L else offset
     }
 
     private fun longValue(o: JSONObject, vararg keys: String): Long {

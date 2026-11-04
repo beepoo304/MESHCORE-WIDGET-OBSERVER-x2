@@ -21,9 +21,10 @@
         <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
         <ImageView android:id="@+id/refresh_icon" android:layout_width="26dp" android:layout_height="26dp"
             android:src="@drawable/ic_refresh" android:contentDescription="@null"/>
-        <ProgressBar android:id="@+id/refresh_spinner" style="?android:attr/progressBarStyleSmall"
+        <ProgressBar android:id="@+id/refresh_spinner"
             android:layout_width="26dp" android:layout_height="26dp" android:indeterminate="true"
-            android:indeterminateTint="#FFFF9500" android:visibility="gone"/>
+            android:indeterminateOnly="true" android:indeterminateDrawable="@drawable/ic_refresh_spin"
+            android:indeterminateDuration="900" android:visibility="gone"/>
         <TextView android:id="@+id/interval_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:layout_marginStart="6dp" android:text="00s" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp" android:maxLines="1"/>
     </LinearLayout>

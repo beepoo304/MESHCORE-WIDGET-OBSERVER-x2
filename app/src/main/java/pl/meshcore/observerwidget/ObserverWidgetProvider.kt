@@ -1,6 +1,5 @@
 package pl.meshcore.observerwidget
 
-import android.app.AlarmManager
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
@@ -11,7 +10,7 @@ class ObserverWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         ObserverRefresh.renderNow(context, ids)
-        ObserverRefresh.scheduleTick(context)
+        ObserverRefresh.ensureTicking(context)
         ObserverRefresh.refreshAll(context, goAsync())
     }
 
@@ -23,15 +22,15 @@ class ObserverWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            ObserverRefresh.ACTION_REFRESH -> ObserverRefresh.refreshAll(context, goAsync())
-            ObserverRefresh.ACTION_TICK -> ObserverRefresh.tick(context)
-            AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
-                ObserverRefresh.scheduleTick(context)
-                ObserverRefresh.refreshAll(context)
+            // Dotknięcie widgetu: Android pozwala wtedy uruchomić usługę pierwszoplanową z tła.
+            ObserverRefresh.ACTION_REFRESH -> {
+                ObserverRefresh.ensureTicking(context)
+                ObserverRefresh.refreshAll(context, goAsync())
             }
+            ObserverRefresh.ACTION_TICK -> ObserverRefresh.tick(context)
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 RefreshWorker.sync(context)
-                ObserverRefresh.scheduleTick(context)
+                ObserverRefresh.ensureTicking(context)
                 ObserverRefresh.refreshAll(context)
             }
             else -> super.onReceive(context, intent)
@@ -40,11 +39,12 @@ class ObserverWidgetProvider : AppWidgetProvider() {
 
     override fun onEnabled(context: Context) {
         RefreshWorker.sync(context)
-        ObserverRefresh.scheduleTick(context)
+        ObserverRefresh.ensureTicking(context)
     }
 
     override fun onDisabled(context: Context) {
         ObserverRefresh.cancelAlarm(context)
+        MonitorService.stop(context)
         RefreshWorker.sync(context)
     }
 }

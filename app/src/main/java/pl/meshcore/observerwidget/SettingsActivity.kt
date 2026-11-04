@@ -75,11 +75,7 @@ class SettingsActivity : Activity() {
         }
         root.addView(intervalBar)
         updateIntervalLabel()
-        root.addView(label("Licznik sekund wymaga uprawnienia Androida „Dokładne alarmy i przypomnienia”."))
-        root.addView(Button(this).apply {
-            text = "Włącz dokładne odliczanie"
-            setOnClickListener { openExactAlarmSettings() }
-        })
+        root.addView(label("Licznik odświeżania i wiek pakietu zmieniają się co sekundę dzięki usłudze w tle (stałe, ciche powiadomienie „Monitoring Observera aktywny”). Przy wyłączonym ekranie odliczanie jest wstrzymane."))
 
         root.addView(title("Progi koloru czasu pakietu"))
         root.addView(label("Pomarańczowy po (min)"))
@@ -95,7 +91,7 @@ class SettingsActivity : Activity() {
         delayField = field(cfg.alertDelayMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(delayField)
         root.addView(label("Cooldown między powiadomieniami (min, min. 1)"))
         cooldownField = field(cfg.alertCooldownMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(cooldownField)
-        root.addView(label("Alarm Observera jest niezależny od statusów MQTT. Opóźnienie alarmu (min) dotyczy każdego włączonego alarmu; 0 = natychmiast. Sprawdzanie w tle co ok. 15 min (ograniczenie Androida). Opóźnienie alarmu (min) dotyczy każdego włączonego alarmu; 0 = natychmiast. Sprawdzanie w tle co ok. 15 min (ograniczenie Androida)."))
+        root.addView(label("Alarm Observera jest niezależny od statusów MQTT. Opóźnienie alarmu (min) dotyczy każdego włączonego alarmu; 0 = natychmiast."))
 
         info = label("").apply { setTextColor(Color.parseColor("#6EF015")) }
         root.addView(info)
@@ -117,20 +113,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun updateIntervalLabel() {
-        intervalLabel.text = "Interwał odświeżania: ${intervalBar.progress + Config.MIN_INTERVAL} s (tylko przy aktywnej aplikacji, w tle co 15 min)"
-    }
-
-    private fun openExactAlarmSettings() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        val manager = getSystemService(AlarmManager::class.java)
-        if (manager.canScheduleExactAlarms()) {
-            ObserverRefresh.scheduleTick(this)
-        } else {
-            startActivity(
-                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                    .setData(Uri.parse("package:$packageName"))
-            )
-        }
+        intervalLabel.text = "Interwał odświeżania: ${intervalBar.progress + Config.MIN_INTERVAL} s"
     }
 
     private fun save() {
@@ -189,6 +172,7 @@ class SettingsActivity : Activity() {
         RefreshWorker.sync(this)
         info.setTextColor(Color.parseColor("#6EF015"))
         info.text = "Zapisano"
+        ObserverRefresh.ensureTicking(this)
         ObserverRefresh.refreshAll(this)
     }
 
@@ -212,9 +196,9 @@ class SettingsActivity : Activity() {
                     is FetchResult.Fail -> "Observer ✕: ${observerResult.reason}"
                 }
                 val mqttLine = when (MqttStatusApi.fetch(h, timeout)) {
-                    Health.GOOD -> "MQTT: CONNECTED"
-                    Health.BAD -> "MQTT: DISCONNECTED"
-                    Health.UNKNOWN -> "MQTT: UNKNOWN (brak /api/mqtt/status lub nieaktualny status)"
+                    Health.GOOD -> "Broker: ŻYJE"
+                    Health.BAD -> "Broker: MARTWY (strona nie odpowiada, status zamrożony lub brak połączenia MQTT)"
+                    Health.UNKNOWN -> "Broker: NIEZNANY (niezrozumiała odpowiedź /api/mqtt/status)"
                 }
                 "${Config.displayHost(h)}\n$observerLine\n$mqttLine"
             }

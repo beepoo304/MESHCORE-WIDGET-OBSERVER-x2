@@ -10,8 +10,17 @@ data class ObserverSnapshot(
     val packetsPerHour: Long,
     /** Czas ostatniego pakietu (epoch ms) albo null, gdy serwer nie ma takiej informacji. */
     val lastPacketMs: Long?,
-    val fetchedAtMs: Long
-)
+    val fetchedAtMs: Long,
+    /**
+     * Różnica zegara serwera względem telefonu (ms), z nagłówka HTTP Date.
+     * Dzięki temu wiek pakietu jest poprawny nawet przy źle ustawionym zegarze telefonu.
+     */
+    val serverOffsetMs: Long = 0L
+) {
+    /** Wiek ostatniego pakietu liczony w czasie serwera; null, gdy brak znacznika. */
+    fun lastPacketAgeMs(nowMs: Long): Long? =
+        lastPacketMs?.let { (nowMs + serverOffsetMs - it).coerceAtLeast(0L) }
+}
 
 sealed class FetchResult {
     data class Ok(val snapshot: ObserverSnapshot) : FetchResult()

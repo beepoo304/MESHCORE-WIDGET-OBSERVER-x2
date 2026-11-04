@@ -34,12 +34,14 @@ class MainActivity : Activity() {
     private lateinit var dash: LinearLayout
     private var dashboardData: WidgetData? = null
 
+    /** Co sekundę: przerysowanie z danych w pamięci; pobieranie tylko gdy licznik dojdzie do zera. */
     private val ticker = object : Runnable {
         override fun run() {
             val config = Config(this@MainActivity)
             if (!config.monitoringEnabled) return
             refresh()
-            handler.postDelayed(this, config.intervalSec * 1000L)
+            val now = System.currentTimeMillis()
+            handler.postDelayed(this, 1_000L - (now % 1_000L) + 15L)
         }
     }
 
@@ -83,43 +85,16 @@ class MainActivity : Activity() {
         ))
         setContentView(root)
         root.applySystemBarsPadding()
-        requestExactAlarmPermission()
         refresh()
-    }
-
-    private fun requestExactAlarmPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !Config(this).monitoringEnabled) return
-        val ids = AppWidgetManager.getInstance(this).getAppWidgetIds(
-            android.content.ComponentName(this, ObserverWidgetProvider::class.java)
-        )
-        if (ids.isEmpty()) return
-        if (getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) return
-
-        val prefs = getSharedPreferences("runtime", MODE_PRIVATE)
-        if (prefs.getBoolean("exact_alarm_prompt_shown", false)) return
-        prefs.edit().putBoolean("exact_alarm_prompt_shown", true).apply()
-
-        AlertDialog.Builder(this)
-            .setTitle("Licznik sekund")
-            .setMessage("Android opóźnia zwykłe alarmy. Aby licznik widgetu zmieniał się co sekundę, włącz dla aplikacji „Dokładne alarmy i przypomnienia”.")
-            .setPositiveButton("Otwórz ustawienia") { _, _ ->
-                startActivity(
-                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                        .setData(Uri.parse("package:$packageName"))
-                )
-            }
-            .setNegativeButton("Później", null)
-            .show()
     }
 
     override fun onResume() {
         super.onResume()
         handler.removeCallbacks(ticker)
         if (Config(this).monitoringEnabled) {
+            // Aplikacja na pierwszym planie: Android pozwala uruchomić usługę tykania widgetu.
+            ObserverRefresh.ensureTicking(this)
             handler.post(ticker)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
-            ) ObserverRefresh.scheduleTick(this)
         }
     }
 
@@ -133,16 +108,8 @@ class MainActivity : Activity() {
             renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this))
             return
         }
-        if (!busy.compareAndSet(false, true)) return
-        val app = applicationContext
-        thread {
-            try {
-                val data = runBlocking { ObserverRefresh.collect(app) }
-                runOnUiThread { renderDashboard(data) }
-            } finally {
-                busy.set(false)
-            }
-        }
+        if (!MonitorService.isRunning && ObserverRefresh.isRefreshDue()) ObserverRefresh.refreshAll(applicationContext)
+        renderDashboard(ObserverRefresh.latest() ?: ObserverRefresh.emptyData(this, busy = true))
     }
 
     private fun renderDashboard(d: WidgetData) {
@@ -172,7 +139,8 @@ class MainActivity : Activity() {
         dash.addView(spacer())
         dash.addView(brokerCard("MQTT2", d.mqtt2Host, d.broker2, d, now, d.mqtt2Health))
         dash.addView(spacer())
-        dash.addView(line("Odświeżono ${DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()))}, co ${d.intervalSec} s", 12f, WidgetRenderer.GRAY))
+        val fetchedAt = obs?.fetchedAtMs ?: now
+        dash.addView(line("Pobrano ${DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(fetchedAt).atZone(ZoneId.systemDefault()))}, następne za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), Config(this).monitoringEnabled)}", 12f, WidgetRenderer.GRAY))
     }
 
     private fun monitoringControl(): View = Button(this).apply {
@@ -187,6 +155,7 @@ class MainActivity : Activity() {
                 handler.removeCallbacks(ticker)
             } else {
                 ObserverRefresh.start(this@MainActivity)
+                MonitorService.ensureChannel(this@MainActivity)
                 handler.removeCallbacks(ticker)
                 handler.post(ticker)
             }
@@ -200,7 +169,7 @@ class MainActivity : Activity() {
             setBackgroundResource(R.drawable.card_outline)
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
-        val titleColor = when (health) { Health.GOOD -> Color.WHITE; Health.BAD -> WidgetRenderer.RED; Health.UNKNOWN -> WidgetRenderer.GRAY }
+        val titleColor = WidgetRenderer.brokerHealthColor(health, r)
         box.addView(line("$title  ${Config.displayHost(host)}", 18f, titleColor, bold = true))
         when (r) {
             is FetchResult.Ok -> {
@@ -208,11 +177,12 @@ class MainActivity : Activity() {
                 box.addView(line("${s.packetsPerHour} pkt/h   ·   razem ${Status.formatCount(s.totalPackets)}", 16f, WidgetRenderer.GREEN))
                 if (s.lastPacketMs == null) box.addView(line("Ostatni pakiet: brak danych", 16f, WidgetRenderer.GRAY))
                 else {
-                    val age = now - s.lastPacketMs
-                    val color = when (Status.level(age, d.orangeMin, d.redMin)) {
+                    val age = s.lastPacketAgeMs(now) ?: 0L
+                    val cfg = Config(this)
+                    val color = when (Status.level(age, cfg.orangeMin, cfg.redMin)) {
                         Level.GREEN -> WidgetRenderer.GREEN; Level.ORANGE -> WidgetRenderer.ORANGE; else -> WidgetRenderer.RED
                     }
-                    box.addView(line("Ostatni pakiet: ${Status.formatAge(age)} temu", 18f, color, bold = true))
+                    box.addView(line("Ostatni pakiet: ${TimeFormat.packetAge(age)} temu", 18f, color, bold = true))
                 }
             }
             is FetchResult.Fail -> box.addView(line("API niedostępne: ${r.reason}", 16f, WidgetRenderer.RED))
