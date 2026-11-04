@@ -24,8 +24,8 @@
         <ProgressBar android:id="@+id/refresh_spinner" style="?android:attr/progressBarStyleSmall"
             android:layout_width="26dp" android:layout_height="26dp" android:indeterminate="true"
             android:indeterminateTint="#FFFF9500" android:visibility="gone"/>
-        <TextView android:id="@+id/interval_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="6dp" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp" android:maxLines="1"/>
+        <Chronometer android:id="@+id/interval_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginStart="6dp" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp" android:maxLines="1" android:format="%02ds"/>
     </LinearLayout>
 
     <FrameLayout android:layout_width="match_parent" android:layout_height="1dp" android:background="#FFFFFF"/>
