@@ -37,4 +37,30 @@ class WidgetRendererTest {
 
     @Test fun noTimestampIsNoData() =
         assertEquals("NO DATA" to WidgetRenderer.GRAY, WidgetRenderer.liveState(data(obs = snap(null)), now))
+
+    @Test fun refreshCountdownUsesSecondsSuffixAndClampsAtZero() {
+        assertEquals("09s", WidgetRenderer.formatRefreshCountdown(9L, true))
+        assertEquals("00s", WidgetRenderer.formatRefreshCountdown(-4L, true))
+        assertEquals("00s", WidgetRenderer.formatRefreshCountdown(30L, false))
+    }
+
+    @Test fun lastPacketAgeSwitchesFromSecondsToMinutes() {
+        assertEquals("59s", WidgetRenderer.formatLastPacketAge(59_999L))
+        assertEquals("01m", WidgetRenderer.formatLastPacketAge(60_000L))
+        assertEquals("03m", WidgetRenderer.formatLastPacketAge(3 * 60_000L))
+    }
+
+    @Test fun unknownBrokerStatusDoesNotGrayTheBrokerTitle() {
+        assertEquals(
+            WidgetRenderer.WHITE,
+            WidgetRenderer.brokerHealthColor(Health.UNKNOWN, FetchResult.Fail("mqtt2", "404"))
+        )
+    }
+
+    @Test fun confirmedBrokerFailureRemainsRed() {
+        assertEquals(
+            WidgetRenderer.RED,
+            WidgetRenderer.brokerHealthColor(Health.BAD, FetchResult.Ok(snap(1_000L)))
+        )
+    }
 }

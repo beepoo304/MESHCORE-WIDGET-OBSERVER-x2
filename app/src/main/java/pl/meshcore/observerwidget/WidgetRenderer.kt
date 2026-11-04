@@ -11,6 +11,7 @@ object WidgetRenderer {
     const val ORANGE = 0xFFFF9500.toInt()
     const val RED = 0xFFFF3B30.toInt()
     const val GRAY = 0xFF6B6B6B.toInt()
+    const val WHITE = 0xFFFFFFFF.toInt()
 
     /** Napis i kolor statusu Observera. Wspólne dla widgetu i Dashboardu. */
     fun liveState(d: WidgetData, nowMs: Long): Pair<String, Int> {
@@ -54,7 +55,7 @@ object WidgetRenderer {
         } else 0L
         v.setTextViewText(
             R.id.interval_text,
-            if (!monitoringEnabled) "00s" else String.format("%02ds", remainingSeconds)
+            formatRefreshCountdown(remainingSeconds, monitoringEnabled)
         )
         v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
         v.setImageViewResource(
@@ -108,13 +109,7 @@ object WidgetRenderer {
         when {
             r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
                 val age = (nowMs - r.snapshot.lastPacketMs).coerceAtLeast(0L)
-                val chronometerBase = SystemClock.elapsedRealtime() - age
-                if (monitoringEnabled) {
-                    v.setChronometer(lastId, chronometerBase, "%s", true)
-                    v.setChronometerCountDown(lastId, false)
-                } else {
-                    v.setTextViewText(lastId, formatLastPacketAge(age))
-                }
+                v.setTextViewText(lastId, formatLastPacketAge(age))
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
@@ -132,21 +127,22 @@ object WidgetRenderer {
         }
     }
 
-    private fun formatLastPacketAge(ageMs: Long): String {
-        val totalSeconds = ageMs / 1_000L
+    internal fun formatRefreshCountdown(remainingSeconds: Long, enabled: Boolean): String =
+        if (!enabled) "00s" else "${remainingSeconds.coerceAtLeast(0L).toString().padStart(2, '0')}s"
+
+    internal fun formatLastPacketAge(ageMs: Long): String {
+        val totalSeconds = ageMs.coerceAtLeast(0L) / 1_000L
         return if (totalSeconds < 60L) {
-            String.format("%02d", totalSeconds)
+            "${totalSeconds.toString().padStart(2, '0')}s"
         } else {
-            val minutes = totalSeconds / 60L
-            val seconds = totalSeconds % 60L
-            String.format("%02d:%02d", minutes, seconds)
+            "${(totalSeconds / 60L).toString().padStart(2, '0')}m"
         }
     }
 
-    private fun brokerHealthColor(health: Health, result: FetchResult?): Int = when {
+    internal fun brokerHealthColor(health: Health, result: FetchResult?): Int = when {
         health == Health.BAD -> RED
         health == Health.GOOD || result is FetchResult.Ok -> GREEN
-        else -> GRAY
+        else -> WHITE
     }
 
     private fun healthColor(health: Health): Int = when (health) {
