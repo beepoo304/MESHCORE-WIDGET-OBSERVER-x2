@@ -74,8 +74,8 @@ object WidgetRenderer {
             obs?.name != null -> obs.name
             else -> "—"
         })
-        v.setTextColor(R.id.m1_title, healthColor(d.mqtt1Health))
-        v.setTextColor(R.id.m2_title, healthColor(d.mqtt2Health))
+        v.setTextColor(R.id.m1_title, brokerHealthColor(d.mqtt1Health, d.broker1))
+        v.setTextColor(R.id.m2_title, brokerHealthColor(d.mqtt2Health, d.broker2))
 
         val effectiveNowMs = if (monitoringEnabled) nowMs
             else Config(ctx).monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
@@ -143,6 +143,12 @@ object WidgetRenderer {
             val seconds = totalSeconds % 60L
             String.format("%02d:%02d", minutes, seconds)
         }
+    }
+
+    private fun brokerHealthColor(health: Health, result: FetchResult?): Int = when {
+        result is FetchResult.Ok -> GREEN
+        health == Health.BAD -> RED
+        else -> GRAY
     }
 
     private fun healthColor(health: Health): Int = when (health) {
