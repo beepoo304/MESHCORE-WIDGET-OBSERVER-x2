@@ -49,14 +49,14 @@ object WidgetRenderer {
 
         val monitoringEnabled = Config(ctx).monitoringEnabled
         val scheduledAt = ObserverRefresh.nextRefreshElapsedRealtime(d.intervalSec)
-        val remainingSec = if (monitoringEnabled) {
-            ((scheduledAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L) + 999L) / 1_000L
-        } else 0L
-        if (monitoringEnabled) {
-            v.setChronometer(R.id.interval_text, scheduledAt, "%02ds", true)
-            v.setChronometerCountDown(R.id.interval_text, true)
-        } else {
+        if (!monitoringEnabled) {
             v.setTextViewText(R.id.interval_text, "00s")
+        } else if (d.busy) {
+            // Nie pokazuj ujemnego odliczania, gdy pobieranie przekroczy planowany interwał.
+            v.setTextViewText(R.id.interval_text, "…")
+        } else {
+            v.setChronometer(R.id.interval_text, scheduledAt, "%s", true)
+            v.setChronometerCountDown(R.id.interval_text, true)
         }
         v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
         v.setImageViewResource(
