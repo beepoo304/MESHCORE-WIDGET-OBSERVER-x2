@@ -10,6 +10,7 @@ import androidx.work.Configuration
 import androidx.work.WorkManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -112,6 +113,33 @@ class WidgetInflationTest {
             val second = root.findViewById<View>(secondId)
             assertEquals("MQTT columns have different left edges: $firstId/$secondId", left(first), left(second))
             assertEquals("MQTT columns have different widths: $firstId/$secondId", first.width, second.width)
+        }
+    }
+
+    /** Napis MQTTx stoi w jednej linii (ten sam środek w pionie) z liczbą w polu Last packet. */
+    @Test fun fullBrokerTitleIsLevelWithLastPacket() {
+        val density = ctx.resources.displayMetrics.density
+        val width = (300 * density).toInt()
+        val height = (320 * density).toInt()
+        val root = android.view.LayoutInflater.from(ctx).inflate(R.layout.widget_observer, FrameLayout(ctx), false)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+        )
+        root.layout(0, 0, width, height)
+        fun centerY(view: View): Int {
+            var current: View? = view
+            var y = view.height / 2
+            while (current != null && current !== root) {
+                y += current.top
+                current = current.parent as? View
+            }
+            return y
+        }
+        for ((title, last) in listOf(R.id.m1_title to R.id.m1_last, R.id.m2_title to R.id.m2_last)) {
+            val t = centerY(root.findViewById(title))
+            val l = centerY(root.findViewById(last))
+            assertTrue("MQTT title not level with Last packet: $t vs $l", kotlin.math.abs(t - l) <= (1 * density).toInt())
         }
     }
 

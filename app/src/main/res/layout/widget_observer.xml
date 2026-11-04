@@ -57,8 +57,11 @@
         android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="3"
         android:orientation="horizontal" android:gravity="center_vertical"
         android:background="@drawable/card_outline" android:padding="8dp">
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="horizontal" android:gravity="center_vertical">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:id="@+id/m1_title" android:text="MQTT1" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="12sp" android:maxLines="1"/>
+        <!-- Kolumna tytułu ma taką samą budowę jak "Last packet" (niewidoczny nagłówek + wiersz wartości),
+             dzięki czemu napis MQTT1 stoi w jednej linii z liczbami Packets/h i Last packet. -->
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Last packet" android:visibility="invisible" android:textStyle="bold" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:id="@+id/m1_title" android:text="MQTT1" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center_vertical|start" android:textSize="13sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
         </LinearLayout>
         <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical" android:gravity="center_horizontal">
@@ -86,8 +89,11 @@
         android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="3"
         android:orientation="horizontal" android:gravity="center_vertical"
         android:background="@drawable/card_outline" android:padding="8dp">
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="horizontal" android:gravity="center_vertical">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:id="@+id/m2_title" android:text="MQTT2" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="12sp" android:maxLines="1"/>
+        <!-- Kolumna tytułu ma taką samą budowę jak "Last packet" (niewidoczny nagłówek + wiersz wartości),
+             dzięki czemu napis MQTT2 stoi w jednej linii z liczbami Packets/h i Last packet. -->
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Last packet" android:visibility="invisible" android:textStyle="bold" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:id="@+id/m2_title" android:text="MQTT2" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center_vertical|start" android:textSize="13sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
         </LinearLayout>
         <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
         <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical" android:gravity="center_horizontal">
