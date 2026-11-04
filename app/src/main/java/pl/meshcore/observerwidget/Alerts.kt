@@ -35,9 +35,29 @@ object Alerts {
         val assessment = AlertEngine.assess(data.observer?.let { o -> o.lastPacketMs?.minus(o.serverOffsetMs) }, nowMs, cfg.redMin, data.mqtt1Health, data.mqtt2Health)
         val delayMs = cfg.alertDelayMin * 60_000L
         val cooldownMs = cfg.alertCooldownMin * 60_000L
-        step(ctx, Kind.OBSERVER, assessment.observer, cfg.alertObserver, nowMs, delayMs, cooldownMs)
-        step(ctx, Kind.MQTT1, data.mqtt1Health, cfg.alertMqtt1, nowMs, delayMs, cooldownMs, cfg.mqtt1Host)
-        step(ctx, Kind.MQTT2, data.mqtt2Health, cfg.alertMqtt2, nowMs, delayMs, cooldownMs, cfg.mqtt2Host)
+
+        // Alarm Observera: natychmiast po przekroczeniu progu czerwonego (bez opóźnienia).
+        // Gdy żaden API nie odpowiada, też alarmujemy – wtedy w treści podajemy oba.
+        val bothApisDown = data.observer == null &&
+            data.broker1 is FetchResult.Fail && data.broker2 is FetchResult.Fail
+        val observerHealth = if (bothApisDown) Health.BAD else assessment.observer
+        val observerText: ((Long) -> String)? = when {
+            bothApisDown -> ({ minutes ->
+                "Brak odpowiedzi API: ${Config.displayHost(cfg.mqtt1Host)}, ${Config.displayHost(cfg.mqtt2Host)} (od ok. $minutes min)."
+            })
+            data.observer != null -> ({ minutes ->
+                "${Config.displayHost(data.observer!!.host)}: brak pakietów od ok. $minutes min."
+            })
+            else -> null
+        }
+        step(ctx, Kind.OBSERVER, observerHealth, cfg.alertObserver, nowMs, delayMs = 0L, cooldownMs, observerText)
+        step(ctx, Kind.MQTT1, data.mqtt1Health, cfg.alertMqtt1, nowMs, delayMs, cooldownMs, mqttText(cfg.mqtt1Host))
+        step(ctx, Kind.MQTT2, data.mqtt2Health, cfg.alertMqtt2, nowMs, delayMs, cooldownMs, mqttText(cfg.mqtt2Host))
+    }
+
+    /** Treść dla alarmów MQTT: nazwa hosta i od jak dawna brak połączenia. */
+    private fun mqttText(host: String): (Long) -> String = { minutes ->
+        "${Config.displayHost(host)}: brak połączenia MQTT od ok. $minutes min."
     }
 
     fun clearAll(ctx: Context) {
@@ -50,7 +70,7 @@ object Alerts {
         }
     }
 
-    private fun step(ctx: Context, kind: Kind, health: Health, enabled: Boolean, nowMs: Long, delayMs: Long, cooldownMs: Long, host: String? = null) {
+    private fun step(ctx: Context, kind: Kind, health: Health, enabled: Boolean, nowMs: Long, delayMs: Long, cooldownMs: Long, text: ((Long) -> String)? = null) {
         synchronized(lock) {
             val prefs = ctx.applicationContext.getSharedPreferences("alert_state", Context.MODE_PRIVATE)
             val key = kind.key
@@ -65,7 +85,7 @@ object Alerts {
             var stateToPersist = next
             when (action) {
                 AlertAction.NOTIFY -> {
-                    if (!notify(ctx, kind, next.badSinceMs, nowMs, host)) {
+                    if (!notify(ctx, kind, next.badSinceMs, nowMs, text)) {
                         // Keep the alert pending; a later refresh can retry after permission is granted.
                         stateToPersist = next.copy(notified = false, lastNotifiedMs = previous.lastNotifiedMs)
                     }
@@ -83,7 +103,7 @@ object Alerts {
         }
     }
 
-    private fun notify(ctx: Context, kind: Kind, sinceMs: Long, nowMs: Long, host: String?): Boolean {
+    private fun notify(ctx: Context, kind: Kind, sinceMs: Long, nowMs: Long, text: ((Long) -> String)?): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return false
@@ -94,10 +114,11 @@ object Alerts {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val elapsedMinutes = ((nowMs - sinceMs) / 60_000L).coerceAtLeast(0)
+        val content = text?.invoke(elapsedMinutes) ?: "Brak pakietów od ok. $elapsedMinutes min."
         val notification = NotificationCompat.Builder(ctx, kind.channel)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle(kind.title)
-            .setContentText(if (host == null) "Brak pakietów od ok. $elapsedMinutes min." else "${Config.displayHost(host)}: brak połączenia MQTT od ok. $elapsedMinutes min.")
+            .setContentText(content)
             .setContentIntent(openIntent)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)

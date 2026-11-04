@@ -41,7 +41,13 @@ data class WidgetData(
     val busy: Boolean = false,
     val mqtt1Health: Health = Health.UNKNOWN,
     val mqtt2Health: Health = Health.UNKNOWN,
-    val fallbackHealth: Health = Health.UNKNOWN
+    val fallbackHealth: Health = Health.UNKNOWN,
+    /**
+     * Ostatnia znana wartość wieku pakietu danego brokera (ms), zamrożona w chwili,
+     * gdy jego API przestało odpowiadać – licznik nie ucieka w nieskończoność.
+     */
+    val broker1FrozenAgeMs: Long? = null,
+    val broker2FrozenAgeMs: Long? = null
 )
 
 enum class Level { GREEN, ORANGE, RED, UNKNOWN }

@@ -76,15 +76,17 @@ object WidgetRenderer {
             else config.monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
         // Progi kolorów zawsze z bieżących ustawień (zmiana w Settings działa od razu).
         val live = d.copy(orangeMin = config.orangeMin, redMin = config.redMin)
-        broker(v, live, d.broker1, effectiveNowMs, monitoringEnabled, layout, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
-        broker(v, live, d.broker2, effectiveNowMs, monitoringEnabled, layout, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
+        broker(v, live, d.broker1, effectiveNowMs, monitoringEnabled, layout, d.broker1FrozenAgeMs, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
+        broker(v, live, d.broker2, effectiveNowMs, monitoringEnabled, layout, d.broker2FrozenAgeMs, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
         return v
     }
 
     /** Teksty karty brokera. */
-    data class BrokerTexts(val hour: String, val total: String, val last: String?)
+    data class BrokerTexts(val hour: String, val total: String, val last: String?, val lastLevel: Level? = null)
 
-    fun brokerTexts(r: FetchResult?, compact: Boolean): BrokerTexts = when (r) {
+    fun brokerTexts(
+        r: FetchResult?, compact: Boolean, frozenAgeMs: Long? = null, orangeMin: Int = 3, redMin: Int = 5
+    ): BrokerTexts = when (r) {
         is FetchResult.Ok -> {
             val s = r.snapshot
             BrokerTexts(
@@ -93,15 +95,24 @@ object WidgetRenderer {
                 last = if (s.lastPacketMs == null) "brak" else null
             )
         }
-        // API niedostępne: nigdy nie udajemy LIVE
-        else -> BrokerTexts("—", "—", if (r == null) "…" else "API ✕")
+        // API niedostępne: nigdy nie udajemy LIVE. Gdy znamy ostatni wiek pakietu, pokazujemy go zamrożonego.
+        else -> {
+            if (r is FetchResult.Fail && frozenAgeMs != null) {
+                BrokerTexts(
+                    "—",
+                    "—",
+                    formatLastPacketAge(frozenAgeMs),
+                    Status.level(frozenAgeMs, orangeMin, redMin)
+                )
+            } else BrokerTexts("—", "—", if (r == null) "…" else "API ✕")
+        }
     }
 
     private fun broker(
         v: RemoteViews, d: WidgetData, r: FetchResult?, nowMs: Long, monitoringEnabled: Boolean, layout: WidgetLayout,
-        hourId: Int, totalId: Int, lastId: Int
+        frozenAgeMs: Long?, hourId: Int, totalId: Int, lastId: Int
     ) {
-        val t = brokerTexts(r, compact = false)
+        val t = brokerTexts(r, compact = false, frozenAgeMs = frozenAgeMs, orangeMin = d.orangeMin, redMin = d.redMin)
         v.setTextViewText(hourId, t.hour)
         v.setTextViewText(totalId, t.total)
         when {
@@ -109,6 +120,15 @@ object WidgetRenderer {
                 val age = r.snapshot.lastPacketAgeMs(nowMs) ?: 0L
                 v.setTextViewText(lastId, formatLastPacketAge(age))
                 v.setInt(lastId, "setBackgroundResource", when (Status.level(age, d.orangeMin, d.redMin)) {
+                    Level.GREEN -> R.drawable.pill_green
+                    Level.ORANGE -> R.drawable.pill_orange
+                    else -> R.drawable.pill_red
+                })
+            }
+            t.last != null && t.lastLevel != null -> {
+                // API brokera padnięte: pokazujemy zamrożony, ostatni znany wiek pakietu.
+                v.setTextViewText(lastId, t.last)
+                v.setInt(lastId, "setBackgroundResource", when (t.lastLevel) {
                     Level.GREEN -> R.drawable.pill_green
                     Level.ORANGE -> R.drawable.pill_orange
                     else -> R.drawable.pill_red

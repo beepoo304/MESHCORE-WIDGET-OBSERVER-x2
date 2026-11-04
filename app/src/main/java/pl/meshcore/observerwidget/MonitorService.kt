@@ -30,11 +30,14 @@ import kotlinx.coroutines.launch
  *
  * Usługa pierwszoplanowa (specialUse) to jedyny sposób na niezawodną aktualizację co sekundę:
  * AlarmManager ma minimalny odstęp ~5 s, a WorkManager 15 min.
- * Przy wyłączonym ekranie tykanie jest wstrzymane (oszczędność baterii) i wraca po włączeniu ekranu.
+ * Pobieranie danych biegnie zawsze, gdy monitoring jest włączony – także przy wyłączonym ekranie
+ * (częściowy wakelock chroni pętlę przed zamrożeniem przez Doze w nocy). Rysowanie co 1 s
+ * działa tylko przy włączonym ekranie; po włączeniu ekranu widget dorysowuje się w ciągu sekundy.
  */
 class MonitorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var loop: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -77,18 +80,44 @@ class MonitorService : Service() {
                 stopSelf()
                 return
             }
-            if (power?.isInteractive != false) {
-                if (ObserverRefresh.isRefreshDue()) ObserverRefresh.refreshAll(this)
-                else ObserverRefresh.renderAll(this)
-            }
+            renewWakeLock()
+            // Pobieranie danych biegnie cały czas (także przy wyłączonym ekranie);
+            // rysowanie co 1 s ma sens tylko przy włączonym ekranie.
+            if (ObserverRefresh.isRefreshDue()) ObserverRefresh.refreshAll(this)
+            else if (power?.isInteractive != false) ObserverRefresh.renderAll(this)
             // Następne tyknięcie tuż po granicy pełnej sekundy: cyfry zmieniają się równo co 1 s.
             val now = System.currentTimeMillis()
             delay(1_000L - (now % 1_000L) + 15L)
         }
     }
 
+    /**
+     * Częściowy wakelock, żeby Doze nie zamrażał pętli w nocy. Odnawiany z limitem czasu
+     * (zamiast trzymania w nieskończoność): pętla podtrzymuje go przy każdym obrocie,
+     * a [onDestroy] zawsze zwalnia.
+     */
+    private fun renewWakeLock() {
+        val lock = wakeLock
+        if (lock != null && lock.isHeld) return
+        val power = getSystemService(PowerManager::class.java) ?: return
+        try {
+            if (lock == null) {
+                wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ObserverWidget:monitor").also {
+                    it.setReferenceCounted(false)
+                    it.acquire(WAKELOCK_RENEW_MS)
+                }
+            } else {
+                lock.acquire(WAKELOCK_RENEW_MS)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot acquire wakelock", e)
+        }
+    }
+
     override fun onDestroy() {
         isRunning = false
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
         scope.cancel()
         super.onDestroy()
     }
@@ -114,6 +143,7 @@ class MonitorService : Service() {
         private const val TAG = "ObserverWidget"
         private const val CHANNEL = "monitor_service"
         private const val NOTIFICATION_ID = 2001
+        private const val WAKELOCK_RENEW_MS = 10 * 60_000L
 
         @Volatile
         var isRunning: Boolean = false

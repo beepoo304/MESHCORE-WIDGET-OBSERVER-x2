@@ -75,7 +75,7 @@ class SettingsActivity : Activity() {
         }
         root.addView(intervalBar)
         updateIntervalLabel()
-        root.addView(label("Licznik odświeżania i wiek pakietu zmieniają się co sekundę dzięki usłudze w tle (stałe, ciche powiadomienie „Monitoring Observera aktywny”). Przy wyłączonym ekranie odliczanie jest wstrzymane."))
+        root.addView(label("Licznik odświeżania i wiek pakietu zmieniają się co sekundę dzięki usłudze w tle (stałe, ciche powiadomienie „Monitoring Observera aktywny”). Przy wyłączonym ekranie dane nadal są pobierane co interwał, a widget dorysowuje się w ciągu sekundy po włączeniu ekranu (częściowy wakelock chroni pętlę przed Doze)."))
 
         root.addView(title("Progi koloru czasu pakietu"))
         root.addView(label("Pomarańczowy po (min)"))
@@ -91,7 +91,7 @@ class SettingsActivity : Activity() {
         delayField = field(cfg.alertDelayMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(delayField)
         root.addView(label("Cooldown między powiadomieniami (min, min. 1)"))
         cooldownField = field(cfg.alertCooldownMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(cooldownField)
-        root.addView(label("Alarm Observera jest niezależny od statusów MQTT. Opóźnienie alarmu (min) dotyczy każdego włączonego alarmu; 0 = natychmiast."))
+        root.addView(label("Alarm Observera jest niezależny od statusów MQTT i przychodzi natychmiast po przekroczeniu czerwonego progu, a w treści podaje nazwę API, z którego przyszły dane (gdy oba nie odpowiadają – obie). Opóźnienie (min) dotyczy tylko alarmów MQTT; 0 = natychmiast."))
 
         info = label("").apply { setTextColor(Color.parseColor("#6EF015")) }
         root.addView(info)

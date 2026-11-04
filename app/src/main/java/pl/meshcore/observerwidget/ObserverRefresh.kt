@@ -47,6 +47,16 @@ object ObserverRefresh {
     var refreshInProgress: Boolean = false
         private set
 
+    /**
+     * Ostatnia znana wartość wieku pakietu dla każdego brokera – aktualizowana przy udanym
+     * pobraniu. Gdy API brokera padnie, widget pokazuje tę wartość zamrożoną zamiast „API ✕”.
+     */
+    @Volatile
+    private var lastKnownBroker1AgeMs: Long? = null
+
+    @Volatile
+    private var lastKnownBroker2AgeMs: Long? = null
+
     fun latest(): WidgetData? = lastData
 
     fun pendingIntent(ctx: Context): PendingIntent {
@@ -364,14 +374,25 @@ object ObserverRefresh {
                     minOf(timeout, 2_000)
                 ) as? FetchResult.Ok)?.snapshot
             }
+            // Zamrożony wiek pakietu: zapamiętujemy ostatnią znaną wartość przy udanym pobraniu,
+            // żeby przy padnięciu API brokera licznik nie uciekał w nieskończoność.
+            rememberBrokerAges(firstResult, secondResult)
             base.copy(
                 observer = observer,
                 broker1 = firstResult,
                 broker2 = secondResult,
                 mqtt1Health = health1.health,
                 mqtt2Health = health2.health,
-                fallbackHealth = healthFallback.health
+                fallbackHealth = healthFallback.health,
+                broker1FrozenAgeMs = if (firstResult is FetchResult.Ok) null else lastKnownBroker1AgeMs,
+                broker2FrozenAgeMs = if (secondResult is FetchResult.Ok) null else lastKnownBroker2AgeMs
             )
         }
+    }
+
+    /** Wiek pakietu liczony w chwili udanego pobrania – ta wartość zostanie pokazana po padnięciu API. */
+    private fun rememberBrokerAges(first: FetchResult, second: FetchResult) {
+        (first as? FetchResult.Ok)?.snapshot?.lastPacketAgeMs(System.currentTimeMillis())?.let { lastKnownBroker1AgeMs = it }
+        (second as? FetchResult.Ok)?.snapshot?.lastPacketAgeMs(System.currentTimeMillis())?.let { lastKnownBroker2AgeMs = it }
     }
 }
