@@ -52,13 +52,7 @@ object WidgetRenderer {
         val remainingSec = if (monitoringEnabled) {
             ((scheduledAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L) + 999L) / 1_000L
         } else 0L
-        if (monitoringEnabled) {
-            v.setChronometer(R.id.interval_text, scheduledAt, "%s", true)
-            v.setChronometerCountDown(R.id.interval_text, true)
-        } else {
-            v.setChronometer(R.id.interval_text, SystemClock.elapsedRealtime(), "%s", false)
-            v.setTextViewText(R.id.interval_text, "00s")
-        }
+        v.setTextViewText(R.id.interval_text, if (monitoringEnabled) String.format("%02ds", remainingSec) else "00s")
         v.setViewVisibility(R.id.refresh_icon, android.view.View.VISIBLE)
         v.setImageViewResource(
             R.id.refresh_icon,
