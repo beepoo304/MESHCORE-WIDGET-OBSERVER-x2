@@ -1,116 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Pełny wariant widgetu: minimalistyczny układ, jedna czcionka (Roboto), 3 rozmiary, cyfry o stałej szerokości.
+     Plik generowany wspólnym szablonem razem z widget_observer_compact.xml; te same id. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="10dp"
+    android:paddingStart="14dp" android:paddingEnd="14dp" android:paddingTop="10dp" android:paddingBottom="10dp"
     android:background="@drawable/widget_bg">
 
-    <!-- Header: MESHCORE + refresh -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="2"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="MESH" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="30sp" android:maxLines="1"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="CORE" android:textColor="#6EF015" android:textStyle="bold" android:textSize="26sp" android:maxLines="1"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MESH" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="17sp" android:maxLines="1"/>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="CORE" android:textColor="#6EF015" android:textStyle="bold" android:textSize="17sp" android:maxLines="1"/>
         <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
-        <ImageView android:id="@+id/refresh_icon" android:layout_width="26dp" android:layout_height="26dp"
+        <ImageView android:id="@+id/refresh_icon" android:layout_width="18dp" android:layout_height="18dp"
             android:src="@drawable/ic_refresh" android:contentDescription="@null"/>
         <ProgressBar android:id="@+id/refresh_spinner"
-            android:layout_width="26dp" android:layout_height="26dp" android:indeterminate="true"
+            android:layout_width="18dp" android:layout_height="18dp" android:indeterminate="true"
             android:indeterminateOnly="true" android:indeterminateDrawable="@drawable/ic_refresh_spin"
             android:indeterminateDuration="900" android:visibility="gone"/>
         <TextView android:id="@+id/interval_text" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="6dp" android:text="00s" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="13sp" android:maxLines="1"/>
+            android:layout_marginStart="5dp" android:text="00s" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
     </LinearLayout>
 
-    <FrameLayout android:layout_width="match_parent" android:layout_height="1dp" android:background="#FFFFFF"/>
+    <TextView android:id="@+id/obs_name" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:ellipsize="end"/>
 
-    <!-- Observer row -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="3"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingTop="4dp" android:paddingBottom="4dp">
-        <ImageView android:layout_width="34dp" android:layout_height="34dp"
-            android:src="@drawable/ic_tower" android:contentDescription="@null"/>
-        <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:layout_marginStart="6dp" android:layout_marginEnd="8dp" android:background="#FFFFFF"/>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center_vertical">
-            <TextView android:id="@+id/obs_name" android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="—" android:textColor="#FFFFFF" android:textStyle="bold" android:textSize="16sp" android:maxLines="1" android:ellipsize="end"/>
-            <TextView android:id="@+id/obs_hash" android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="----" android:textColor="#6B6B6B" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"/>
-        </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@+id/obs_hash" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="----" android:textColor="#6B6F69" android:textSize="10sp" android:fontFamily="monospace"
+            android:singleLine="true" android:maxLines="1" android:ellipsize="end"/>
+        <ImageView android:id="@+id/copy_key" android:layout_width="30dp" android:layout_height="26dp"
+            android:paddingStart="8dp" android:paddingEnd="4dp" android:paddingTop="4dp" android:paddingBottom="4dp"
+            android:src="@drawable/ic_copy" android:contentDescription="Kopiuj klucz"/>
     </LinearLayout>
 
-    <FrameLayout android:layout_width="match_parent" android:layout_height="1dp" android:background="#FFFFFF" android:layout_marginBottom="5dp"/>
-
-    <!-- MQTT1 -->
-    <LinearLayout
-        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="3"
-        android:orientation="horizontal" android:gravity="center_vertical"
-        android:background="@drawable/card_outline" android:padding="8dp">
-        <!-- Kolumna tytułu ma taką samą budowę jak "Last packet" (niewidoczny nagłówek + wiersz wartości),
-             dzięki czemu napis MQTT1 stoi w jednej linii z liczbami Packets/h i Last packet. -->
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Last packet" android:visibility="invisible" android:textStyle="bold" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:id="@+id/m1_title" android:text="MQTT1" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center_vertical|start" android:textSize="13sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
-        </LinearLayout>
-        <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical" android:gravity="center_horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Packets/h" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m1_hour" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#6EF015" android:textStyle="bold" android:gravity="center" android:textSize="18sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="14sp" android:autoSizeMaxTextSize="24sp" android:autoSizeStepGranularity="1sp"/>
-        </LinearLayout>
-        <LinearLayout android:id="@+id/m1_total_col" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="3" android:orientation="horizontal" android:gravity="center_vertical">
-        <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center_horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Total packets" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m1_total" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="12sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="15sp" android:autoSizeStepGranularity="1sp"/>
-        </LinearLayout>
-        </LinearLayout>
-        <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical" android:gravity="center_horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Last packet" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m1_last" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:layout_marginStart="4dp" android:layout_marginEnd="4dp" android:background="@drawable/pill_gray" android:text="—" android:textColor="#000000" android:textStyle="bold" android:textSize="13sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
-        </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+        android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:text="BROKER" android:textSize="10sp" android:fontFamily="sans-serif-medium" android:textColor="#8A8F88" android:letterSpacing="0.04" android:maxLines="1"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="2" android:gravity="end" android:text="PKT/H" android:textSize="10sp" android:fontFamily="sans-serif-medium" android:textColor="#8A8F88" android:letterSpacing="0.04" android:maxLines="1"/>
+        <FrameLayout android:id="@+id/hdr_total_col" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="end" android:text="TOTAL" android:textSize="10sp" android:fontFamily="sans-serif-medium" android:textColor="#8A8F88" android:letterSpacing="0.04" android:maxLines="1"/>
+        </FrameLayout>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:layout_marginStart="8dp" android:gravity="center" android:text="LAST" android:textSize="10sp" android:fontFamily="sans-serif-medium" android:textColor="#8A8F88" android:letterSpacing="0.04" android:maxLines="1"/>
     </LinearLayout>
-
-    <FrameLayout android:layout_width="match_parent" android:layout_height="5dp"/>
-
-    <!-- MQTT2 -->
-    <LinearLayout
-        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="3"
-        android:orientation="horizontal" android:gravity="center_vertical"
-        android:background="@drawable/card_outline" android:padding="8dp">
-        <!-- Kolumna tytułu ma taką samą budowę jak "Last packet" (niewidoczny nagłówek + wiersz wartości),
-             dzięki czemu napis MQTT2 stoi w jednej linii z liczbami Packets/h i Last packet. -->
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Last packet" android:visibility="invisible" android:textStyle="bold" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:id="@+id/m2_title" android:text="MQTT2" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center_vertical|start" android:textSize="13sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
-        </LinearLayout>
-        <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical" android:gravity="center_horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Packets/h" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m2_hour" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#6EF015" android:textStyle="bold" android:gravity="center" android:textSize="18sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="14sp" android:autoSizeMaxTextSize="24sp" android:autoSizeStepGranularity="1sp"/>
-        </LinearLayout>
-        <LinearLayout android:id="@+id/m2_total_col" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="3" android:orientation="horizontal" android:gravity="center_vertical">
-        <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center_horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Total packets" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m2_total" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="—" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="12sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="10sp" android:autoSizeMaxTextSize="15sp" android:autoSizeStepGranularity="1sp"/>
-        </LinearLayout>
-        </LinearLayout>
-        <FrameLayout android:layout_width="1dp" android:layout_height="match_parent" android:background="#FFFFFF"/>
-        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:orientation="vertical" android:gravity="center_horizontal">
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Last packet" android:textColor="#FFFFFF" android:textStyle="bold" android:gravity="center" android:textSize="10sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="6sp" android:autoSizeMaxTextSize="10sp" android:autoSizeStepGranularity="1sp"/>
-            <TextView android:id="@+id/m2_last" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_marginEnd="4dp" android:gravity="center" android:background="@drawable/pill_gray" android:text="—" android:textColor="#000000" android:textStyle="bold" android:textSize="13sp" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="9sp" android:autoSizeMaxTextSize="13sp" android:autoSizeStepGranularity="1sp"/>
-        </LinearLayout>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="1dp" android:background="#1F231E"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:minHeight="22dp"
+        android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="4dp" android:paddingBottom="4dp">
+        <TextView android:id="@+id/m1_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:layout_gravity="center_vertical" android:text="MQTT1" android:textColor="#6B6B6B" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+        <TextView android:id="@+id/m1_hour" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="2" android:layout_gravity="center_vertical" android:gravity="end" android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+        <FrameLayout android:id="@+id/m1_total_col" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:layout_gravity="center_vertical">
+            <TextView android:id="@+id/m1_total" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="end" android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+        </FrameLayout>
+        <TextView android:id="@+id/m1_last" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:layout_gravity="center_vertical" android:layout_marginStart="8dp" android:gravity="center" android:background="@drawable/pill_gray" android:text="—" android:textColor="#000000" android:textSize="14sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:paddingTop="1dp" android:paddingBottom="1dp"/>
+    </LinearLayout>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="1dp" android:background="#1F231E"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:minHeight="22dp"
+        android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="4dp" android:paddingBottom="4dp">
+        <TextView android:id="@+id/m2_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:layout_gravity="center_vertical" android:text="MQTT2" android:textColor="#6B6B6B" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+        <TextView android:id="@+id/m2_hour" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="2" android:layout_gravity="center_vertical" android:gravity="end" android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+        <FrameLayout android:id="@+id/m2_total_col" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:layout_gravity="center_vertical">
+            <TextView android:id="@+id/m2_total" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="end" android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+        </FrameLayout>
+        <TextView android:id="@+id/m2_last" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="3" android:layout_gravity="center_vertical" android:layout_marginStart="8dp" android:gravity="center" android:background="@drawable/pill_gray" android:text="—" android:textColor="#000000" android:textSize="14sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:paddingTop="1dp" android:paddingBottom="1dp"/>
     </LinearLayout>
 </LinearLayout>

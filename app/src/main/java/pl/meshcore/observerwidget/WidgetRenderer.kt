@@ -44,6 +44,7 @@ object WidgetRenderer {
         val totalVisibility = if (layout.showTotal) android.view.View.VISIBLE else android.view.View.GONE
         v.setViewVisibility(R.id.m1_total_col, totalVisibility)
         v.setViewVisibility(R.id.m2_total_col, totalVisibility)
+        v.setViewVisibility(R.id.hdr_total_col, totalVisibility)
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
 
@@ -60,7 +61,9 @@ object WidgetRenderer {
         // Wiersz Observera
         val obs = d.observer
         v.setTextViewText(R.id.obs_hash, d.observerId.ifBlank { "----" }.uppercase())
-        v.setTextColor(R.id.obs_hash, GRAY)
+        // Ikona kopiowania: cały klucz trafia do schowka, choć na widgecie jest skrócony (…).
+        v.setViewVisibility(R.id.copy_key, if (d.configured && d.observerId.isNotBlank()) android.view.View.VISIBLE else android.view.View.GONE)
+        v.setOnClickPendingIntent(R.id.copy_key, CopyKeyReceiver.pendingIntent(ctx))
         v.setTextViewText(R.id.obs_name, when {
             !d.configured -> "Ustaw hash w aplikacji"
             obs?.name != null -> obs.name
@@ -98,7 +101,7 @@ object WidgetRenderer {
         v: RemoteViews, d: WidgetData, r: FetchResult?, nowMs: Long, monitoringEnabled: Boolean, layout: WidgetLayout,
         hourId: Int, totalId: Int, lastId: Int
     ) {
-        val t = brokerTexts(r, layout.compact)
+        val t = brokerTexts(r, compact = false)
         v.setTextViewText(hourId, t.hour)
         v.setTextViewText(totalId, t.total)
         when {
