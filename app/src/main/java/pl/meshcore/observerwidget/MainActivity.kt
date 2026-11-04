@@ -2,6 +2,9 @@ package pl.meshcore.observerwidget
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlarmManager
+import android.app.AlertDialog
+import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -9,6 +12,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.net.Uri
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -78,13 +83,44 @@ class MainActivity : Activity() {
         ))
         setContentView(root)
         root.applySystemBarsPadding()
+        requestExactAlarmPermission()
         refresh()
+    }
+
+    private fun requestExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !Config(this).monitoringEnabled) return
+        val ids = AppWidgetManager.getInstance(this).getAppWidgetIds(
+            android.content.ComponentName(this, ObserverWidgetProvider::class.java)
+        )
+        if (ids.isEmpty()) return
+        if (getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) return
+
+        val prefs = getSharedPreferences("runtime", MODE_PRIVATE)
+        if (prefs.getBoolean("exact_alarm_prompt_shown", false)) return
+        prefs.edit().putBoolean("exact_alarm_prompt_shown", true).apply()
+
+        AlertDialog.Builder(this)
+            .setTitle("Licznik sekund")
+            .setMessage("Android opóźnia zwykłe alarmy. Aby licznik widgetu zmieniał się co sekundę, włącz dla aplikacji „Dokładne alarmy i przypomnienia”.")
+            .setPositiveButton("Otwórz ustawienia") { _, _ ->
+                startActivity(
+                    Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                        .setData(Uri.parse("package:$packageName"))
+                )
+            }
+            .setNegativeButton("Później", null)
+            .show()
     }
 
     override fun onResume() {
         super.onResume()
         handler.removeCallbacks(ticker)
-        if (Config(this).monitoringEnabled) handler.post(ticker)
+        if (Config(this).monitoringEnabled) {
+            handler.post(ticker)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+            ) ObserverRefresh.scheduleTick(this)
+        }
     }
 
     override fun onPause() {

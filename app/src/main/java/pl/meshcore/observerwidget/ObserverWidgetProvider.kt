@@ -1,5 +1,6 @@
 package pl.meshcore.observerwidget
 
+import android.app.AlarmManager
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
@@ -24,6 +25,10 @@ class ObserverWidgetProvider : AppWidgetProvider() {
         when (intent.action) {
             ObserverRefresh.ACTION_REFRESH -> ObserverRefresh.refreshAll(context, goAsync())
             ObserverRefresh.ACTION_TICK -> ObserverRefresh.tick(context)
+            AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
+                ObserverRefresh.scheduleTick(context)
+                ObserverRefresh.refreshAll(context)
+            }
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 RefreshWorker.sync(context)
                 ObserverRefresh.scheduleTick(context)

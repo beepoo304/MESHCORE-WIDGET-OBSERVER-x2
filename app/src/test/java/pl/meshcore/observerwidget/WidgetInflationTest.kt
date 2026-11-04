@@ -2,6 +2,7 @@ package pl.meshcore.observerwidget
 
 import android.appwidget.AppWidgetManager
 import android.content.Context
+import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.RemoteViews
@@ -69,6 +70,49 @@ class WidgetInflationTest {
             .inflate(R.layout.widget_observer_compact, FrameLayout(ctx), false)
         assertEquals("MQTT1", root.findViewById<TextView>(R.id.m1_title).text.toString())
         assertEquals("MQTT2", root.findViewById<TextView>(R.id.m2_title).text.toString())
+    }
+
+    @Test fun compactBrokerColumnsAreAligned() {
+        assertBrokerColumnsAligned(R.layout.widget_observer_compact, 180)
+    }
+
+    @Test fun fullBrokerColumnsAreAligned() {
+        assertBrokerColumnsAligned(R.layout.widget_observer, 320)
+    }
+
+    private fun assertBrokerColumnsAligned(layoutRes: Int, heightDp: Int) {
+        val density = ctx.resources.displayMetrics.density
+        val width = (300 * density).toInt()
+        val height = (heightDp * density).toInt()
+        val root = android.view.LayoutInflater.from(ctx).inflate(layoutRes, FrameLayout(ctx), false)
+        root.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+        )
+        root.layout(0, 0, width, height)
+
+        fun left(view: View): Int {
+            var current: View? = view
+            var x = 0
+            while (current != null) {
+                x += current.left
+                current = current.parent as? View
+            }
+            return x
+        }
+
+        val pairs = listOf(
+            R.id.m1_title to R.id.m2_title,
+            R.id.m1_hour to R.id.m2_hour,
+            R.id.m1_total_col to R.id.m2_total_col,
+            R.id.m1_last to R.id.m2_last
+        )
+        pairs.forEach { (firstId, secondId) ->
+            val first = root.findViewById<View>(firstId)
+            val second = root.findViewById<View>(secondId)
+            assertEquals("MQTT columns have different left edges: $firstId/$secondId", left(first), left(second))
+            assertEquals("MQTT columns have different widths: $firstId/$secondId", first.width, second.width)
+        }
     }
 
     @Test fun safeLayoutInflates() = assertNotNull(inflate(WidgetRenderer.safe(ctx, "Błąd")))

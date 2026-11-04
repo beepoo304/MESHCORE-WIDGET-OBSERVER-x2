@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import android.widget.RemoteViews
@@ -50,22 +51,24 @@ object ObserverRefresh {
         return PendingIntent.getBroadcast(ctx, 3, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
-    /**
-     * UI tick updates only RemoteViews from cached data. It must not use an exact alarm:
-     * Android throttles inexact alarms in Doze, while exact alarms require a special user grant.
-     */
+    /** Update countdown and packet-age text once per second while the device is awake. */
     fun scheduleTick(ctx: Context) {
         val app = ctx.applicationContext
         if (!Config(app).monitoringEnabled || widgetIds(app).isEmpty()) return
+        val manager = app.getSystemService(AlarmManager::class.java)
+        val triggerAt = SystemClock.elapsedRealtime() + TICK_INTERVAL_MS
+        val pending = tickIntent(app)
         try {
-            val manager = app.getSystemService(AlarmManager::class.java)
-            manager.set(
-                AlarmManager.ELAPSED_REALTIME,
-                SystemClock.elapsedRealtime() + TICK_INTERVAL_MS,
-                tickIntent(app)
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "scheduleTick failed", e)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || manager.canScheduleExactAlarms()) {
+                manager.setExact(AlarmManager.ELAPSED_REALTIME, triggerAt, pending)
+            } else {
+                manager.set(AlarmManager.ELAPSED_REALTIME, triggerAt, pending)
+            }
+        } catch (exception: SecurityException) {
+            Log.w(TAG, "Exact alarm permission unavailable; using inexact tick", exception)
+            manager.set(AlarmManager.ELAPSED_REALTIME, triggerAt, pending)
+        } catch (exception: Exception) {
+            Log.w(TAG, "scheduleTick failed", exception)
         }
     }
 

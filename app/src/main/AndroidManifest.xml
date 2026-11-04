@@ -22,6 +22,7 @@
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
                 <action android:name="android.appwidget.action.BOOT_COMPLETED"/>
                 <action android:name="android.appwidget.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED"/>
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/observer_widget_info"/>
         </receiver>
