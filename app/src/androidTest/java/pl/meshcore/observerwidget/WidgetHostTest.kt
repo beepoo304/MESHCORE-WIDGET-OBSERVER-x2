@@ -1,7 +1,6 @@
 package pl.meshcore.observerwidget
 
 import android.appwidget.AppWidgetHostView
-import android.appwidget.AppWidgetProviderInfo
 import android.view.View
 import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -24,13 +23,6 @@ class WidgetHostTest {
     @Test
     fun widgetLoadsInRealHostAndShowsBothBrokers() {
         val observerId = "9B250340D918846EFB9140F6243E9253FA0DB9DD3B1B8C0AD8A53337CE5D1234"
-        val providerInfo = AppWidgetProviderInfo().apply {
-            provider = android.content.ComponentName(ctx, ObserverWidgetProvider::class.java)
-            initialLayout = R.layout.widget_observer_compact
-            minWidth = 180
-            minHeight = 110
-        }
-
         val now = System.currentTimeMillis()
         val snapshot = ObserverSnapshot(
             "hash",
@@ -61,7 +53,6 @@ class WidgetHostTest {
         lateinit var hostView: AppWidgetHostView
         inst.runOnMainSync {
             hostView = AppWidgetHostView(ctx)
-            hostView.setAppWidget(1, providerInfo)
             hostView.updateAppWidget(WidgetRenderer.render(ctx, data))
             hostView.measure(
                 View.MeasureSpec.makeMeasureSpec(900, View.MeasureSpec.EXACTLY),
