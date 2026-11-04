@@ -35,7 +35,7 @@ class WidgetHostTest {
 
         inst.uiAutomation.adoptShellPermissionIdentity("android.permission.BIND_APPWIDGET")
         try {
-            assertTrue("bindAppWidgetIdIfAllowed", mgr.bindAppWidgetIdIfAllowed(widgetId, provider))
+            assertTrue("bindAppWidgetId", mgr.bindAppWidgetId(widgetId, provider))
         } finally {
             inst.uiAutomation.dropShellPermissionIdentity()
         }
