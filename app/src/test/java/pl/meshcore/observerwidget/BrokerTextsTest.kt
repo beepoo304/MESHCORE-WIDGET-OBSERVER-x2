@@ -34,6 +34,27 @@ class BrokerTextsTest {
         assertEquals("—", t.hour)
         assertEquals("—", t.total)
         assertEquals("API ✕", t.last)
+        assertNull(t.lastLevel)
+    }
+
+    @Test fun apiDownFreezesLastKnownAge() {
+        val t = WidgetRenderer.brokerTexts(FetchResult.Fail("h", "Timeout"), compact = false, frozenAgeMs = 4 * 60_000L, orangeMin = 3, redMin = 5)
+        assertEquals("—", t.hour)
+        assertEquals("—", t.total)
+        assertEquals("04:00s", t.last)
+        assertEquals(Level.ORANGE, t.lastLevel)
+    }
+
+    @Test fun apiDownWithoutKnownAgeShowsApiError() {
+        val t = WidgetRenderer.brokerTexts(FetchResult.Fail("h", "Timeout"), compact = false, frozenAgeMs = null)
+        assertEquals("API ✕", t.last)
+        assertNull(t.lastLevel)
+    }
+
+    @Test fun apiDownFreezesRedAgeToo() {
+        val t = WidgetRenderer.brokerTexts(FetchResult.Fail("h", "Timeout"), compact = false, frozenAgeMs = 6 * 60_000L, orangeMin = 3, redMin = 5)
+        assertEquals("06:00s", t.last)
+        assertEquals(Level.RED, t.lastLevel)
     }
 
     @Test fun notFetchedYetShowsLoading() {
