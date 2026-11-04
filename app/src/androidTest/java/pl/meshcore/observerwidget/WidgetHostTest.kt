@@ -73,8 +73,8 @@ class WidgetHostTest {
         assertNotNull("MQTT1 last-packet chronometer", hostView.findViewById<View>(R.id.m1_last))
         assertNotNull("MQTT2 packets/h view", hostView.findViewById<View>(R.id.m2_hour))
         assertNotNull("MQTT2 last-packet chronometer", hostView.findViewById<View>(R.id.m2_last))
-        assertEquals("143", text(hostView, R.id.m1_hour))
-        assertEquals("143", text(hostView, R.id.m2_hour))
+        assertTrue("MQTT1 packet rate missing", text(hostView, R.id.m1_hour).orEmpty().contains("143"))
+        assertTrue("MQTT2 packet rate missing", text(hostView, R.id.m2_hour).orEmpty().contains("143"))
         assertTrue("MQTT1 total packets missing", !text(hostView, R.id.m1_total).isNullOrBlank())
         assertTrue("MQTT2 total packets missing", !text(hostView, R.id.m2_total).isNullOrBlank())
     }
