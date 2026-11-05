@@ -103,7 +103,7 @@ object WidgetRenderer {
     }
 
     /** Strzałka kierunku mapera (kolor wg mapującego, obrót o azymut) + odległość, np. „1,2km”. */
-    fun mappingArrowBitmap(ctx: Context, bearingDeg: Double, distKm: Double, color: Int = RED): Bitmap {
+    fun mappingArrowBitmap(ctx: Context, bearingDeg: Double, distKm: Double, arrowColor: Int = RED): Bitmap {
         val density = ctx.resources.displayMetrics.density
         val h = (16 * density).roundToInt().coerceAtLeast(16)
         val arrow = (13 * density).roundToInt().coerceAtLeast(13)
@@ -132,7 +132,7 @@ object WidgetRenderer {
             lineTo(-a * 0.60f, 0f)            // lewe skrzydło grotu
             close()
         }
-        c.drawPath(p, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color })
+        c.drawPath(p, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = arrowColor })
         c.restore()
         // Odległość obok strzałki, wyśrodkowana w pionie.
         val ty = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
