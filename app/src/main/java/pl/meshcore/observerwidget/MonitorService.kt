@@ -134,14 +134,16 @@ class MonitorService : Service() {
             .setContentText("Widget odświeżany co ${Config(this).intervalSec} s")
             .setOngoing(true)
             .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(open)
             .build()
     }
 
     companion object {
         private const val TAG = "ObserverWidget"
-        private const val CHANNEL = "monitor_service"
+        // Nowy ID kanału: Android nie pozwala podnieść ważności istniejącego kanału
+        // (MIN = brak ikony w pasku statusu), więc kanał LOW tworzymy od nowa.
+        private const val CHANNEL = "monitor_service_low"
         private const val NOTIFICATION_ID = 2001
         private const val WAKELOCK_RENEW_MS = 10 * 60_000L
 
@@ -151,8 +153,11 @@ class MonitorService : Service() {
 
         fun ensureChannel(ctx: Context) {
             if (Build.VERSION.SDK_INT < 26) return
-            ctx.getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL, "Monitoring w tle", NotificationManager.IMPORTANCE_MIN)
+            val nm = ctx.getSystemService(NotificationManager::class.java)
+            // Usuwamy stary kanał MIN, żeby nie zostawał w ustawieniach jako martwy.
+            nm.deleteNotificationChannel("monitor_service")
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL, "Monitoring w tle", NotificationManager.IMPORTANCE_LOW)
             )
         }
 

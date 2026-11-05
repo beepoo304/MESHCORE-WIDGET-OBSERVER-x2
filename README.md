@@ -86,6 +86,7 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 
 ## Historia wersji
 
+- **2.3.2** — ikona wieży widoczna w pasku statusu i na ekranie blokady (kanał monitoringu LOW zamiast MIN; nowy ID kanału, bo Android nie pozwala podnieść ważności istniejącego).
 - **2.3.1** — kolor strzałki mapera wg mapującego (czerwony/żółty/fioletowy/…, zmiana co 3 s w kółko), kompaktowa karta mapowania (2–3 linijki, nadal 24 h, nick w kolorze strzałki mapera), drobne poprawki.
 - **2.3.0** — strzałka kierunku mapera na widgecie (czerwona, azymut + odległość, zmiana mapera co 3 s), kierunek i odległość zamiast współrzędnych w karcie mapowania (dla każdego mapującego), karta mapowania widać 24 h od ostatniego pinga; pozycja Observera z bazy repeaterów mapera.
 - **2.2.1** — słowo MAPPER w nagłówku widgetu zamiast ikonki M, szybsze czyszczenie (3 min), przewijanie panelu aplikacji, karta mapowania chowa się po 30 min, push raz na sesję mapującego.
