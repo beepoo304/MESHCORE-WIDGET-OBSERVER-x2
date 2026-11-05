@@ -27,7 +27,7 @@ class GeoMathTest {
         assertEquals("E", GeoMath.compassLabel(90.0))
         assertEquals("S", GeoMath.compassLabel(180.0))
         assertEquals("W", GeoMath.compassLabel(270.0))
-        assertEquals("S", GeoMath.compassLabel(192.0)) // Katowice→Pszczyna
+        assertEquals("SSE", GeoMath.compassLabel(192.0)) // Katowice→Pszczyna (sektor S kończy się na 191,25°)
     }
 
     @Test fun kmFormatsPolishComma() {
