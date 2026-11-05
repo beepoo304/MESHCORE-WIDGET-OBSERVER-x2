@@ -85,7 +85,9 @@ object MapperMonitor {
     fun stateOf(all: List<MapperPing>, nowMs: Long, nickOf: (Long) -> String? = { null }): MappingState {
         if (all.isEmpty()) return MappingState(active = false)
         val last = all.last()
-        val active = nowMs - last.tsMs <= MapperApi.SESSION_GAP_MS
+        // Ikona MAPPER znika już po 3 min ciszy (użytkownik kończy mapowanie i chce natychmiastowego feedbacku);
+        // sesja (do karty w aplikacji) łączy pomiary do 5 min przerwy.
+        val active = nowMs - last.tsMs <= MapperApi.ACTIVE_MS
         // Sesja: idziemy od najnowszego wstecz, dopóki przerwy między pomiarami są krótkie.
         val session = mutableListOf(last)
         for (i in all.indices.last - 1 downTo 0) {

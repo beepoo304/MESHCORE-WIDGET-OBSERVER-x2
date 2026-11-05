@@ -85,7 +85,8 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(8), dp(14), dp(14))
         }
-        root.addView(dash, LinearLayout.LayoutParams(
+        // Panel przewijany w pionie: karta mapowania może być wysoka i nie może zasłaniać kart brokerów.
+        root.addView(ScrollView(this).apply { addView(dash) }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
         ))
         setContentView(root)
@@ -140,9 +141,10 @@ class MainActivity : Activity() {
         ))
         obs?.let { dash.addView(line("Dane z: ${Config.displayHost(it.host)}", 12f, WidgetRenderer.GRAY)) }
         dash.addView(spacer())
-        // Karta mapowania: pokazujemy ją, gdy ktoś mapuje lub mapował, albo po kliknięciu ikony na widgecie.
+        // Karta mapowania: gdy ktoś mapuje lub mapował niedawno (do 30 min), albo po kliknięciu MAPPER na widgecie.
         val mapping = d.mapping
-        if (mapping != null || showMapping) {
+        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < 30 * 60_000L } == true
+        if (showMapping || (mapping != null && (mapping.active || mappingRecent))) {
             dash.addView(mappingCard(mapping, d, wallClockNow))
             dash.addView(spacer())
         }

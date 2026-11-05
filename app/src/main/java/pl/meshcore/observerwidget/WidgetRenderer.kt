@@ -34,10 +34,16 @@ object WidgetRenderer {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+    /** Kolor słowa MAPPER w nagłówku widgetu (puls: sekunda jasno, sekunda przyciemnione). */
+    const val MAPPER_BLUE = 0xFF4FC3F7.toInt()
+    private const val MAPPER_BLUE_DIM = 0xFF1F6E8F.toInt()
+
+    fun mappingIconColor(on: Boolean): Int = if (on) MAPPER_BLUE else MAPPER_BLUE_DIM
+
     /**
-     * Ikona „M” (mapowanie) przy nazwie Observera: widoczna tylko wtedy, gdy ktoś mapuje
-     * w zasięgu Observera; pulsuje, bo RemoteViews nie obsługują prawdziwej animacji.
-     * Okres 2 s: sekunda jasno, sekunda przyciemnione.
+     * Słowo „MAPPER” w nagłówku widgetu (między MESHCORE a licznikiem odświeżania):
+     * widoczne tylko wtedy, gdy ktoś mapuje w zasięgu Observera; pulsuje,
+     * bo RemoteViews nie obsługują prawdziwej animacji. Okres 2 s.
      */
     fun mappingIconOn(nowMs: Long): Boolean = nowMs % 2_000L < 1_200L
 
@@ -54,10 +60,10 @@ object WidgetRenderer {
         v.setViewVisibility(R.id.hdr_total_col, totalVisibility)
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
-        // Ikona mapowania: tylko gdy ktoś mapuje; puls = naprzemienna jasność, klik otwiera panel w aplikacji.
+        // Słowo MAPPER w nagłówku: tylko gdy ktoś mapuje; puls = naprzemienny kolor, klik otwiera panel w aplikacji.
         val mappingActive = d.mapping?.active == true
         v.setViewVisibility(R.id.mapping_icon, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
-        if (mappingActive) v.setInt(R.id.mapping_icon, "setImageAlpha", if (mappingIconOn(nowMs)) 255 else 90)
+        if (mappingActive) v.setTextColor(R.id.mapping_icon, mappingIconColor(mappingIconOn(nowMs)))
         v.setOnClickPendingIntent(R.id.mapping_icon, MainActivity.mappingIntent(ctx))
 
         val config = Config(ctx)

@@ -11,8 +11,8 @@ Dokumentacja jest celowo szczegółowa, żeby kolejne osoby (i asystenci AI) mog
    - dla dwóch brokerów (MQTT1/MQTT2): pakiety na godzinę, total packets, wiek ostatniego pakietu (kolor: zielony/pomarańczowy/czerwony wg progów minutowych),
    - licznik sekund do następnego odświeżenia (tyka co 1 s).
 2. **Wykrywa mapowanie** (od v2.2.0): gdy ktoś mapuje sieć maperem [meshcoresouth.pl/mapper](https://meshcoresouth.pl/mapper/) i nasz Observer odbierze pingi mapowania:
-   - pulsująca **jasnoniebieska ikona „M”** obok nazwy Observera na widgecie (tylko gdy ktoś faktycznie mapuje),
-   - klik na ikonę otwiera aplikację z kartą mapowania: nazwa Observera, klucz (pierwsze 4 znaki + ikonka kopiowania pełnego), nick mapującego, liczba pingów, czasy, SNR (odbiu i u Observera), RSSI, pozycja mapera, dokładność GPS, podłoże szumu,
+   - pulsujące słowo **MAPPER** (jasnoniebieskie) w nagłówku widgetu, na środku między MESHCORE a licznikiem odświeżania — widoczne tylko, gdy ktoś faktycznie mapuje (ostatni ping ≤ 3 min; znika szybko po zakończeniu mapowania),
+   - klik na MAPPER otwiera aplikację z kartą mapowania: nazwa Observera, klucz (pierwsze 4 znaki + ikonka kopiowania pełnego), nick mapującego, liczba pingów, czasy, SNR (odbiór i u Observera), RSSI, pozycja mapera, dokładność GPS, podłoże szumu; karta znika z panelu 30 min po ostatnim pingu,
    - **powiadomienie PUSH** z nickiem mapującego (raz na sesję i przy zmianie mapującego).
 3. **Powiadomienia PUSH o awariach**: Observer nie wysyła pakietów (natychmiast po przekroczeniu czerwonego progu), MQTT1/MQTT2 martwe (z opóźnieniem i cooldownem).
 4. **Aplikacja** (panel OBSERVER): karta mapowania, karty brokerów, start/stop monitoringu; osobny ekran Settings.
@@ -38,7 +38,7 @@ Punkt = tablica: `[id, unix_s, lat, lon, rpt, snr, usnr, rssi, user, acc, nf, pr
 - `since` = increment po ID punktu (pole `last` z odpowiedzi); `rev` zmienia się po usunięciu danych przez moderatora → wtedy resetujemy kursor i nie traktujemy starych punktów jako nowych.
 - Mapper pinguje co 20–120 s, wysyła pomiary do serwera kolejkowo (do 15 s opóźnienia).
 
-Sesja mapowania = pomiary połączone przerwami ≤ 5 min (`MapperApi.SESSION_GAP_MS`). Próg „aktywnego mapowania” = ostatni ping ≤ 5 min temu.
+Sesja mapowania = pomiary połączone przerwami ≤ 5 min (`MapperApi.SESSION_GAP_MS`). Próg „aktywnego mapowania” (widoczność MAPPER na widgecie) = ostatni ping ≤ 3 min temu (`MapperApi.ACTIVE_MS`).
 
 ## Architektura (pliki w `app/src/main/java/pl/meshcore/observerwidget/`)
 
@@ -50,14 +50,14 @@ Sesja mapowania = pomiary połączone przerwami ≤ 5 min (`MapperApi.SESSION_GA
 - `MapperMonitor.kt` — stan mapowania: trzyma nasze pingi w pamięci (6 h), cache nicków, buduje sesję. `poll()` wołane z `ObserverRefresh.collect()`; pierwsza tura ustawia tylko kursor (historia nie powiadamia). `stateOf()` to czysta, testowalna logika sesji.
 - `ObserverRefresh.kt` — serce: `collect()` pobiera równolegle oba brokery + statusy + fallback + mapera; `RefreshGate` chroni przed nakładaniem cykli; harmonogram wyrównany do pełnej sekundy; zamraża wiek pakietu brokera przy padnięciu jego API; `lastData` w pamięci.
 - `MonitorService.kt` — usługa pierwszoplanowa (specialUse): tyka co 1 s (tylko rysowanie przy włączonym ekranie; pobieranie danych zawsze), częściowy wakelock 10 min odnawiany w pętli. AlarmManager tylko rezerwa, WorkManager co 15 min zapas.
-- `WidgetRenderer.kt` — RemoteViews; warianty compact/full; `mappingIconOn(nowMs)` = puls ikony M (okres 2 s: 1,2 s jasno / 0,8 s przyciemnione, przez `setImageAlpha`).
+- `WidgetRenderer.kt` — RemoteViews; warianty compact/full; słowo MAPPER w nagłówku widgetu pulsuje kolorem (`mappingIconOn`, okres 2 s: 1,2 s jasny / 0,8 s przyciemniony niebieski).
 - `Alerts.kt` + `AlertEngine.kt` — powiadomienia: Observer (natychmiast), MQTT1/2 (opóźnienie + cooldown, automat stanów w `AlertEngine`), mapowanie (`evaluateMapping`: raz na sesję i przy zmianie mapującego; stan w prefs `alert_state`, klucze `map_user`/`map_last`). Kanały: `alerts_observer/mqtt1/mqtt2/mapping`, ID 1001–1004.
 - `MainActivity.kt` — panel OBSERVER: karty (mapowanie z ikoną kopiowania pełnego klucza, MQTT1, MQTT2), ticker 1 s; `mappingIntent()` = PendingIntent z `EXTRA_SHOW_MAPPING` (klik ikony M na widgecie).
 - `SettingsActivity.kt` — konfiguracja: hash, hosty, timeout, interwał 2–60 s, progi, alerty (w tym mapowanie), test API. Zmiana hasha resetuje stan mapera (`MapperMonitor.reset()`, kursor).
 - `CopyKeyReceiver.kt` — kopiowanie pełnego klucza do schowka (widget i aplikacja).
 - `TimeFormat.kt`, `Status.kt`, `WidgetLayout.kt`, `Insets.kt`, `RefreshWorker.kt`, `ObserverWidgetProvider.kt` — formaty czasu, progi kolorów, wybór layoutu wg rozmiaru widgetu, edge-to-edge, WorkManager, receiver widgetu.
 
-Layouty widgetu: `res/layout/widget_observer.xml` (full) i `widget_observer_compact.xml` — **te same id view**, zmiany trzeba wprowadzać w obu. Ikona M: `res/drawable/ic_mapping.xml` (jasnoniebieska #4FC3F7, litera M).
+Layouty widgetu: `res/layout/widget_observer.xml` (full) i `widget_observer_compact.xml` — **te same id view**, zmiany trzeba wprowadzać w obu. Wskaźnik mapowania to TextView `mapping_icon` (słowo „MAPPER”) w wierszu nagłówka, między MESHCORE a licznikiem odświeżania.
 
 ## CI/CD (`.github/workflows/`)
 
