@@ -45,16 +45,6 @@ data class MapperPing(
     val noiseFloorDb: Double?
 )
 
-/**
- * Stan mapowania w zasięgu Observera, wyliczony z pingów mapera:
- * - [active] – w ciągu ostatnich [MapperApi.SESSION_GAP_MS] ktoś mapował (pulsująca ikonka M),
- * - [pings] – pomiary bieżącej/przedostatniej sesji (do panelu w aplikacji).
- */
-data class MappingState(
-    val active: Boolean,
-    val pings: List<MapperPing> = emptyList()
-)
-
 sealed class FetchResult {
     data class Ok(val snapshot: ObserverSnapshot) : FetchResult()
     data class Fail(val host: String, val reason: String) : FetchResult()
@@ -88,27 +78,6 @@ data class WidgetData(
 )
 
 enum class Level { GREEN, ORANGE, RED, UNKNOWN }
-
-/**
- * Pojedynczy pomiar mapera (meshcoresouth.pl/mapper) odebrany przez Observera.
- * Format punktu z API mapera: [id, unix_s, lat, lon, rpt, snr, usnr, rssi, user, acc, nf, prof].
- */
-data class MapperPoint(
-    val id: Long,
-    val tsMs: Long,
-    val lat: Double?,
-    val lon: Double?,
-    /** ID repeatera/obserwatora w bazie mapera: pierwsze 16 znaków klucza publicznego (małe litery). */
-    val rptId: String?,
-    /** SNR odbioru – companion mapera słyszy obserwatora (dB). */
-    val snrDb: Double?,
-    /** SNR u obserwatora – obserwator słyszy companiona mapera (dB). */
-    val observerSnrDb: Double?,
-    val rssiDbm: Double?,
-    val userId: Long,
-    val accM: Double?,
-    val noiseFloorDb: Double?
-)
 
 /** Stan mapowania w zasięgu Observera, wyliczony z pingów mapera. */
 data class MappingState(
