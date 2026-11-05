@@ -159,7 +159,7 @@ class SettingsActivity : Activity() {
         }
         // Zmiana Observera = nowy ID w bazie mapera: reset stanu mapowania i pozycji RPT.
         if (id != cfg.observerId) {
-            MapperMonitor.reset()
+            MapperMonitor.reset(applicationContext)
             cfg.mapperLastId = 0L
             cfg.mapperRev = 0
             cfg.mapperObsLat = Float.NaN

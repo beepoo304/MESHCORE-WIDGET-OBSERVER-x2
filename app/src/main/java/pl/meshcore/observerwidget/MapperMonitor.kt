@@ -1,6 +1,8 @@
 package pl.meshcore.observerwidget
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Śledzenie mapowania w zasięgu Observera na podstawie publicznej bazy mapera MeshCore South.
@@ -8,10 +10,17 @@ import android.content.Context
  * Co cykl odświeżania widgetu odpytujemy API o punkty nowsze niż ostatnio widziany ID.
  * Ping mapowania odebrany przez naszego Observera = punkt z rpt równym pierwszym 16 znakom
  * jego klucza publicznego. Z punktów składamy sesję mapowania (przerwa > 5 min kończy sesję);
- * stan trzymamy w pamięci, żeby widget i aplikacja mogły go rysować bez sieci.
+ * stan trzymamy w pamięci, a pingi i nicki dodatkowo zapisujemy na dysk – dzięki temu karta
+ * „ostatniego mapowania” przeżywa restart procesu/telefonu i widnieje w zakładce OBSERVER
+ * przez pełne 24 h od ostatniego pingu, jak obiecano.
  */
 object MapperMonitor {
     private const val MAX_PAGES = 5
+
+    /** Osobne prefs na stan mapowania (pingi + nicki), przeżywające restart procesu. */
+    private const val PREFS_NAME = "mapper_state"
+    private const val KEY_PINGS = "pings_json"
+    private const val KEY_NICKS = "nicks_json"
 
     /** Jak długo trzymamy pozycję Observera w pamięci/prefs (tydzień). */
     private const val POS_TTL_MS = 7 * 24 * 60 * 60_000L
@@ -31,14 +40,58 @@ object MapperMonitor {
 
     fun nick(userId: Long): String? = synchronized(nicks) { nicks[userId] }
 
-    /** Czyszczenie stanu (np. po zmianie Observera w ustawieniach). */
-    fun reset() {
+    /** Czy stan został już wczytany z dysku w tym życiu procesu. */
+    private var loaded = false
+
+    /** Czyszczenie stanu (np. po zmianie Observera w ustawieniach). Kasuje też zapis na dysku. */
+    fun reset(ctx: Context? = null) {
         synchronized(pings) { pings.clear() }
         synchronized(nicks) { nicks.clear() }
         synchronized(this) {
             obsLat = null
             obsLon = null
         }
+        loaded = true
+        ctx?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.edit()
+            ?.remove(KEY_PINGS)?.remove(KEY_NICKS)?.apply()
+    }
+
+    /**
+     * Jednorazowe przywrócenie pingów i nicków z dysku (okno 24 h). Uruchamiane na początku
+     * każdego poll() – jeśli proces padł (aktualizacja APK, restart telefonu, Android ubił
+     * usługę w tle), karta mapowania w zakładce OBSERVER od razu ma z powrotem swoją historię.
+     */
+    private fun ensureLoaded(ctx: Context) {
+        if (loaded) return
+        synchronized(pings) {
+            if (loaded) return
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val cut = System.currentTimeMillis() - MapperApi.KEEP_MS
+            val restored = pingsFromJson(prefs.getString(KEY_PINGS, null))
+                .filter { it.tsMs >= cut }
+                .sortedBy { it.tsMs }
+            if (restored.isNotEmpty()) {
+                pings.clear()
+                pings.addAll(restored)
+            }
+            val restoredNicks = nicksFromJson(prefs.getString(KEY_NICKS, null))
+            if (restoredNicks.isNotEmpty()) {
+                nicks.clear()
+                nicks.putAll(restoredNicks)
+            }
+            loaded = true
+        }
+    }
+
+    /** Zapis okna 24 h pingów + nicków na dysk (asynchronicznie). */
+    private fun persist(ctx: Context) {
+        val cut = System.currentTimeMillis() - MapperApi.KEEP_MS
+        val pingJson = synchronized(pings) { pingsToJson(pings.filter { it.tsMs >= cut }) }
+        val nickJson = synchronized(nicks) { nicksToJson(nicks) }
+        ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(KEY_PINGS, pingJson)
+            .putString(KEY_NICKS, nickJson)
+            .apply()
     }
 
     /**
@@ -48,6 +101,7 @@ object MapperMonitor {
      */
     fun poll(ctx: Context, observerId: String, timeoutMs: Int): Pair<MappingState?, List<MapperPing>> {
         val config = Config(ctx.applicationContext)
+        ensureLoaded(ctx.applicationContext)
         val short = MapperApi.shortId(observerId)
         if (short.length != 16) return state() to emptyList()
         ensurePosition(ctx.applicationContext, short, timeoutMs)
@@ -56,11 +110,13 @@ object MapperMonitor {
         var since = if (firstRun) 0L else config.mapperLastId
         var lastId = since
         val fresh = mutableListOf<MapperPing>()
+        var dirty = firstRun // pierwsza tura zapisuje (nawet pusty) stan na dysk
         var pages = 0
         while (pages < MAX_PAGES) {
             pages++
             val result = MapperApi.poll(sinceId = since, timeoutMs = timeoutMs)
                 ?: return state() to emptyList() // serwer mapera nie odpowiada: zostaje stan z pamięci
+            if (result.users.isNotEmpty()) dirty = true
             synchronized(nicks) { nicks.putAll(result.users) }
             if (result.rev != 0 && result.rev != config.mapperRev) {
                 // Zmiana rewizji bazy (np. moderator usunął dane): przesuwamy punkt startowy,
@@ -70,12 +126,13 @@ object MapperMonitor {
                 return state() to emptyList()
             }
             if (result.rev != 0) config.mapperRev = result.rev
-            for (p in result.points) if (p.rptId == short && add(p)) fresh.add(p)
+            for (p in result.points) if (p.rptId == short && add(p)) { fresh.add(p); dirty = true }
             lastId = maxOf(lastId, result.lastId)
             since = result.lastId
             if (!result.more) break
         }
         config.mapperLastId = lastId
+        if (dirty) persist(ctx.applicationContext)
         // Pierwsza tura: punkt startowy ustawiony, ale nie powiadamiamy o historii.
         return state() to if (firstRun) emptyList() else fresh
     }
@@ -150,5 +207,87 @@ object MapperMonitor {
             active = active, pings = shown, mapperNicks = mapperNicks,
             observerLat = observerLat, observerLon = observerLon
         )
+    }
+}
+
+/** Serializacja pingów mapowania do JSON (stan na dysk, przeżywa restart procesu). */
+internal fun pingsToJson(pings: List<MapperPing>): String {
+    val arr = JSONArray()
+    for (p in pings) {
+        val o = JSONObject()
+        o.put("id", p.id)
+        o.put("t", p.tsMs)
+        p.lat?.let { o.put("la", it) }
+        p.lon?.let { o.put("lo", it) }
+        p.rptId?.let { o.put("r", it) }
+        p.snrDb?.let { o.put("s", it) }
+        p.observerSnrDb?.let { o.put("os", it) }
+        p.rssiDbm?.let { o.put("rs", it) }
+        o.put("u", p.userId)
+        p.accM?.let { o.put("a", it) }
+        p.noiseFloorDb?.let { o.put("n", it) }
+        arr.put(o)
+    }
+    return arr.toString()
+}
+
+/** Odczyt pingów z JSON; uszkodzone/obce rekordy są po prostu pomijane. */
+internal fun pingsFromJson(json: String?): List<MapperPing> {
+    if (json.isNullOrBlank()) return emptyList()
+    return try {
+        val arr = JSONArray(json)
+        val out = ArrayList<MapperPing>(arr.length())
+        for (i in 0 until arr.length()) {
+            try {
+                val o = arr.getJSONObject(i)
+                out.add(
+                    MapperPing(
+                        id = o.getLong("id"),
+                        tsMs = o.getLong("t"),
+                        lat = o.optNullableDouble("la"),
+                        lon = o.optNullableDouble("lo"),
+                        rptId = if (o.has("r")) o.getString("r") else null,
+                        snrDb = o.optNullableDouble("s"),
+                        observerSnrDb = o.optNullableDouble("os"),
+                        rssiDbm = o.optNullableDouble("rs"),
+                        userId = o.getLong("u"),
+                        accM = o.optNullableDouble("a"),
+                        noiseFloorDb = o.optNullableDouble("n")
+                    )
+                )
+            } catch (_: Exception) {
+                // pojedynczy uszkodzony rekord nie wywala całej historii
+            }
+        }
+        out
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+/** Null gdy klucza brak lub wartość to JSON null. */
+internal fun JSONObject.optNullableDouble(key: String): Double? =
+    if (has(key) && !isNull(key)) optDouble(key) else null
+
+/** Serializacja cache nicków (ID konta → nick). */
+internal fun nicksToJson(nicks: Map<Long, String>): String {
+    val o = JSONObject()
+    for ((id, nick) in nicks) o.put(id.toString(), nick)
+    return o.toString()
+}
+
+internal fun nicksFromJson(json: String?): Map<Long, String> {
+    if (json.isNullOrBlank()) return emptyMap()
+    return try {
+        val o = JSONObject(json)
+        val out = HashMap<Long, String>()
+        for (key in o.keys()) {
+            val id = key.toLongOrNull() ?: continue
+            val nick = o.optString(key, "")
+            if (nick.isNotBlank()) out[id] = nick
+        }
+        out
+    } catch (_: Exception) {
+        emptyMap()
     }
 }
