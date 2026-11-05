@@ -118,6 +118,7 @@ object MapperApi {
         return if (d.isNaN()) null else d
     }
 
-    /** ID repeatera/obserwatora w bazie mapera: pierwsze 16 znaków klucza publicznego. */
-    fun shortId(observerId: String): String = observerId.trim().lowercase().take(16)
+    /** ID repeatera/obserwatora w bazie mapera: pierwsze 16 znaków klucza publicznego; puste dla krótszych. */
+    fun shortId(observerId: String): String =
+        observerId.trim().lowercase().let { if (it.length >= 16) it.take(16) else "" }
 }
