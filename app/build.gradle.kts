@@ -9,8 +9,8 @@ android {
         applicationId = "pl.meshcore.observerwidget"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "2.3.1"
+        versionCode = 8
+        versionName = "2.3.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Stały klucz (w repo), żeby każde APK z GitHub Actions instalowało się jako aktualizacja poprzedniego.
