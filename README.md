@@ -12,8 +12,8 @@ Dokumentacja jest celowo szczegółowa, żeby kolejne osoby (i asystenci AI) mog
    - licznik sekund do następnego odświeżenia (tyka co 1 s).
 2. **Wykrywa mapowanie** (od v2.2.0): gdy ktoś mapuje sieć maperem [meshcoresouth.pl/mapper](https://meshcoresouth.pl/mapper/) i nasz Observer odbierze pingi mapowania:
    - pulsujące słowo **MAPPER** (jasnoniebieskie) w nagłówku widgetu, na środku między MESHCORE a licznikiem odświeżania — widoczne tylko, gdy ktoś faktycznie mapuje (ostatni ping ≤ 3 min; znika szybko po zakończeniu mapowania),
-   - obok MAPPER **czerwona strzałka kierunku** (obracana o azymut, 8 kierunków) z odległością mapera od Observera, np. `→ 1,6km`; przy kilku mapujących strzałka zmienia mapera co 3 s (ostatni ping każdego z nich); pozycja Observera z `api.php?action=repeaters` (cache w prefs, tydzień),
-   - klik na MAPPER otwiera aplikację z kartą mapowania: nazwa Observera, klucz (pierwsze 4 znaki + ikonka kopiowania pełnego), nick mapującego, kierunek (N/NE/E… 16 sektorów) i odległość każdego mapującego od Observera, liczba pingów, czasy, SNR (odbiór i u Observera), RSSI, dokładność GPS, podłoże szumu; karta widać w panelu 24 h od ostatniego pinga,
+   - obok MAPPER **strzałka kierunku w kolorze mapującego** (obracana o azymut, 8 kierunków) z odległością mapera od Observera, np. `→ 1,6km`; 1. mapujący = czerwony, 2. = żółty, 3. = fioletowy, kolejni dalej z palety (`WidgetRenderer.MAPPER_ARROW_COLORS`, cyklicznie); przy kilku mapujących strzałka zmienia mapera co 3 s w kółko (ostatni ping każdego z nich), aż mapowanie zniknie (3 min po ostatnim pingu); pozycja Observera z `api.php?action=repeaters` (cache w prefs, tydzień),
+   - klik na MAPPER otwiera aplikację z **kompaktową kartą mapowania (2–3 linijki)**, widoczną 24 h od ostatniego pinga: tytuł + klucz (pierwsze 4 znaki + ikonka kopiowania pełnego), mapujący z kierunkiem (16 sektorów) i odległością od Observera (nick w kolorze strzałki tego mapera na widgecie), liczba pingów + czas ostatniego pinga + SNR u Observera,
    - **powiadomienie PUSH** z nickiem mapującego (raz na sesję i przy zmianie mapującego).
 3. **Powiadomienia PUSH o awariach**: Observer nie wysyła pakietów (natychmiast po przekroczeniu czerwonego progu), MQTT1/MQTT2 martwe (z opóźnieniem i cooldownem).
 4. **Aplikacja** (panel OBSERVER): karta mapowania, karty brokerów, start/stop monitoringu; osobny ekran Settings.
@@ -59,7 +59,7 @@ Sesja mapowania = pomiary połączone przerwami ≤ 5 min (`MapperApi.SESSION_GA
 - `CopyKeyReceiver.kt` — kopiowanie pełnego klucza do schowka (widget i aplikacja).
 - `TimeFormat.kt`, `Status.kt`, `WidgetLayout.kt`, `Insets.kt`, `RefreshWorker.kt`, `ObserverWidgetProvider.kt` — formaty czasu, progi kolorów, wybór layoutu wg rozmiaru widgetu, edge-to-edge, WorkManager, receiver widgetu.
 
-Layouty widgetu: `res/layout/widget_observer.xml` (full) i `widget_observer_compact.xml` — **te same id view**, zmiany trzeba wprowadzać w obu. Wskaźnik mapowania to TextView `mapping_icon` (słowo „MAPPER”) w wierszu nagłówka, między MESHCORE a licznikiem odświeżania; obok niego ImageView `mapping_arrow` (bitmapa: czerwona strzałka obrócona o azymut + odległość, rysowana w `WidgetRenderer.mappingArrowBitmap`, bo RemoteViews nie obracają drawabli).
+Layouty widgetu: `res/layout/widget_observer.xml` (full) i `widget_observer_compact.xml` — **te same id view**, zmiany trzeba wprowadzać w obu. Wskaźnik mapowania to TextView `mapping_icon` (słowo „MAPPER”) w wierszu nagłówka, między MESHCORE a licznikiem odświeżania; obok niego ImageView `mapping_arrow` (bitmapa: strzałka w kolorze mapującego obrócona o azymut + odległość, rysowana w `WidgetRenderer.mappingArrowBitmap`, bo RemoteViews nie obracają drawabli).
 
 ## CI/CD (`.github/workflows/`)
 
@@ -86,6 +86,7 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 
 ## Historia wersji
 
+- **2.3.1** — kolor strzałki mapera wg mapującego (czerwony/żółty/fioletowy/…, zmiana co 3 s w kółko), kompaktowa karta mapowania (2–3 linijki, nadal 24 h, nick w kolorze strzałki mapera), drobne poprawki.
 - **2.3.0** — strzałka kierunku mapera na widgecie (czerwona, azymut + odległość, zmiana mapera co 3 s), kierunek i odległość zamiast współrzędnych w karcie mapowania (dla każdego mapującego), karta mapowania widać 24 h od ostatniego pinga; pozycja Observera z bazy repeaterów mapera.
 - **2.2.1** — słowo MAPPER w nagłówku widgetu zamiast ikonki M, szybsze czyszczenie (3 min), przewijanie panelu aplikacji, karta mapowania chowa się po 30 min, push raz na sesję mapującego.
 - **2.2.0** — wykrywanie mapowania (mapper meshcoresouth.pl): pulsująca niebieska ikona M na widgecie, karta mapowania w aplikacji, push z nickiem mapującego; alerty o mapowaniu w ustawieniach (domyślnie włączone).
