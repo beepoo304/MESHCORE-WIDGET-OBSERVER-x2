@@ -157,9 +157,9 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Karta mapowania (ikona „M” na widgecie): nazwa Observera, klucz – pierwsze 4 znaki
-     * + ikona kopiowania pełnego (jak w widgecie), nick mapującego, czas, liczba pingów,
-     * SNR/RSSI ostatniego pomiaru.
+     * Karta mapowania — KOMPAKTOWA (2–3 linijki), widoczna 24 h od ostatniego pinga:
+     * tytuł z kluczem i ikoną kopiowania, mapujący z kierunkiem i odległością
+     * (nick w kolorze strzałki tego mapera na widgecie), statystyki pingów.
      */
     private fun mappingCard(m: MappingState?, d: WidgetData, nowMs: Long): View {
         val box = LinearLayout(this).apply {
@@ -175,10 +175,11 @@ class MainActivity : Activity() {
             active -> 0xFF1F6E8F.toInt()
             else -> WidgetRenderer.GRAY
         }
-        box.addView(line(if (active) "● MAPOWANIE W TOKU" else "OSTATNIE MAPOWANIE", 18f, titleColor, bold = true))
-        // Nazwa Observera i klucz: pierwsze 4 znaki, reszta do skopiowania (jak w widgecie).
-        val keyRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        keyRow.addView(line("${d.mappingObserverName()}  ${d.observerId.take(4)}…", 16f, Color.WHITE, bold = true))
+        // Linia 1: tytuł + klucz (pierwsze 4 znaki) + ikona kopiowania pełnego (jak w widgecie).
+        val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        titleRow.addView(line(if (active) "● MAPOWANIE W TOKU" else "OSTATNIE MAPOWANIE", 18f, titleColor, bold = true))
+        titleRow.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
+        titleRow.addView(line("${d.mappingObserverName()} ${d.observerId.take(4)}…", 15f, Color.WHITE))
         val copy = android.widget.ImageView(this).apply {
             setImageResource(R.drawable.ic_copy)
             setPadding(dp(6), dp(2), dp(2), dp(2))
@@ -191,40 +192,55 @@ class MainActivity : Activity() {
                 }
             }
         }
-        keyRow.addView(copy)
-        box.addView(keyRow)
+        titleRow.addView(copy)
+        box.addView(titleRow)
         if (m == null) {
             box.addView(line("Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada).", 15f, WidgetRenderer.GRAY))
             return box
         }
-        if (m.mapperNicks.isNotEmpty()) {
-            box.addView(line("Mapuje: ${m.mapperNicks.joinToString(", ")}", 16f, 0xFF4FC3F7.toInt(), bold = true))
-        }
-        // Kierunek i odległość każdego mapującego od Observera (pozycja RPT z bazy mapera).
-        if (m.observerLat != null && m.observerLon != null) {
-            m.pings.filter { it.lat != null && it.lon != null }
-                .groupBy { it.userId }
-                .map { (_, v) -> v.last() }
-                .sortedBy { it.userId }
-                .forEach { p ->
-                    val bearing = GeoMath.bearingDeg(m.observerLat!!, m.observerLon!!, p.lat!!, p.lon!!)
-                    val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, p.lat!!, p.lon!!)
-                    val nick = MapperMonitor.nick(p.userId) ?: "user ${p.userId}"
-                    box.addView(line("$nick: ${GeoMath.km(dist)} na ${GeoMath.compassLabel(bearing)} od Observera", 15f, Color.WHITE))
+        // Linia 2: mapujący z kierunkiem i odległością od Observera (pozycja RPT z bazy mapera);
+        // nick w kolorze strzałki danego mapera na widgecie (czerwony/żółty/fioletowy/…).
+        val latest = m.pings
+            .filter { it.lat != null && it.lon != null }
+            .groupBy { it.userId }
+            .map { (_, v) -> v.last() }
+            .sortedBy { it.userId }
+        if (latest.isNotEmpty() || m.mapperNicks.isNotEmpty()) {
+            val sb = android.text.SpannableStringBuilder()
+            sb.append(if (active) "Mapuje: " else "Mapowali: ")
+            if (latest.isEmpty()) {
+                sb.append(m.mapperNicks.joinToString(", "))
+            } else latest.forEachIndexed { i, p ->
+                val nick = MapperMonitor.nick(p.userId) ?: m.mapperNicks.getOrNull(i) ?: "user ${p.userId}"
+                val nStart = sb.length
+                sb.append(nick)
+                sb.setSpan(
+                    android.text.style.ForegroundColorSpan(WidgetRenderer.mapperArrowColor(i)),
+                    nStart, sb.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                if (m.observerLat != null && m.observerLon != null) {
+                    val bearing = GeoMath.bearingDeg(m.observerLat, m.observerLon, p.lat!!, p.lon!!)
+                    val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, p.lat, p.lon!!)
+                    sb.append(" ${GeoMath.km(dist)} ${GeoMath.compassLabel(bearing)}")
                 }
+                if (i < latest.size - 1) sb.append(" · ")
+            }
+            box.addView(TextView(this).apply {
+                text = sb; textSize = 15f; setTextColor(Color.WHITE)
+                setPadding(0, dp(2), 0, dp(2))
+            })
         }
+        // Linia 3: liczba pingów, ostatni ping, SNR u Observera (jeśli jest).
         val pings = m.pings
         if (pings.isNotEmpty()) {
             val last = pings.last()
-            box.addView(line("Pingów mapowania: ${pings.size} (sesja od ${timeOf(pings.first().tsMs)})", 15f, Color.WHITE))
-            box.addView(line("Ostatni ping: ${TimeFormat.packetAge(nowMs - last.tsMs)} temu (${timeOf(last.tsMs)})", 15f, Color.WHITE))
-            last.observerSnrDb?.let { box.addView(line("SNR u Observera: ${fmt(it)} dB", 15f, Color.WHITE)) }
-            last.snrDb?.let { box.addView(line("SNR odbioru (u mapera): ${fmt(it)} dB", 15f, Color.WHITE)) }
-            last.rssiDbm?.let { box.addView(line("RSSI: ${fmt(it)} dBm", 15f, Color.WHITE)) }
-            last.accM?.let { box.addView(line("Dokładność GPS: ±${fmt(it)} m", 14f, WidgetRenderer.GRAY)) }
-            last.noiseFloorDb?.let { box.addView(line("Podłoże szumu: ${fmt(it)} dB", 14f, WidgetRenderer.GRAY)) }
+            val parts = mutableListOf(
+                "Pingów: ${pings.size}",
+                "ostatni ${TimeFormat.packetAge(nowMs - last.tsMs)} temu (${timeOf(last.tsMs)})"
+            )
+            last.observerSnrDb?.let { parts.add("SNR u Obs: ${fmt(it)} dB") }
+            box.addView(line(parts.joinToString(" · "), 15f, Color.WHITE))
         }
-        box.addView(line("Ping mapowania = odkrycie odebrane przez Observera z bazy mapera meshcoresouth.pl", 12f, WidgetRenderer.GRAY))
         return box
     }
 

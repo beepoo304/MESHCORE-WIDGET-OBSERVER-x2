@@ -95,6 +95,28 @@ class WidgetRendererTest {
         assertEquals(2L, WidgetRenderer.mappingArrowPing(m, 6_000L)?.userId)   // wraca na slot 0
     }
 
+    @Test fun mapperArrowColorsPerMapperIndex() {
+        // 1. mapujący – czerwony, 2. – żółty, 3. – fioletowy, kolejni dalej z palety.
+        assertEquals(WidgetRenderer.RED, WidgetRenderer.mapperArrowColor(0))
+        assertEquals(0xFFFFD60A.toInt(), WidgetRenderer.mapperArrowColor(1))
+        assertEquals(0xFFBF5AF2.toInt(), WidgetRenderer.mapperArrowColor(2))
+        assertEquals(0xFF64D2FF.toInt(), WidgetRenderer.mapperArrowColor(3))
+        assertEquals(0xFF30D158.toInt(), WidgetRenderer.mapperArrowColor(4))
+        // Paleta cyklicznie: szósty mapujący znowu czerwony, ujemny indeks bezpieczny.
+        assertEquals(WidgetRenderer.RED, WidgetRenderer.mapperArrowColor(5))
+        assertEquals(WidgetRenderer.RED, WidgetRenderer.mapperArrowColor(-5))
+    }
+
+    @Test fun mappingArrowReturnsPingWithMapperIndexForColor() {
+        val m = MappingState(active = true, pings = listOf(mp(1, 2), mp(2, 5)), mapperNicks = listOf("A", "B"))
+        val a = WidgetRenderer.mappingArrow(m, 0L)!!
+        assertEquals(2L, a.first.userId)
+        assertEquals(0, a.second)
+        val b = WidgetRenderer.mappingArrow(m, 3_000L)!!
+        assertEquals(5L, b.first.userId)
+        assertEquals(1, b.second)
+    }
+
     @Test fun arrowPingTakesLatestPingPerMapperAndSkipsNoGps() {
         val m = MappingState(active = true, pings = listOf(mp(1, 2), mp(2, 2), mp(3, 5, lat = null)))
         assertEquals(2L, WidgetRenderer.mappingArrowPing(m, 0L)?.userId) // maper 5 bez GPS odpada

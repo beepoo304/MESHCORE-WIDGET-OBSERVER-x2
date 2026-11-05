@@ -53,23 +53,57 @@ object WidgetRenderer {
     fun mappingIconOn(nowMs: Long): Boolean = nowMs % 2_000L < 1_200L
 
     /**
+     * Kolory strzałki kierunku mapera: każdy mapujący ma swój kolor
+     * (1. czerwony, 2. żółty, 3. fioletowy, kolejni dalej z palety, cyklicznie).
+     */
+    val MAPPER_ARROW_COLORS = intArrayOf(
+        RED,                    // 1. mapujący – czerwony
+        0xFFFFD60A.toInt(),     // 2. mapujący – żółty
+        0xFFBF5AF2.toInt(),    // 3. mapujący – fioletowy
+        0xFF64D2FF.toInt(),    // 4. – błękitny
+        0xFF30D158.toInt()     // 5. – zielony
+    )
+
+    fun mapperArrowColor(mapperIndex: Int): Int =
+        MAPPER_ARROW_COLORS[Math.floorMod(mapperIndex, MAPPER_ARROW_COLORS.size)]
+
+    /**
+     * Ostatni ping każdego mapującego (z pozycją GPS), posortowane po userId.
+     * Kolejność na tej liście = numer koloru strzałki danego mapującego.
+     */
+    private fun latestPingsPerMapper(m: MappingState): List<MapperPing> =
+        m.pings
+            .filter { it.lat != null && it.lon != null }
+            .groupBy { it.userId }
+            .map { (_, v) -> v.last() }
+            .sortedBy { it.userId }
+
+    /**
      * Ping, którego ma pokazać strzałka kierunku: ostatni ping każdego mapującego
      * (z pozycją GPS), a przy kilku mapujących zmiana co 3 s (cykl [nowMs]).
      */
     fun mappingArrowPing(m: MappingState?, nowMs: Long): MapperPing? {
         if (m == null) return null
-        val latest = m.pings
-            .filter { it.lat != null && it.lon != null }
-            .groupBy { it.userId }
-            .map { (_, v) -> v.last() }
-            .sortedBy { it.userId }
+        val latest = latestPingsPerMapper(m)
         if (latest.isEmpty()) return null
         val idx = ((nowMs / 3_000L) % latest.size).toInt()
         return latest[idx]
     }
 
-    /** Strzałka kierunku mapera (czerwona, 8 kierunków = obrót o azymut) + odległość, np. „1,2km”. */
-    fun mappingArrowBitmap(ctx: Context, bearingDeg: Double, distKm: Double): Bitmap {
+    /**
+     * Strzałka kierunku razem z numerem mapującego na liście (do koloru):
+     * przy kilku mapujących zmiana co 3 s w kółko, aż mapowanie zniknie.
+     */
+    fun mappingArrow(m: MappingState?, nowMs: Long): Pair<MapperPing, Int>? {
+        if (m == null) return null
+        val latest = latestPingsPerMapper(m)
+        if (latest.isEmpty()) return null
+        val idx = ((nowMs / 3_000L) % latest.size).toInt()
+        return latest[idx] to idx
+    }
+
+    /** Strzałka kierunku mapera (kolor wg mapującego, obrót o azymut) + odległość, np. „1,2km”. */
+    fun mappingArrowBitmap(ctx: Context, bearingDeg: Double, distKm: Double, color: Int = RED): Bitmap {
         val density = ctx.resources.displayMetrics.density
         val h = (16 * density).roundToInt().coerceAtLeast(16)
         val arrow = (13 * density).roundToInt().coerceAtLeast(13)
@@ -98,7 +132,7 @@ object WidgetRenderer {
             lineTo(-a * 0.60f, 0f)            // lewe skrzydło grotu
             close()
         }
-        c.drawPath(p, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = RED })
+        c.drawPath(p, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color })
         c.restore()
         // Odległość obok strzałki, wyśrodkowana w pionie.
         val ty = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
@@ -126,15 +160,16 @@ object WidgetRenderer {
         v.setOnClickPendingIntent(R.id.mapping_icon, MainActivity.mappingIntent(ctx))
         // Strzałka kierunku: czerwona, obrócona w stronę mapera + odległość; przy kilku mapujących zmiana co 3 s.
         val m = d.mapping
-        val arrowPing = mappingArrowPing(m, nowMs)
+        val arrow = mappingArrow(m, nowMs)
+        val arrowPing = arrow?.first
         val obsLat = m?.observerLat
         val obsLon = m?.observerLon
         val showArrow = mappingActive && arrowPing?.lat != null && arrowPing.lon != null && obsLat != null && obsLon != null
         v.setViewVisibility(R.id.mapping_arrow, if (showArrow) android.view.View.VISIBLE else android.view.View.GONE)
-        if (showArrow && arrowPing != null) {
+        if (showArrow && arrow != null && arrowPing != null) {
             val bearing = GeoMath.bearingDeg(obsLat!!, obsLon!!, arrowPing.lat!!, arrowPing.lon!!)
-            val dist = GeoMath.distanceKm(obsLat, obsLon, arrowPing.lat!!, arrowPing.lon!!)
-            v.setImageViewBitmap(R.id.mapping_arrow, mappingArrowBitmap(ctx, bearing, dist))
+            val dist = GeoMath.distanceKm(obsLat, obsLon, arrowPing.lat, arrowPing.lon!!)
+            v.setImageViewBitmap(R.id.mapping_arrow, mappingArrowBitmap(ctx, bearing, dist, mapperArrowColor(arrow.second)))
         }
 
         val config = Config(ctx)
