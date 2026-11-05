@@ -59,38 +59,44 @@ object Alerts {
 
     /**
      * Powiadomienie o mapowaniu: przychodzi z nazwą mapującego, gdy ktoś zacznie mapować
-     * w zasięgu Observera (pierwszy ping nowej sesji) albo gdy w tej samej sesji zacznie
-     * mapować ktoś inny. Nie powiadamiamy o każdym pingu (maper pinguje co 20–120 s).
+     * w zasięgu Observera – raz na sesję dla każdego mapującego (kolejna osoba w tej samej
+     * sesji też dostaje osobny push). Nie powiadamiamy o każdym pingu (maper pinguje co 20–120 s).
      */
     fun evaluateMapping(ctx: Context, state: MappingState?, fresh: List<MapperPing>, nowMs: Long = System.currentTimeMillis()) {
         val cfg = Config(ctx)
         if (!cfg.monitoringEnabled || !cfg.alertMapping || fresh.isEmpty()) return
         synchronized(lock) {
             val prefs = ctx.applicationContext.getSharedPreferences("alert_state", Context.MODE_PRIVATE)
-            val lastUser = prefs.getLong("map_user", -1L)
             val lastAt = prefs.getLong("map_last", 0L)
-            // Nowa sesja = cisza dłuższa niż przerwa sesji od poprzedniego powiadomienia.
+            // Nowa sesja = cisza dłuższa niż przerwa sesji od ostatniego pingu.
             val newSession = lastAt == 0L || nowMs - lastAt > MapperApi.SESSION_GAP_MS
-            val ping = fresh.last()
-            val newMapper = ping.userId != lastUser
-            if (!newSession && !newMapper) return
-            val nick = MapperMonitor.nick(ping.userId) ?: "nieznany mapujący"
+            val notified = if (newSession) emptySet()
+                else prefs.getString("map_notified", "").orEmpty().split(',').mapNotNull { it.toLongOrNull() }.toSet()
+            val newcomers = fresh.map { it.userId }.distinct().filter { it !in notified }
+            // Czas ostatniego pingu zawsze odświeżamy – to granica sesji.
+            prefs.edit().putLong("map_last", nowMs).apply()
+            if (newcomers.isEmpty()) return
+            val userId = newcomers.last()
+            val nick = MapperMonitor.nick(userId) ?: "nieznany mapujący"
             val sessionCount = state?.pings?.size ?: 1
             val content = buildString {
                 append(nick)
                 append(" mapuje w zasięgu Observera")
                 state?.pings?.firstOrNull()?.let { first ->
-                    val minutes = ((ping.tsMs - first.tsMs) / 60_000L).coerceAtLeast(0L)
+                    val minutes = ((nowMs - first.tsMs) / 60_000L).coerceAtLeast(0L)
                     if (minutes > 0L) append(" (sesja od ok. $minutes min, $sessionCount pingów)")
                 }
-                ping.observerSnrDb?.let { append(". SNR u Observera: ${fmt(it)} dB") }
-                ping.rssiDbm?.let { append(", RSSI: ${fmt(it)} dBm") }
+                state?.mapperNicks?.takeIf { it.size > 1 }?.let {
+                    append(". Mapują teraz: ${it.joinToString(", ")}")
+                }
+                fresh.lastOrNull { it.userId == userId }?.let { ping ->
+                    ping.observerSnrDb?.let { append(". SNR u Observera: ${fmt(it)} dB") }
+                    ping.rssiDbm?.let { append(", RSSI: ${fmt(it)} dBm") }
+                }
             }
             if (notifyMapping(ctx, Kind.MAPPING, nick, content)) {
-                prefs.edit()
-                    .putLong("map_user", ping.userId)
-                    .putLong("map_last", nowMs)
-                    .apply()
+                // Zapamiętujemy wszystkich nowych naraz, żeby nie spamić przy kolejnych pingach.
+                prefs.edit().putString("map_notified", (notified + newcomers).joinToString(",")).apply()
             }
         }
     }

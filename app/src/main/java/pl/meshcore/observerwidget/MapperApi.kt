@@ -25,6 +25,9 @@ object MapperApi {
     /** Przerwa między pingami dłuższa niż ta wartość = koniec sesji mapowania (pingi idą co 20–120 s). */
     const val SESSION_GAP_MS = 5 * 60_000L
 
+    /** Po takim czasie od ostatniego pinga ikona MAPPER znika z widgetu (szybciej niż koniec sesji). */
+    const val ACTIVE_MS = 3 * 60_000L
+
     /** Jak długo trzymamy pomiary w pamięci (na potrzeby panelu w aplikacji). */
     const val KEEP_MS = 6 * 60 * 60_000L
 
