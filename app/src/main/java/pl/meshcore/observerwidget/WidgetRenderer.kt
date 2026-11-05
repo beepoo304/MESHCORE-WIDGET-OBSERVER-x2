@@ -3,7 +3,12 @@ package pl.meshcore.observerwidget
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
 import android.widget.RemoteViews
+import kotlin.math.roundToInt
 
 object WidgetRenderer {
     const val GREEN = 0xFF6EF015.toInt()
@@ -47,6 +52,60 @@ object WidgetRenderer {
      */
     fun mappingIconOn(nowMs: Long): Boolean = nowMs % 2_000L < 1_200L
 
+    /**
+     * Ping, którego ma pokazać strzałka kierunku: ostatni ping każdego mapującego
+     * (z pozycją GPS), a przy kilku mapujących zmiana co 3 s (cykl [nowMs]).
+     */
+    fun mappingArrowPing(m: MappingState?, nowMs: Long): MapperPing? {
+        if (m == null) return null
+        val latest = m.pings
+            .filter { it.lat != null && it.lon != null }
+            .groupBy { it.userId }
+            .map { (_, v) -> v.last() }
+            .sortedBy { it.userId }
+        if (latest.isEmpty()) return null
+        val idx = ((nowMs / 3_000L) % latest.size).toInt()
+        return latest[idx]
+    }
+
+    /** Strzałka kierunku mapera (czerwona, 8 kierunków = obrót o azymut) + odległość, np. „1,2km”. */
+    fun mappingArrowBitmap(ctx: Context, bearingDeg: Double, distKm: Double): Bitmap {
+        val density = ctx.resources.displayMetrics.density
+        val h = (16 * density).roundToInt().coerceAtLeast(16)
+        val arrow = (13 * density).roundToInt().coerceAtLeast(13)
+        val gap = (3 * density).roundToInt().coerceAtLeast(3)
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = WHITE
+            textSize = 10 * density * 1.1f
+            isFakeBoldText = true
+        }
+        val text = GeoMath.kmShort(distKm)
+        val tw = textPaint.measureText(text).roundToInt()
+        val bmp = Bitmap.createBitmap(arrow + gap + tw, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        // Strzałka: grot skierowany na północ, obrót o azymut (0° = N = góra).
+        c.save()
+        c.translate(arrow / 2f, h / 2f)
+        c.rotate(bearingDeg.toFloat())
+        val a = arrow / 2f
+        val p = Path().apply {
+            moveTo(0f, -a)                    // czubek
+            lineTo(a * 0.60f, 0f)             // prawe skrzydło grotu
+            lineTo(a * 0.24f, 0f)
+            lineTo(a * 0.24f, a)              // trzon
+            lineTo(-a * 0.24f, a)
+            lineTo(-a * 0.24f, 0f)
+            lineTo(-a * 0.60f, 0f)            // lewe skrzydło grotu
+            close()
+        }
+        c.drawPath(p, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = RED })
+        c.restore()
+        // Odległość obok strzałki, wyśrodkowana w pionie.
+        val ty = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
+        c.drawText(text, (arrow + gap).toFloat(), ty, textPaint)
+        return bmp
+    }
+
     fun render(
         ctx: Context,
         d: WidgetData,
@@ -65,6 +124,18 @@ object WidgetRenderer {
         v.setViewVisibility(R.id.mapping_icon, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
         if (mappingActive) v.setTextColor(R.id.mapping_icon, mappingIconColor(mappingIconOn(nowMs)))
         v.setOnClickPendingIntent(R.id.mapping_icon, MainActivity.mappingIntent(ctx))
+        // Strzałka kierunku: czerwona, obrócona w stronę mapera + odległość; przy kilku mapujących zmiana co 3 s.
+        val m = d.mapping
+        val arrowPing = mappingArrowPing(m, nowMs)
+        val obsLat = m?.observerLat
+        val obsLon = m?.observerLon
+        val showArrow = mappingActive && arrowPing?.lat != null && arrowPing.lon != null && obsLat != null && obsLon != null
+        v.setViewVisibility(R.id.mapping_arrow, if (showArrow) android.view.View.VISIBLE else android.view.View.GONE)
+        if (showArrow && arrowPing != null) {
+            val bearing = GeoMath.bearingDeg(obsLat!!, obsLon!!, arrowPing.lat!!, arrowPing.lon!!)
+            val dist = GeoMath.distanceKm(obsLat, obsLon, arrowPing.lat!!, arrowPing.lon!!)
+            v.setImageViewBitmap(R.id.mapping_arrow, mappingArrowBitmap(ctx, bearing, dist))
+        }
 
         val config = Config(ctx)
         val monitoringEnabled = config.monitoringEnabled

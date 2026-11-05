@@ -62,4 +62,27 @@ class MapperApiTest {
         )
         assertEquals("", MapperApi.shortId("krótki"))
     }
+
+    @Test fun repeaterPositionFindsObserver() {
+        val body = """
+            {"ok":true,"repeaters":[
+              {"id":"9bbc40925031246c","name":"SPS-PSZCZYNA-BAZA","lat":50.00188,"lon":18.95046,"city":"Pszczyna"},
+              {"id":"f4809c7817bc7771","name":"K-ce Paderewa 2 obsvr","lat":50.255352,"lon":19.037188,"city":"Katowice"}
+            ]}
+        """.trimIndent()
+        val pos = MapperApi.parseRepeaterPosition(body, "f4809c7817bc7771")
+        assertEquals(50.255352, pos?.lat ?: Double.NaN, 1e-9)
+        assertEquals(19.037188, pos?.lon ?: Double.NaN, 1e-9)
+        assertEquals(true, pos?.found)
+    }
+
+    @Test fun repeaterPositionNotFoundIsNotError() {
+        val body = """{"ok":true,"repeaters":[{"id":"9bbc40925031246c","lat":50.00188,"lon":18.95046}]}"""
+        assertEquals(false, MapperApi.parseRepeaterPosition(body, "f4809c7817bc7771")?.found)
+    }
+
+    @Test fun repeaterPositionBadBodyIsNull() {
+        assertNull(MapperApi.parseRepeaterPosition("nie-json", "f4809c7817bc7771"))
+        assertNull(MapperApi.parseRepeaterPosition("""{"ok":false}""", "f4809c7817bc7771"))
+    }
 }

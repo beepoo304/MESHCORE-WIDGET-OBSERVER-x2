@@ -18,6 +18,9 @@
             android:text="MAPPER" android:textColor="#4FC3F7" android:textStyle="bold" android:textSize="9sp"
             android:letterSpacing="0.08" android:maxLines="1" android:visibility="gone"
             android:contentDescription="Ktoś mapuje w zasięgu Observera"/>
+        <ImageView android:id="@+id/mapping_arrow" android:layout_width="wrap_content" android:layout_height="14dp"
+            android:layout_marginStart="5dp" android:scaleType="center" android:visibility="gone"
+            android:contentDescription="Kierunek i odległość mapera od Observera"/>
         <FrameLayout android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
         <ImageView android:id="@+id/refresh_icon" android:layout_width="15dp" android:layout_height="15dp"
             android:src="@drawable/ic_refresh" android:contentDescription="@null"/>

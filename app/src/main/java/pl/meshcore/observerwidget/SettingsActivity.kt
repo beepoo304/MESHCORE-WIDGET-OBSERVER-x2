@@ -157,11 +157,15 @@ class SettingsActivity : Activity() {
             info.text = "Podaj poprawne adresy hostów API (bez spacji)"
             return
         }
-        // Zmiana Observera = nowy ID w bazie mapera: reset stanu mapowania.
+        // Zmiana Observera = nowy ID w bazie mapera: reset stanu mapowania i pozycji RPT.
         if (id != cfg.observerId) {
             MapperMonitor.reset()
             cfg.mapperLastId = 0L
             cfg.mapperRev = 0
+            cfg.mapperObsLat = Float.NaN
+            cfg.mapperObsLon = Float.NaN
+            cfg.mapperObsPosOk = false
+            cfg.mapperObsPosAtMs = 0L
         }
         cfg.observerId = id
         cfg.mqtt1Host = hosts[0]
