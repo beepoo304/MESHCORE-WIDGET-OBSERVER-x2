@@ -24,8 +24,14 @@
             android:layout_marginStart="5dp" android:text="00s" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
     </LinearLayout>
 
-    <TextView android:id="@+id/obs_name" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:layout_marginTop="6dp" android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:ellipsize="end"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:orientation="horizontal" android:gravity="center_vertical">
+        <TextView android:id="@+id/obs_name" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:ellipsize="end"/>
+        <ImageView android:id="@+id/mapping_icon" android:layout_width="20dp" android:layout_height="20dp"
+            android:layout_marginStart="6dp" android:src="@drawable/ic_mapping" android:visibility="gone"
+            android:contentDescription="Ktoś mapuje w zasięgu Observera"/>
+    </LinearLayout>
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:gravity="center_vertical">

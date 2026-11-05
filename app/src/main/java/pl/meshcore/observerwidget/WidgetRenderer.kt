@@ -34,6 +34,13 @@ object WidgetRenderer {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+    /**
+     * Ikona „M” (mapowanie) przy nazwie Observera: widoczna tylko wtedy, gdy ktoś mapuje
+     * w zasięgu Observera; pulsuje, bo RemoteViews nie obsługują prawdziwej animacji.
+     * Okres 2 s: sekunda jasno, sekunda przyciemnione.
+     */
+    fun mappingIconOn(nowMs: Long): Boolean = nowMs % 2_000L < 1_200L
+
     fun render(
         ctx: Context,
         d: WidgetData,
@@ -47,6 +54,11 @@ object WidgetRenderer {
         v.setViewVisibility(R.id.hdr_total_col, totalVisibility)
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
+        // Ikona mapowania: tylko gdy ktoś mapuje; puls = naprzemienna jasność, klik otwiera panel w aplikacji.
+        val mappingActive = d.mapping?.active == true
+        v.setViewVisibility(R.id.mapping_icon, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
+        if (mappingActive) v.setInt(R.id.mapping_icon, "setImageAlpha", if (mappingIconOn(nowMs)) 255 else 90)
+        v.setOnClickPendingIntent(R.id.mapping_icon, MainActivity.mappingIntent(ctx))
 
         val config = Config(ctx)
         val monitoringEnabled = config.monitoringEnabled

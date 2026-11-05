@@ -16,7 +16,8 @@ object Alerts {
     private enum class Kind(val key: String, val channel: String, val title: String, val id: Int) {
         OBSERVER("obs", "alerts_observer", "Observer nie wysyła pakietów", 1001),
         MQTT1("m1", "alerts_mqtt1", "MQTT1 nie działa", 1002),
-        MQTT2("m2", "alerts_mqtt2", "MQTT2 nie działa", 1003)
+        MQTT2("m2", "alerts_mqtt2", "MQTT2 nie działa", 1003),
+        MAPPING("map", "alerts_mapping", "Ktoś mapuje w zasięgu Observera", 1004)
     }
 
     private val lock = Any()
@@ -27,6 +28,7 @@ object Alerts {
         nm.createNotificationChannel(NotificationChannel("alerts_observer", "Brak pakietów Observera", NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel("alerts_mqtt1", "Awaria MQTT1", NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel("alerts_mqtt2", "Awaria MQTT2", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel("alerts_mapping", "Mapowanie w zasięgu Observera", NotificationManager.IMPORTANCE_HIGH))
     }
 
     fun evaluate(ctx: Context, data: WidgetData, nowMs: Long = System.currentTimeMillis()) {
@@ -55,6 +57,77 @@ object Alerts {
         step(ctx, Kind.MQTT2, data.mqtt2Health, cfg.alertMqtt2, nowMs, delayMs, cooldownMs, mqttText(cfg.mqtt2Host))
     }
 
+    /**
+     * Powiadomienie o mapowaniu: przychodzi z nazwą mapującego, gdy ktoś zacznie mapować
+     * w zasięgu Observera (pierwszy ping nowej sesji) albo gdy w tej samej sesji zacznie
+     * mapować ktoś inny. Nie powiadamiamy o każdym pingu (maper pinguje co 20–120 s).
+     */
+    fun evaluateMapping(ctx: Context, state: MappingState?, fresh: List<MapperPing>, nowMs: Long = System.currentTimeMillis()) {
+        val cfg = Config(ctx)
+        if (!cfg.monitoringEnabled || !cfg.alertMapping || fresh.isEmpty()) return
+        synchronized(lock) {
+            val prefs = ctx.applicationContext.getSharedPreferences("alert_state", Context.MODE_PRIVATE)
+            val lastUser = prefs.getLong("map_user", -1L)
+            val lastAt = prefs.getLong("map_last", 0L)
+            // Nowa sesja = cisza dłuższa niż przerwa sesji od poprzedniego powiadomienia.
+            val newSession = lastAt == 0L || nowMs - lastAt > MapperApi.SESSION_GAP_MS
+            val ping = fresh.last()
+            val newMapper = ping.userId != lastUser
+            if (!newSession && !newMapper) return
+            val nick = MapperMonitor.nick(ping.userId) ?: "nieznany mapujący"
+            val sessionCount = state?.pings?.size ?: 1
+            val content = buildString {
+                append(nick)
+                append(" mapuje w zasięgu Observera")
+                state?.pings?.firstOrNull()?.let { first ->
+                    val minutes = ((ping.tsMs - first.tsMs) / 60_000L).coerceAtLeast(0L)
+                    if (minutes > 0L) append(" (sesja od ok. $minutes min, $sessionCount pingów)")
+                }
+                ping.observerSnrDb?.let { append(". SNR u Observera: ${fmt(it)} dB") }
+                ping.rssiDbm?.let { append(", RSSI: ${fmt(it)} dBm") }
+            }
+            if (notifyMapping(ctx, Kind.MAPPING, nick, content)) {
+                prefs.edit()
+                    .putLong("map_user", ping.userId)
+                    .putLong("map_last", nowMs)
+                    .apply()
+            }
+        }
+    }
+
+    private fun fmt(v: Double): String =
+        if (v % 1.0 == 0.0) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
+
+    private fun notifyMapping(ctx: Context, kind: Kind, nick: String, content: String): Boolean {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return false
+
+        ensureChannels(ctx)
+        val openIntent = PendingIntent.getActivity(
+            ctx, kind.id, Intent(ctx, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(ctx, kind.channel)
+            .setSmallIcon(android.R.drawable.ic_dialog_map)
+            .setContentTitle("Mapowanie: $nick")
+            .setContentText(content)
+            .setContentIntent(openIntent)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        return try {
+            NotificationManagerCompat.from(ctx).notify(kind.id, notification)
+            true
+        } catch (_: SecurityException) {
+            false
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
     /** Treść dla alarmów MQTT: nazwa hosta i od jak dawna brak połączenia. */
     private fun mqttText(host: String): (Long) -> String = { minutes ->
         "${Config.displayHost(host)}: brak połączenia MQTT od ok. $minutes min."
@@ -67,6 +140,7 @@ object Alerts {
             cancel(1001)
             cancel(1002)
             cancel(1003)
+            cancel(1004)
         }
     }
 

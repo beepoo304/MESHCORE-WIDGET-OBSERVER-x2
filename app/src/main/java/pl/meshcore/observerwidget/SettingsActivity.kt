@@ -35,6 +35,7 @@ class SettingsActivity : Activity() {
     private lateinit var alertObs: CheckBox
     private lateinit var alertM1: CheckBox
     private lateinit var alertM2: CheckBox
+    private lateinit var alertMap: CheckBox
     private lateinit var delayField: EditText
     private lateinit var cooldownField: EditText
 
@@ -87,11 +88,12 @@ class SettingsActivity : Activity() {
         alertObs = check("Observer: brak pakietów (niezależnie od MQTT)", cfg.alertObserver); root.addView(alertObs)
         alertM1 = check("MQTT1: brak połączenia / brak odbioru", cfg.alertMqtt1); root.addView(alertM1)
         alertM2 = check("MQTT2: brak połączenia / brak odbioru", cfg.alertMqtt2); root.addView(alertM2)
+        alertMap = check("Mapowanie: ktoś mapuje w zasięgu Observera (pingi mapera meshcoresouth.pl)", cfg.alertMapping); root.addView(alertMap)
         root.addView(label("Opóźnienie alarmu (min)"))
         delayField = field(cfg.alertDelayMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(delayField)
         root.addView(label("Cooldown między powiadomieniami (min, min. 1)"))
         cooldownField = field(cfg.alertCooldownMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(cooldownField)
-        root.addView(label("Alarm Observera jest niezależny od statusów MQTT i przychodzi natychmiast po przekroczeniu czerwonego progu, a w treści podaje nazwę API, z którego przyszły dane (gdy oba nie odpowiadają – obie). Opóźnienie (min) dotyczy tylko alarmów MQTT; 0 = natychmiast."))
+        root.addView(label("Alarm Observera jest niezależny od statusów MQTT i przychodzi natychmiast po przekroczeniu czerwonego progu, a w treści podaje nazwę API, z którego przyszły dane (gdy oba nie odpowiadają – obie). Opóźnienie (min) dotyczy tylko alarmów MQTT; 0 = natychmiast. Powiadomienie o mapowaniu przychodzi z nickiem mapującego raz na sesję (i przy zmianie mapującego), gdy ktoś mapuje w zasięgu Observera – dane z publicznej bazy mapera meshcoresouth.pl."))
 
         info = label("").apply { setTextColor(Color.parseColor("#6EF015")) }
         root.addView(info)
@@ -155,6 +157,12 @@ class SettingsActivity : Activity() {
             info.text = "Podaj poprawne adresy hostów API (bez spacji)"
             return
         }
+        // Zmiana Observera = nowy ID w bazie mapera: reset stanu mapowania.
+        if (id != cfg.observerId) {
+            MapperMonitor.reset()
+            cfg.mapperLastId = 0L
+            cfg.mapperRev = 0
+        }
         cfg.observerId = id
         cfg.mqtt1Host = hosts[0]
         cfg.mqtt2Host = hosts[1]
@@ -166,6 +174,7 @@ class SettingsActivity : Activity() {
         cfg.alertObserver = alertObs.isChecked
         cfg.alertMqtt1 = alertM1.isChecked
         cfg.alertMqtt2 = alertM2.isChecked
+        cfg.alertMapping = alertMap.isChecked
         cfg.alertDelayMin = delay
         cfg.alertCooldownMin = cooldown
         Alerts.ensureChannels(this)

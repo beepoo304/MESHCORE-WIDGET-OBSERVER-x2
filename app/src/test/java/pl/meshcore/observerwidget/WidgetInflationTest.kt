@@ -53,7 +53,20 @@ class WidgetInflationTest {
         data(true, FetchResult.Ok(snap(30_000)), FetchResult.Fail("h", "HTTP 404")),
         data(true, FetchResult.Ok(snap(4 * 60_000L)), FetchResult.Ok(snap(10 * 60_000L))),
         data(true, FetchResult.Ok(snap(null)), FetchResult.Fail("h", "Timeout")),
-        data(true, FetchResult.Fail("h", "Timeout"), FetchResult.Fail("h", "Brak połączenia"))
+        data(true, FetchResult.Fail("h", "Timeout"), FetchResult.Fail("h", "Brak połączenia")),
+        // Mapowanie w toku: ikona M widoczna, puls (alpha) ustawiany w render.
+        data(true, FetchResult.Ok(snap(30_000)), FetchResult.Ok(snap(30_000))).copy(
+            mapping = MappingState(
+                active = true,
+                pings = listOf(
+                    MapperPing(1, now - 40_000, 50.0, 19.0, id.lowercase().take(16), 10.0, 9.5, -48.0, 2, 6.0, -115.0)
+                ),
+                mapperNicks = listOf("MapperTest")
+            ),
+            mappingNew = listOf(
+                MapperPing(1, now - 40_000, 50.0, 19.0, id.lowercase().take(16), 10.0, 9.5, -48.0, 2, 6.0, -115.0)
+            )
+        )
     )
 
     @Test fun everyLayoutAndStateInflates() {

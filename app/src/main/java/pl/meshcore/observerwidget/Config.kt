@@ -75,7 +75,22 @@ class Config(context: Context) {
         get() = prefs.getInt("alert_cooldown_min", 15).coerceAtLeast(1)
         set(v) = prefs.edit().putInt("alert_cooldown_min", v.coerceAtLeast(1)).apply()
 
-    val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2
+    /** Powiadomienie, gdy ktoś mapuje w zasięgu Observera (pingi mapera MeshCore South). */
+    var alertMapping: Boolean
+        get() = prefs.getBoolean("alert_mapping", true)
+        set(v) = prefs.edit().putBoolean("alert_mapping", v).apply()
+
+    /** Punkt startowy odpytań bazy mapera (najnowszy widziany ID punktu). */
+    var mapperLastId: Long
+        get() = prefs.getLong("mapper_last_id", 0L)
+        set(v) = prefs.edit().putLong("mapper_last_id", v.coerceAtLeast(0L)).apply()
+
+    /** Rewizja bazy mapera – zmiana oznacza usunięcie danych i reset punktu startowego. */
+    var mapperRev: Int
+        get() = prefs.getInt("mapper_rev", 0)
+        set(v) = prefs.edit().putInt("mapper_rev", v).apply()
+
+    val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2 || alertMapping
 
     companion object {
         const val DEFAULT_MQTT1 = "live.meshcorekk.xyz"

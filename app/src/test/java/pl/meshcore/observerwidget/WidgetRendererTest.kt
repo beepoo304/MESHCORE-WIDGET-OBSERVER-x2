@@ -1,6 +1,7 @@
 package pl.meshcore.observerwidget
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /** Logika stanu widgetu (napis + kolor), bez klas Androida. */
@@ -52,6 +53,14 @@ class WidgetRendererTest {
         assertEquals("01:55:00s", WidgetRenderer.formatLastPacketAge((3600L + 55 * 60) * 1000))
         assertEquals("23:59:59s", WidgetRenderer.formatLastPacketAge(86_399_000L))
         assertEquals("1d16h05m", WidgetRenderer.formatLastPacketAge((86_400L + 16 * 3600 + 5 * 60 + 42) * 1000))
+    }
+
+    @Test fun mappingIconPulsesWithTwoSecondPeriod() {
+        assertTrue(WidgetRenderer.mappingIconOn(1_000L))     // pierwsza faza: jasna
+        assertTrue(WidgetRenderer.mappingIconOn(1_199L))
+        assertFalse(WidgetRenderer.mappingIconOn(1_200L))    // druga faza: przyciemniona
+        assertFalse(WidgetRenderer.mappingIconOn(1_999L))
+        assertTrue(WidgetRenderer.mappingIconOn(2_000L))     // nowy okres
     }
 
     @Test fun aliveBrokerIsGreenDeadIsRed() {
