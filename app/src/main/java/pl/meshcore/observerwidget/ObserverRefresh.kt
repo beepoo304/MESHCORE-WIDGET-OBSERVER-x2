@@ -270,7 +270,7 @@ object ObserverRefresh {
         if (!Config(app).monitoringEnabled) return
         if (data != null) lastData = data
         val result = (data ?: lastData ?: emptyData(app)).copy(busy = false)
-        evaluateAlerts(app, result)
+        evaluateAlerts(app, result, fresh = data != null)
     }
 
     suspend fun refreshOnce(ctx: Context) {
@@ -280,13 +280,17 @@ object ObserverRefresh {
         if (!Config(app).monitoringEnabled) return
         lastData = data
         renderAll(app)
-        evaluateAlerts(app, data)
+        evaluateAlerts(app, data, fresh = true)
         ensureTicking(app)
     }
 
-    private fun evaluateAlerts(app: Context, data: WidgetData) {
+    private fun evaluateAlerts(app: Context, data: WidgetData, fresh: Boolean) {
         try {
             Alerts.evaluate(app, data)
+            // Powiadomienie o mapowaniu tylko przy świeżych danych (nie po czasie od ostatka).
+            if (fresh && data.mappingNew.isNotEmpty()) {
+                Alerts.evaluateMapping(app, data.mapping, data.mappingNew)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Alert evaluation failed", e)
         }
@@ -351,6 +355,8 @@ object ObserverRefresh {
                 if (config.fallbackHost.isBlank()) MqttStatusApi.Probe(Health.UNKNOWN, false)
                 else MqttStatusApi.probe(config.fallbackHost, statusTimeout)
             }
+            // Baza mapera MeshCore South: czy ktoś mapuje w zasięgu naszego Observera.
+            val mapping = async(Dispatchers.IO) { MapperMonitor.poll(ctx, config.observerId, minOf(timeout, 5_000)) }
             val firstResult = first.await()
             val secondResult = second.await()
             var health1 = firstHealth.await()
@@ -377,6 +383,7 @@ object ObserverRefresh {
             // Zamrożony wiek pakietu: zapamiętujemy ostatnią znaną wartość przy udanym pobraniu,
             // żeby przy padnięciu API brokera licznik nie uciekał w nieskończoność.
             rememberBrokerAges(firstResult, secondResult)
+            val (mappingState, mappingFresh) = mapping.await()
             base.copy(
                 observer = observer,
                 broker1 = firstResult,
@@ -385,7 +392,9 @@ object ObserverRefresh {
                 mqtt2Health = health2.health,
                 fallbackHealth = healthFallback.health,
                 broker1FrozenAgeMs = if (firstResult is FetchResult.Ok) null else lastKnownBroker1AgeMs,
-                broker2FrozenAgeMs = if (secondResult is FetchResult.Ok) null else lastKnownBroker2AgeMs
+                broker2FrozenAgeMs = if (secondResult is FetchResult.Ok) null else lastKnownBroker2AgeMs,
+                mapping = mappingState,
+                mappingNew = mappingFresh
             )
         }
     }

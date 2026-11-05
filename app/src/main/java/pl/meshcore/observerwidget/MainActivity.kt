@@ -4,7 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.AlertDialog
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -27,12 +29,14 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
-/** Zakładki: Dashboard, LIVE (250 pakietów), Settings (osobny ekran). */
+/** Panel główny (OBSERVER): dashboard z kartami brokerów i mapowania, Settings jako osobny ekran. */
 class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val busy = AtomicBoolean(false)
     private lateinit var dash: LinearLayout
     private var dashboardData: WidgetData? = null
+    /** Otwarto z ikony mapowania na widgecie – pokaż/rozwiń kartę mapowania. */
+    private var showMapping = false
 
     /** Co sekundę: przerysowanie z danych w pamięci; pobieranie tylko gdy licznik dojdzie do zera. */
     private val ticker = object : Runnable {
@@ -47,6 +51,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        showMapping = intent?.getBooleanExtra(EXTRA_SHOW_MAPPING, false) == true
         Alerts.ensureChannels(this)
         RefreshWorker.sync(this)
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -135,6 +140,12 @@ class MainActivity : Activity() {
         ))
         obs?.let { dash.addView(line("Dane z: ${Config.displayHost(it.host)}", 12f, WidgetRenderer.GRAY)) }
         dash.addView(spacer())
+        // Karta mapowania: pokazujemy ją, gdy ktoś mapuje lub mapował, albo po kliknięciu ikony na widgecie.
+        val mapping = d.mapping
+        if (mapping != null || showMapping) {
+            dash.addView(mappingCard(mapping, d, wallClockNow))
+            dash.addView(spacer())
+        }
         dash.addView(brokerCard("MQTT1", d.mqtt1Host, d.broker1, d, now, d.mqtt1Health))
         dash.addView(spacer())
         dash.addView(brokerCard("MQTT2", d.mqtt2Host, d.broker2, d, now, d.mqtt2Health))
@@ -142,6 +153,77 @@ class MainActivity : Activity() {
         val fetchedAt = obs?.fetchedAtMs ?: now
         dash.addView(line("Pobrano ${DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(fetchedAt).atZone(ZoneId.systemDefault()))}, następne za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), Config(this).monitoringEnabled)}", 12f, WidgetRenderer.GRAY))
     }
+
+    /**
+     * Karta mapowania (ikona „M” na widgecie): nazwa Observera, klucz – pierwsze 4 znaki
+     * + ikona kopiowania pełnego (jak w widgecie), nick mapującego, czas, liczba pingów,
+     * SNR/RSSI ostatniego pomiaru.
+     */
+    private fun mappingCard(m: MappingState?, d: WidgetData, nowMs: Long): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.card_outline)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        val active = m?.active == true
+        // Pulsująca kropka w tytule: sekunda jasna, sekunda przyciemniona (jak ikona na widgecie).
+        val pulseOn = WidgetRenderer.mappingIconOn(nowMs)
+        val titleColor = when {
+            active && pulseOn -> 0xFF4FC3F7.toInt()
+            active -> 0xFF1F6E8F.toInt()
+            else -> WidgetRenderer.GRAY
+        }
+        box.addView(line(if (active) "● MAPOWANIE W TOKU" else "OSTATNIE MAPOWANIE", 18f, titleColor, bold = true))
+        // Nazwa Observera i klucz: pierwsze 4 znaki, reszta do skopiowania (jak w widgecie).
+        val keyRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        keyRow.addView(line("${d.mappingObserverName()}  ${d.observerId.take(4)}…", 16f, Color.WHITE, bold = true))
+        val copy = android.widget.ImageView(this).apply {
+            setImageResource(R.drawable.ic_copy)
+            setPadding(dp(6), dp(2), dp(2), dp(2))
+            contentDescription = "Kopiuj pełny klucz Observera"
+            setOnClickListener {
+                CopyKeyReceiver.fullKey(Config(this@MainActivity).observerId)?.let { key ->
+                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Klucz Observera", key))
+                    android.widget.Toast.makeText(this@MainActivity, "Skopiowano pełny klucz Observera", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        keyRow.addView(copy)
+        box.addView(keyRow)
+        if (m == null) {
+            box.addView(line("Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada).", 15f, WidgetRenderer.GRAY))
+            return box
+        }
+        if (m.mapperNicks.isNotEmpty()) {
+            box.addView(line("Mapuje: ${m.mapperNicks.joinToString(", ")}", 16f, 0xFF4FC3F7.toInt(), bold = true))
+        }
+        val pings = m.pings
+        if (pings.isNotEmpty()) {
+            val last = pings.last()
+            box.addView(line("Pingów mapowania: ${pings.size} (sesja od ${timeOf(pings.first().tsMs)})", 15f, Color.WHITE))
+            box.addView(line("Ostatni ping: ${TimeFormat.packetAge(nowMs - last.tsMs)} temu (${timeOf(last.tsMs)})", 15f, Color.WHITE))
+            last.observerSnrDb?.let { box.addView(line("SNR u Observera: ${fmt(it)} dB", 15f, Color.WHITE)) }
+            last.snrDb?.let { box.addView(line("SNR odbioru (u mapera): ${fmt(it)} dB", 15f, Color.WHITE)) }
+            last.rssiDbm?.let { box.addView(line("RSSI: ${fmt(it)} dBm", 15f, Color.WHITE)) }
+            if (last.lat != null && last.lon != null) {
+                box.addView(line("Pozycja mapera: ${String.format(java.util.Locale.US, "%.5f", last.lat)}, ${String.format(java.util.Locale.US, "%.5f", last.lon)}", 14f, WidgetRenderer.GRAY))
+            }
+            last.accM?.let { box.addView(line("Dokładność GPS: ±${fmt(it)} m", 14f, WidgetRenderer.GRAY)) }
+            last.noiseFloorDb?.let { box.addView(line("Podłoże szumu: ${fmt(it)} dB", 14f, WidgetRenderer.GRAY)) }
+        }
+        box.addView(line("Ping mapowania = odkrycie odebrane przez Observera z bazy mapera meshcoresouth.pl", 12f, WidgetRenderer.GRAY))
+        return box
+    }
+
+    private fun WidgetData.mappingObserverName(): String =
+        observer?.name ?: "Observer"
+
+    private fun timeOf(ms: Long): String =
+        DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
+
+    private fun fmt(v: Double): String =
+        if (v % 1.0 == 0.0) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
 
     private fun monitoringControl(): View = Button(this).apply {
         val config = Config(this@MainActivity)
@@ -200,4 +282,17 @@ class MainActivity : Activity() {
     private fun spacer() = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(10)) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    companion object {
+        const val EXTRA_SHOW_MAPPING = "pl.meshcore.observerwidget.SHOW_MAPPING"
+
+        /** Ikona „M” na widgecie: otwiera aplikację z rozwiniętą kartą mapowania. */
+        fun mappingIntent(ctx: Context): PendingIntent =
+            PendingIntent.getActivity(
+                ctx, 4,
+                Intent(ctx, MainActivity::class.java)
+                    .putExtra(EXTRA_SHOW_MAPPING, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+    }
 }
