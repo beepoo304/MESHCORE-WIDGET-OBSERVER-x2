@@ -52,9 +52,10 @@ class MapperMonitorTest {
 
     @Test fun multipleMappersInOneSession() {
         val now = t0 + 60_000L
-        val s = MapperMonitor.stateOf(listOf(ping(1, t0, user = 2), ping(2, t0 + 20_000, user = 5)), now) { id ->
-            mapOf(2L to "Pawlo", 5L to "Piotr M5")[id]
-        }
+        val s = MapperMonitor.stateOf(
+            listOf(ping(1, t0, user = 2), ping(2, t0 + 20_000, user = 5)), now,
+            nickOf = { id -> mapOf(2L to "Pawlo", 5L to "Piotr M5")[id] }
+        )
         assertTrue(s.active)
         assertEquals(listOf("Pawlo", "Piotr M5"), s.mapperNicks)
     }
