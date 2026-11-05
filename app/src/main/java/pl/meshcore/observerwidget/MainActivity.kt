@@ -141,9 +141,9 @@ class MainActivity : Activity() {
         ))
         obs?.let { dash.addView(line("Dane z: ${Config.displayHost(it.host)}", 12f, WidgetRenderer.GRAY)) }
         dash.addView(spacer())
-        // Karta mapowania: gdy ktoś mapuje lub mapował niedawno (do 30 min), albo po kliknięciu MAPPER na widgecie.
+        // Karta mapowania: gdy ktoś mapuje lub mapował w ciągu 24 h, albo po kliknięciu MAPPER na widgecie.
         val mapping = d.mapping
-        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < 30 * 60_000L } == true
+        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < MapperApi.KEEP_MS } == true
         if (showMapping || (mapping != null && (mapping.active || mappingRecent))) {
             dash.addView(mappingCard(mapping, d, wallClockNow))
             dash.addView(spacer())
@@ -200,6 +200,19 @@ class MainActivity : Activity() {
         if (m.mapperNicks.isNotEmpty()) {
             box.addView(line("Mapuje: ${m.mapperNicks.joinToString(", ")}", 16f, 0xFF4FC3F7.toInt(), bold = true))
         }
+        // Kierunek i odległość każdego mapującego od Observera (pozycja RPT z bazy mapera).
+        if (m.observerLat != null && m.observerLon != null) {
+            m.pings.filter { it.lat != null && it.lon != null }
+                .groupBy { it.userId }
+                .map { (_, v) -> v.last() }
+                .sortedBy { it.userId }
+                .forEach { p ->
+                    val bearing = GeoMath.bearingDeg(m.observerLat!!, m.observerLon!!, p.lat!!, p.lon!!)
+                    val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, p.lat!!, p.lon!!)
+                    val nick = MapperMonitor.nick(p.userId) ?: "user ${p.userId}"
+                    box.addView(line("$nick: ${GeoMath.km(dist)} na ${GeoMath.compassLabel(bearing)} od Observera", 15f, Color.WHITE))
+                }
+        }
         val pings = m.pings
         if (pings.isNotEmpty()) {
             val last = pings.last()
@@ -208,9 +221,6 @@ class MainActivity : Activity() {
             last.observerSnrDb?.let { box.addView(line("SNR u Observera: ${fmt(it)} dB", 15f, Color.WHITE)) }
             last.snrDb?.let { box.addView(line("SNR odbioru (u mapera): ${fmt(it)} dB", 15f, Color.WHITE)) }
             last.rssiDbm?.let { box.addView(line("RSSI: ${fmt(it)} dBm", 15f, Color.WHITE)) }
-            if (last.lat != null && last.lon != null) {
-                box.addView(line("Pozycja mapera: ${String.format(java.util.Locale.US, "%.5f", last.lat)}, ${String.format(java.util.Locale.US, "%.5f", last.lon)}", 14f, WidgetRenderer.GRAY))
-            }
             last.accM?.let { box.addView(line("Dokładność GPS: ±${fmt(it)} m", 14f, WidgetRenderer.GRAY)) }
             last.noiseFloorDb?.let { box.addView(line("Podłoże szumu: ${fmt(it)} dB", 14f, WidgetRenderer.GRAY)) }
         }

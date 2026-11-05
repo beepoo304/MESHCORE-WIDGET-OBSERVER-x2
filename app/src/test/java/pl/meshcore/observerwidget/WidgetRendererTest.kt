@@ -74,4 +74,32 @@ class WidgetRendererTest {
         val s = snap(10_000L).copy(serverOffsetMs = 120_000L)
         assertEquals(130_000L, s.lastPacketAgeMs(now))
     }
+
+    private fun mp(id: Long, userId: Long, lat: Double? = 50.26, lon: Double? = 19.04) = MapperPing(
+        id = id, tsMs = now + id, lat = lat, lon = lon, rptId = "f4809c7817bc7771",
+        snrDb = 10.0, observerSnrDb = 9.5, rssiDbm = -48.0, userId = userId, accM = 6.0, noiseFloorDb = -115.0
+    )
+
+    @Test fun arrowPingSingleMapperIsAlwaysHim() {
+        val m = MappingState(active = true, pings = listOf(mp(1, 7), mp(2, 7)), mapperNicks = listOf("X"))
+        assertEquals(7L, WidgetRenderer.mappingArrowPing(m, 0L)?.userId)
+        assertEquals(7L, WidgetRenderer.mappingArrowPing(m, 10_000L)?.userId)
+    }
+
+    @Test fun arrowPingCyclesMappersEvery3Seconds() {
+        val m = MappingState(active = true, pings = listOf(mp(1, 2), mp(2, 5)), mapperNicks = listOf("A", "B"))
+        assertEquals(2L, WidgetRenderer.mappingArrowPing(m, 0L)?.userId)       // slot 0
+        assertEquals(2L, WidgetRenderer.mappingArrowPing(m, 2_999L)?.userId)   // wciąż slot 0
+        assertEquals(5L, WidgetRenderer.mappingArrowPing(m, 3_000L)?.userId)   // slot 1
+        assertEquals(5L, WidgetRenderer.mappingArrowPing(m, 5_999L)?.userId)
+        assertEquals(2L, WidgetRenderer.mappingArrowPing(m, 6_000L)?.userId)   // wraca na slot 0
+    }
+
+    @Test fun arrowPingTakesLatestPingPerMapperAndSkipsNoGps() {
+        val m = MappingState(active = true, pings = listOf(mp(1, 2), mp(2, 2), mp(3, 5, lat = null)))
+        assertEquals(2L, WidgetRenderer.mappingArrowPing(m, 0L)?.userId) // maper 5 bez GPS odpada
+        assertEquals(2L, WidgetRenderer.mappingArrowPing(m, 0L)?.id)     // najnowszy ping mapera 2
+        assertEquals(null, WidgetRenderer.mappingArrowPing(MappingState(active = true, pings = listOf(mp(3, 5, lat = null, lon = null))), 0L))
+        assertEquals(null, WidgetRenderer.mappingArrowPing(null, 0L))
+    }
 }

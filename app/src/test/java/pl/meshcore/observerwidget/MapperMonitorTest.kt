@@ -58,4 +58,11 @@ class MapperMonitorTest {
         assertTrue(s.active)
         assertEquals(listOf("Pawlo", "Piotr M5"), s.mapperNicks)
     }
+
+    @Test fun observerPositionPassedToState() {
+        val now = t0 + 60_000L
+        val s = MapperMonitor.stateOf(listOf(ping(1, t0)), now, observerLat = 50.255352, observerLon = 19.037188)
+        assertEquals(50.255352, s.observerLat ?: Double.NaN, 1e-9)
+        assertEquals(19.037188, s.observerLon ?: Double.NaN, 1e-9)
+    }
 }

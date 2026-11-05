@@ -90,6 +90,25 @@ class Config(context: Context) {
         get() = prefs.getInt("mapper_rev", 0)
         set(v) = prefs.edit().putInt("mapper_rev", v).apply()
 
+    /** Pozycja Observera z bazy repeaterów mapera (do strzałki kierunku); NaN = brak. */
+    var mapperObsLat: Float
+        get() = prefs.getFloat("mapper_obs_lat", Float.NaN)
+        set(v) = prefs.edit().putFloat("mapper_obs_lat", v).apply()
+
+    var mapperObsLon: Float
+        get() = prefs.getFloat("mapper_obs_lon", Float.NaN)
+        set(v) = prefs.edit().putFloat("mapper_obs_lon", v).apply()
+
+    /** Czy pozycja Observera jest w bazie mapera (false = sprawdzono, nie ma; nie pytamy ponownie przez dobę). */
+    var mapperObsPosOk: Boolean
+        get() = prefs.getBoolean("mapper_obs_pos_ok", false)
+        set(v) = prefs.edit().putBoolean("mapper_obs_pos_ok", v).apply()
+
+    /** Kiedy ostatnio pobrano/sprawdzono pozycję Observera (epoch ms). */
+    var mapperObsPosAtMs: Long
+        get() = prefs.getLong("mapper_obs_pos_at", 0L)
+        set(v) = prefs.edit().putLong("mapper_obs_pos_at", v).apply()
+
     val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2 || alertMapping
 
     companion object {

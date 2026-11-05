@@ -13,11 +13,21 @@ import android.content.Context
 object MapperMonitor {
     private const val MAX_PAGES = 5
 
+    /** Jak długo trzymamy pozycję Observera w pamięci/prefs (tydzień). */
+    private const val POS_TTL_MS = 7 * 24 * 60 * 60_000L
+
+    /** Jak często ponawiamy sprawdzanie, gdy Observera nie ma w bazie repeaterów mapera. */
+    private const val POS_RETRY_MS = 24 * 60 * 60_000L
+
     /** Nasze pomiary (pingi odebrane przez Observera), posortowane po czasie. */
     private val pings = ArrayList<MapperPing>()
 
     /** Cache nicków mapujących (ID konta → nick), żeby nick przetrwał kolejne odpytania. */
     private val nicks = HashMap<Long, String>()
+
+    /** Pozycja Observera z bazy repeaterów mapera (pamięć między cyklami). */
+    private var obsLat: Double? = null
+    private var obsLon: Double? = null
 
     fun nick(userId: Long): String? = synchronized(nicks) { nicks[userId] }
 
@@ -25,6 +35,10 @@ object MapperMonitor {
     fun reset() {
         synchronized(pings) { pings.clear() }
         synchronized(nicks) { nicks.clear() }
+        synchronized(this) {
+            obsLat = null
+            obsLon = null
+        }
     }
 
     /**
@@ -36,6 +50,7 @@ object MapperMonitor {
         val config = Config(ctx.applicationContext)
         val short = MapperApi.shortId(observerId)
         if (short.length != 16) return state() to emptyList()
+        ensurePosition(ctx.applicationContext, short, timeoutMs)
 
         val firstRun = config.mapperLastId <= 0L
         var since = if (firstRun) 0L else config.mapperLastId
@@ -78,11 +93,46 @@ object MapperMonitor {
     /** Stan mapowania: sesja = pomiary połączone przerwami krótszymi niż [MapperApi.SESSION_GAP_MS]. */
     fun state(nowMs: Long = System.currentTimeMillis()): MappingState {
         val all: List<MapperPing> = synchronized(pings) { pings.toList() }
-        return stateOf(all, nowMs) { userId -> nick(userId) }
+        val pos = synchronized(this) { if (obsLat != null && obsLon != null) obsLat to obsLon else null }
+        return stateOf(all, nowMs, { userId -> nick(userId) }, pos?.first, pos?.second)
+    }
+
+    /**
+     * Pozycja Observera (naszego RPT) z bazy repeaterów mapera – potrzebna do strzałki
+     * kierunku i odległości mapera. Cache w prefs: tydzień dla znalezionej pozycji,
+     * doba ponawiania, gdy Observera nie ma w bazie. Błąd sieci = spróbujemy w następnym cyklu.
+     */
+    private fun ensurePosition(ctx: Context, short: String, timeoutMs: Int) {
+        val config = Config(ctx)
+        val now = System.currentTimeMillis()
+        synchronized(this) {
+            if (obsLat != null && obsLon != null) return
+            val lat = config.mapperObsLat.toDouble()
+            val lon = config.mapperObsLon.toDouble()
+            if (!lat.isNaN() && !lon.isNaN() && config.mapperObsPosOk && now - config.mapperObsPosAtMs < POS_TTL_MS) {
+                obsLat = lat; obsLon = lon; return
+            }
+            if (!config.mapperObsPosOk && config.mapperObsPosAtMs > 0L && now - config.mapperObsPosAtMs < POS_RETRY_MS) return
+        }
+        val pos = MapperApi.repeaterPosition(short, timeoutMs) ?: return // serwer nie odpowiada: spróbujemy znowu
+        if (pos.found) {
+            config.mapperObsLat = pos.lat.toFloat()
+            config.mapperObsLon = pos.lon.toFloat()
+            config.mapperObsPosOk = true
+            config.mapperObsPosAtMs = now
+            synchronized(this) { obsLat = pos.lat; obsLon = pos.lon }
+        } else {
+            // Observera nie ma w bazie repeaterów: zapisujemy czas sprawdzenia, żeby nie pytać co cykl.
+            config.mapperObsPosOk = false
+            config.mapperObsPosAtMs = now
+        }
     }
 
     /** Czysta logika sesji mapowania (testowalna bez Androida i sieci). */
-    fun stateOf(all: List<MapperPing>, nowMs: Long, nickOf: (Long) -> String? = { null }): MappingState {
+    fun stateOf(
+        all: List<MapperPing>, nowMs: Long, nickOf: (Long) -> String? = { null },
+        observerLat: Double? = null, observerLon: Double? = null
+    ): MappingState {
         if (all.isEmpty()) return MappingState(active = false)
         val last = all.last()
         // Ikona MAPPER znika już po 3 min ciszy (użytkownik kończy mapowanie i chce natychmiastowego feedbacku);
@@ -96,6 +146,9 @@ object MapperMonitor {
         // Po wygaśnięciu sesji zostaje ostatni pomiar – do panelu „ostatnie mapowanie” w aplikacji.
         val shown = if (active) session else listOf(last)
         val mapperNicks = shown.map { it.userId }.distinct().mapNotNull(nickOf)
-        return MappingState(active = active, pings = shown, mapperNicks = mapperNicks)
+        return MappingState(
+            active = active, pings = shown, mapperNicks = mapperNicks,
+            observerLat = observerLat, observerLon = observerLon
+        )
     }
 }
