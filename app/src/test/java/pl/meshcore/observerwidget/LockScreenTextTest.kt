@@ -29,20 +29,37 @@ class LockScreenTextTest {
             data(FetchResult.Ok(snap("K-ce Paderewa 2 obsvr", 1273, 12_000)), FetchResult.Ok(snap("x", 1190, 15_000))),
             now
         )
-        assertEquals("K-ce Paderewa 2 obsvr · ● LIVE", t.title)
+        assertEquals("#F480 · ● LIVE", t.title)
         assertEquals("M1 1273/h 12s · M2 1190/h 15s", t.summary)
         // Zwinięte powiadomienie mieści ok. 36–45 znaków w linii (Edge 40, Roboto 14 sp).
-        assertTrue(t.title.length <= 36)
         assertTrue(t.summary.length <= 36)
-        assertEquals("MQTT1 1273/h · 12s\nMQTT2 1190/h · 15s", t.expanded)
+        assertEquals("M1 1273/h · 12s · 482019\nM2 1190/h · 15s · 482019", t.expanded)
     }
 
-    @Test fun longNameIsShortened() {
-        val t = LockScreenText.build(
-            data(FetchResult.Ok(snap("Bardzo długa nazwa observera na dachu", 1, 1_000)), null), now
-        )
-        assertTrue(t.title.startsWith("Bardzo długa nazwa ob…"))
-        assertTrue(t.title.length <= 36)
+    @Test fun staleBrokerShowsDashPerHourAndError() {
+        // API żyje, ale ostatni pakiet 6 min temu (czerwony próg 5 min).
+        val stale = FetchResult.Ok(snap("n", 738, 370_000))
+        val d = data(stale, FetchResult.Ok(snap("n", 738, 17_000)))
+        val t = LockScreenText.build(d, now)
+        assertEquals("#F480 · ● ERROR", t.title)
+        assertEquals("M1 -/h · 6m10s · 482019\nM2 738/h · 17s · 482019", t.expanded)
+    }
+
+    @Test fun orangeThresholdIsAlreadyError() {
+        val d = data(FetchResult.Ok(snap("n", 738, 200_000)), FetchResult.Ok(snap("n", 738, 17_000)))
+        val t = LockScreenText.build(d, now)
+        assertEquals("#F480 · ● ERROR", t.title)
+        assertEquals("M1 738/h · 3m20s · 482019", t.expanded.lines()[0])
+    }
+
+    @Test fun deadBrokerShowsLastKnownValuesWithGrowingAge() {
+        val fail = FetchResult.Fail("h", "HTTP 500")
+        // Ostatni udany odczyt: pakiet 17 s przed chwilą „now”; teraz minęło kolejne 60 s.
+        val lastOk = snap("n", 738, 17_000).copy(totalPackets = 120_222)
+        val d = data(FetchResult.Ok(snap("n", 738, 17_000)), fail).copy(broker2LastOk = lastOk)
+        assertEquals("D_M2 738/h · 1m17s · 120222", LockScreenText.brokerLine("M2", fail, lastOk, d, now + 60_000))
+        assertEquals("#F480 · ● ERROR", LockScreenText.build(d, now).title)
+        assertEquals("D_M2 -/h · - · -", LockScreenText.brokerLine("M2", fail, null, d, now))
     }
 
     @Test fun apiErrorsAndFrozenAge() {

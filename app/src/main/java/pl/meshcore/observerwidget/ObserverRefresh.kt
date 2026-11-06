@@ -57,6 +57,12 @@ object ObserverRefresh {
     @Volatile
     private var lastKnownBroker2AgeMs: Long? = null
 
+    @Volatile
+    private var lastOkBroker1: ObserverSnapshot? = null
+
+    @Volatile
+    private var lastOkBroker2: ObserverSnapshot? = null
+
     fun latest(): WidgetData? = lastData
 
     fun pendingIntent(ctx: Context): PendingIntent {
@@ -394,6 +400,8 @@ object ObserverRefresh {
                 fallbackHealth = healthFallback.health,
                 broker1FrozenAgeMs = if (firstResult is FetchResult.Ok) null else lastKnownBroker1AgeMs,
                 broker2FrozenAgeMs = if (secondResult is FetchResult.Ok) null else lastKnownBroker2AgeMs,
+                broker1LastOk = lastOkBroker1,
+                broker2LastOk = lastOkBroker2,
                 mapping = mappingState,
                 mappingNew = mappingFresh
             )
@@ -404,5 +412,7 @@ object ObserverRefresh {
     private fun rememberBrokerAges(first: FetchResult, second: FetchResult) {
         (first as? FetchResult.Ok)?.snapshot?.lastPacketAgeMs(System.currentTimeMillis())?.let { lastKnownBroker1AgeMs = it }
         (second as? FetchResult.Ok)?.snapshot?.lastPacketAgeMs(System.currentTimeMillis())?.let { lastKnownBroker2AgeMs = it }
+        (first as? FetchResult.Ok)?.let { lastOkBroker1 = it.snapshot }
+        (second as? FetchResult.Ok)?.let { lastOkBroker2 = it.snapshot }
     }
 }

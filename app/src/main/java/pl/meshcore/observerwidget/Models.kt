@@ -71,6 +71,12 @@ data class WidgetData(
      */
     val broker1FrozenAgeMs: Long? = null,
     val broker2FrozenAgeMs: Long? = null,
+    /**
+     * Ostatni udany odczyt danego brokera (do powiadomienia na ekranie blokady, gdy broker padnie);
+     * null, gdy od startu procesu nie było udanego odczytu.
+     */
+    val broker1LastOk: ObserverSnapshot? = null,
+    val broker2LastOk: ObserverSnapshot? = null,
     /** Stan mapowania w zasięgu Observera; null, gdy brak danych z mapera. */
     val mapping: MappingState? = null,
     /** Nowe pingi mapowania zauważone w tym cyklu (do powiadomienia). */
