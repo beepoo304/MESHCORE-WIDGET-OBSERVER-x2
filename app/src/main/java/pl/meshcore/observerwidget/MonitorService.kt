@@ -122,22 +122,7 @@ class MonitorService : Service() {
         super.onDestroy()
     }
 
-    private fun notification(): Notification {
-        ensureChannel(this)
-        val open = PendingIntent.getActivity(
-            this, 10, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.ic_tower)
-            .setContentTitle("Monitoring Observera aktywny")
-            .setContentText("Widget odświeżany co ${Config(this).intervalSec} s")
-            .setOngoing(true)
-            .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setContentIntent(open)
-            .build()
-    }
+    private fun notification(): Notification = buildNotification(this, ObserverRefresh.latest())
 
     companion object {
         private const val TAG = "ObserverWidget"
@@ -159,6 +144,52 @@ class MonitorService : Service() {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL, "Monitoring w tle", NotificationManager.IMPORTANCE_LOW)
             )
+        }
+
+        /**
+         * Stałe powiadomienie usługi. Przy włączonej opcji [Config.lockScreenStatus] pokazuje dane
+         * Observera (widoczne na ekranie blokady, także z PIN-em): zwinięte = tytuł + skrót brokerów,
+         * rozwinięte = pełne linie MQTT1/MQTT2 + MAPPER. Bez danych / przy wyłączonej opcji – stary tekst.
+         */
+        fun buildNotification(ctx: Context, data: WidgetData?): Notification {
+            ensureChannel(ctx)
+            val open = PendingIntent.getActivity(
+                ctx, 10, Intent(ctx, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val config = Config(ctx)
+            val builder = NotificationCompat.Builder(ctx, CHANNEL)
+                .setSmallIcon(R.drawable.ic_tower)
+                .setOngoing(true)
+                .setSilent(true)
+                .setOnlyAlertOnce(true)
+                .setShowWhen(false)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setContentIntent(open)
+            if (config.lockScreenStatus && data != null && data.configured) {
+                val t = LockScreenText.build(data, System.currentTimeMillis()) { ping, i ->
+                    MapperMonitor.nick(ping.userId) ?: data.mapping?.mapperNicks?.getOrNull(i)
+                }
+                builder.setContentTitle(t.title)
+                    .setContentText(t.summary)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(t.expanded))
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            } else {
+                builder.setContentTitle("Monitoring Observera aktywny")
+                    .setContentText("Widget odświeżany co ${config.intervalSec} s")
+            }
+            return builder.build()
+        }
+
+        /** Odświeża treść stałego powiadomienia po pobraniu danych (nie co sekundę – oszczędza baterię). */
+        fun updateNotification(ctx: Context, data: WidgetData?) {
+            if (!isRunning) return
+            try {
+                val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+                nm.notify(NOTIFICATION_ID, buildNotification(ctx.applicationContext, data))
+            } catch (e: Exception) {
+                Log.w(TAG, "Cannot update monitor notification", e)
+            }
         }
 
         /** true = usługa działa lub została uruchomiona; false = Android odmówił (np. start z tła). */

@@ -285,6 +285,7 @@ object ObserverRefresh {
     }
 
     private fun evaluateAlerts(app: Context, data: WidgetData, fresh: Boolean) {
+        MonitorService.updateNotification(app, data)
         try {
             Alerts.evaluate(app, data)
             // Powiadomienie o mapowaniu tylko przy świeżych danych (nie po czasie od ostatka).
