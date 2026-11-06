@@ -36,6 +36,7 @@ class SettingsActivity : Activity() {
     private lateinit var alertM1: CheckBox
     private lateinit var alertM2: CheckBox
     private lateinit var alertMap: CheckBox
+    private lateinit var lockScreen: CheckBox
     private lateinit var delayField: EditText
     private lateinit var cooldownField: EditText
 
@@ -77,6 +78,8 @@ class SettingsActivity : Activity() {
         root.addView(intervalBar)
         updateIntervalLabel()
         root.addView(label("Licznik odświeżania i wiek pakietu zmieniają się co sekundę dzięki usłudze w tle (stałe, ciche powiadomienie „Monitoring Observera aktywny”). Przy wyłączonym ekranie dane nadal są pobierane co interwał, a widget dorysowuje się w ciągu sekundy po włączeniu ekranu (częściowy wakelock chroni pętlę przed Doze)."))
+        lockScreen = check("Dane Observera w powiadomieniu (ekran blokady)", cfg.lockScreenStatus); root.addView(lockScreen)
+        root.addView(label("Stałe powiadomienie pokazuje status, pakiety/h i wiek ostatniego pakietu obu brokerów, a po rozwinięciu także MAPPER z kierunkiem i odległością. Treść odświeża się po każdym pobraniu danych. Jeśli nie widać go na ekranie blokady: Ustawienia telefonu → Powiadomienia → Ekran blokady → pokazuj wszystkie (także ciche)."))
 
         root.addView(title("Progi koloru czasu pakietu"))
         root.addView(label("Pomarańczowy po (min)"))
@@ -179,6 +182,7 @@ class SettingsActivity : Activity() {
         cfg.alertMqtt1 = alertM1.isChecked
         cfg.alertMqtt2 = alertM2.isChecked
         cfg.alertMapping = alertMap.isChecked
+        cfg.lockScreenStatus = lockScreen.isChecked
         cfg.alertDelayMin = delay
         cfg.alertCooldownMin = cooldown
         Alerts.ensureChannels(this)

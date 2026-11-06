@@ -80,6 +80,11 @@ class Config(context: Context) {
         get() = prefs.getBoolean("alert_mapping", true)
         set(v) = prefs.edit().putBoolean("alert_mapping", v).apply()
 
+    /** Dane Observera (status, pakiety/h, wiek pakietu, MAPPER) w stałym powiadomieniu – widoczne na ekranie blokady. */
+    var lockScreenStatus: Boolean
+        get() = prefs.getBoolean("lock_screen_status", true)
+        set(v) = prefs.edit().putBoolean("lock_screen_status", v).apply()
+
     /** Punkt startowy odpytań bazy mapera (najnowszy widziany ID punktu). */
     var mapperLastId: Long
         get() = prefs.getLong("mapper_last_id", 0L)

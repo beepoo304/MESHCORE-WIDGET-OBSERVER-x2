@@ -86,6 +86,7 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 
 ## Historia wersji
 
+- **2.4.0-beta** (gałąź `feature/lockscreen-notification`) — dane Observera na ekranie blokady: stałe powiadomienie monitoringu pokazuje status i skrót brokerów (`M1 1273/h 12s · M2 1190/h 15s`), po rozwinięciu pełne linie MQTT1/MQTT2 i MAPPER z kierunkiem i odległością; treść odświeżana po każdym pobraniu danych, widoczna także przy PIN-ie; przełącznik w Settings (`Config.lockScreenStatus`, domyślnie włączony). Teksty składa czysty `LockScreenText.kt`.
 - **2.3.2** — ikona wieży widoczna w pasku statusu i na ekranie blokady (kanał monitoringu LOW zamiast MIN; nowy ID kanału, bo Android nie pozwala podnieść ważności istniejącego).
 - **2.3.3** — karta mapowania w zakładce OBSERVER naprawdę wisi 24 h: pingi i nicki są zapisywane na dysk (prefs `mapper_state`) i odtwarzane po restarcie procesu (aktualizacja APK, restart telefonu, Android ubił usługę w tle). Poprzednio historia żyła tylko w RAM i znikała przy pierwszym restarcie.
 - **2.3.1** — kolor strzałki mapera wg mapującego (czerwony/żółty/fioletowy/…, zmiana co 3 s w kółko), kompaktowa karta mapowania (2–3 linijki, nadal 24 h, nick w kolorze strzałki mapera), drobne poprawki.
