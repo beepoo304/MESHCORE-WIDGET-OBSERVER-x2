@@ -34,7 +34,7 @@ class LockScreenTextTest {
         // Zwinięte powiadomienie mieści ok. 36–45 znaków w linii (Edge 40, Roboto 14 sp).
         assertTrue(t.title.length <= 36)
         assertTrue(t.summary.length <= 36)
-        assertEquals("MQTT1 1273/h · ostatni 12s temu\nMQTT2 1190/h · ostatni 15s temu", t.expanded)
+        assertEquals("MQTT1 1273/h · 12s\nMQTT2 1190/h · 15s", t.expanded)
     }
 
     @Test fun longNameIsShortened() {
