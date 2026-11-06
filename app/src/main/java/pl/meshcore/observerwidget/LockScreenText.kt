@@ -47,13 +47,13 @@ object LockScreenText {
         null -> "…"
     }
 
-    /** „1273/h · ostatni 12s temu”. */
+    /** „1273/h · 12s”. */
     internal fun brokerLong(r: FetchResult?, nowMs: Long, frozenAgeMs: Long?): String = when (r) {
         is FetchResult.Ok -> {
             val age = r.snapshot.lastPacketAgeMs(nowMs)
-            "${r.snapshot.packetsPerHour}/h · " + (age?.let { "ostatni ${shortAge(it)} temu" } ?: "brak pakietów")
+            "${r.snapshot.packetsPerHour}/h · " + (age?.let { shortAge(it) } ?: "brak pakietów")
         }
-        is FetchResult.Fail -> if (frozenAgeMs != null) "API ✕ · ostatni ${shortAge(frozenAgeMs)} temu" else "API ✕"
+        is FetchResult.Fail -> if (frozenAgeMs != null) "API ✕ · ${shortAge(frozenAgeMs)}" else "API ✕"
         null -> "…"
     }
 
