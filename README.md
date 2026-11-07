@@ -95,3 +95,7 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 - **2.2.0** — wykrywanie mapowania (mapper meshcoresouth.pl): pulsująca niebieska ikona M na widgecie, karta mapowania w aplikacji, push z nickiem mapującego; alerty o mapowaniu w ustawieniach (domyślnie włączone).
 - **2.1.0** — odświeżanie przy wyłączonym ekranie, natychmiastowy push z nazwą brokera, zamrożony wiek pakietu przy padnięciu API brokera.
 - wcześniejsze — patrz `git log`.
+
+## Licencja
+
+MIT — zobacz plik [LICENSE](LICENSE).
