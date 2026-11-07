@@ -10,7 +10,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 10
-        versionName = "2.4.0-beta"
+        versionName = "2.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Stały klucz (w repo), żeby każde APK z GitHub Actions instalowało się jako aktualizacja poprzedniego.
