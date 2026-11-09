@@ -109,7 +109,7 @@ class MainActivity : Activity() {
     private fun handleIntent(i: Intent?) {
         showMapping = i?.getBooleanExtra(EXTRA_SHOW_MAPPING, false) == true
         val t = i?.getStringExtra(EXTRA_TAB)
-        select(if (showMapping) TAB_STATUS else t?.takeIf { it in TABS } ?: tab)
+        select(if (showMapping) TAB_PEOPLE else t?.takeIf { it in TABS } ?: tab)
     }
 
     override fun onResume() {
@@ -268,26 +268,6 @@ class MainActivity : Activity() {
         brokerItem("MQTT1", d.mqtt1Host, d.broker1, now, d.mqtt1Health)
         brokerItem("MQTT2", d.mqtt2Host, d.broker2, now, d.mqtt2Health)
 
-        ui.section(content, "MAPOWANIE · 24 H")
-        var any = false
-        val mapping = d.mapping
-        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < MapperApi.KEEP_MS } == true
-        if (showMapping || (mapping != null && (mapping.active || mappingRecent))) {
-            any = true
-            mappingItem(mapping, wallClockNow, "OBSERVER", M2Ui.OBS_BLUE,
-                "${d.observer?.name ?: "Observer"} · ${d.observerId.take(4).uppercase()}…", cfg.observerId, "Observera", "SNR u Obs")
-        }
-        for (r in d.rptMappings.sortedBy { it.slot }) {
-            val st = r.state
-            val recent = st.pings.lastOrNull()?.let { wallClockNow - it.tsMs < MapperApi.KEEP_MS } == true
-            if (!st.active && !recent) continue
-            if (cfg.rptId(r.slot).isBlank()) continue
-            any = true
-            mappingItem(st, wallClockNow, r.label, M2Ui.RPT_ORANGE,
-                "${r.name ?: "Repeater"} · ${r.shortId.take(4).uppercase()}…", cfg.rptId(r.slot), r.label, "SNR u RPT")
-        }
-        if (!any) ui.item(content) { addView(ui.muted("Nikt nie mapował przy Twoich węzłach w ciągu ostatnich 24 h.", 14f)) }
-
         d.observer?.let { o ->
             content.addView(ui.muted("Dane z: ${Config.displayHost(o.host)}", 12f).apply { setPadding(ui.dp(18), ui.dp(10), ui.dp(18), 0) })
         }
@@ -320,76 +300,6 @@ class MainActivity : Activity() {
                 }
                 is FetchResult.Fail -> addView(ui.text("API niedostępne: ${r.reason}", 15f, WidgetRenderer.RED))
                 null -> addView(ui.muted("…", 15f))
-            }
-        }
-    }
-
-    /** Pozycja mapowania: znacznik źródła + stan, nazwa węzła z kluczem, mapujący z kierunkiem, pingi. */
-    private fun mappingItem(
-        m: MappingState?, nowMs: Long, tag: String, tagColor: Int, where: String,
-        fullKey: String, keyLabel: String, snrLabel: String
-    ) {
-        ui.item(content) {
-            val active = m?.active == true
-            val pulseOn = WidgetRenderer.mappingIconOn(nowMs)
-            val titleColor = when {
-                active && pulseOn -> tagColor
-                active -> if (tagColor == M2Ui.RPT_ORANGE) WidgetRenderer.rptIconColor(false) else 0xFF1F6E8F.toInt()
-                else -> M2Ui.MUTED
-            }
-            val titleRow = ui.row()
-            titleRow.addView(ui.tag(tag, tagColor))
-            titleRow.addView(ui.text(if (active) "● MAPOWANIE W TOKU" else "OSTATNIE MAPOWANIE", 15f, titleColor, bold = true).apply {
-                setPadding(ui.dp(8), 0, 0, 0)
-            })
-            addView(titleRow)
-            val whereRow = ui.row().apply { setPadding(0, ui.dp(4), 0, 0) }
-            whereRow.addView(ui.text(where, 15f, M2Ui.WHITE), ui.weight())
-            val key = CopyKeyReceiver.fullKey(fullKey) ?: fullKey.takeIf { it.isNotBlank() }
-            if (key != null) whereRow.addView(ui.copyIcon(key, keyLabel))
-            addView(whereRow)
-            if (m == null) {
-                addView(ui.muted("Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada).", 14f))
-                return@item
-            }
-            val latest = m.pings
-                .filter { it.lat != null && it.lon != null }
-                .groupBy { it.userId }
-                .map { (_, v) -> v.last() }
-                .sortedBy { it.userId }
-            if (latest.isNotEmpty() || m.mapperNicks.isNotEmpty()) {
-                val sb = SpannableStringBuilder()
-                sb.append(if (active) "Mapuje: " else "Mapował: ")
-                if (latest.isEmpty()) {
-                    sb.append(m.mapperNicks.joinToString(", "))
-                } else latest.forEachIndexed { i, p ->
-                    val nick = MapperMonitor.nick(p.userId) ?: m.mapperNicks.getOrNull(i) ?: "user ${p.userId}"
-                    val nStart = sb.length
-                    sb.append(nick)
-                    sb.setSpan(ForegroundColorSpan(WidgetRenderer.mapperArrowColor(i)), nStart, sb.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    if (m.observerLat != null && m.observerLon != null) {
-                        val bearing = GeoMath.bearingDeg(m.observerLat, m.observerLon, p.lat!!, p.lon!!)
-                        val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, p.lat, p.lon)
-                        sb.append(" ${GeoMath.km(dist)} ${GeoMath.compassLabel(bearing)}")
-                    }
-                    if (i < latest.size - 1) sb.append(" · ")
-                }
-                addView(ui.text(sb, 15f, M2Ui.TEXT).apply { setPadding(0, ui.dp(3), 0, 0) })
-            }
-            // Pingi: w toku – wiek ostatniego; zakończone – stały zakres sesji (bez licznika).
-            val pings = m.pings
-            if (pings.isNotEmpty()) {
-                val last = pings.last()
-                val parts = mutableListOf("Pingów: ${pings.size}")
-                if (active) {
-                    parts.add("ostatni ${TimeFormat.packetAge(nowMs - last.tsMs)} temu (${fmtTime(last.tsMs, "HH:mm:ss")})")
-                } else {
-                    val first = pings.first()
-                    val minutes = ((last.tsMs - first.tsMs) / 60_000L).coerceAtLeast(0L)
-                    parts.add("${fmtTime(first.tsMs, "HH:mm")}–${fmtTime(last.tsMs, "HH:mm")} ($minutes min)")
-                }
-                last.observerSnrDb?.let { parts.add("$snrLabel: ${fmt(it)} dB") }
-                addView(ui.muted(parts.joinToString(" · "), 14f))
             }
         }
     }
@@ -503,51 +413,12 @@ class MainActivity : Activity() {
 
     private fun renderPeople() {
         content.removeAllViews()
+        mappingSection()
         val snap = historyOrPlaceholder() ?: return
         val cfg = Config(this)
         val nodes = HistoryJobs.nodes(cfg, snap)
         val mine = nodes.map { it.shortId }.toSet()
-        val byShort = nodes.associateBy { it.shortId }
         val since = 0L
-        val range = snap.points.minOfOrNull { it.tsMs }?.let { "od ${fmtTime(it, "dd.MM.yyyy")}" }
-
-        ui.section(content, "RANKING", range)
-        content.addView(ui.muted("Znacznik = Twój węzeł, który słyszał mapującego · liczba jego pingów.", 12f).apply {
-            setPadding(ui.dp(18), 0, ui.dp(18), ui.dp(4))
-        })
-        val ranking = MapperStats.ranking(snap.points, mine, since)
-        if (ranking.isEmpty()) ui.item(content) { addView(ui.muted("Nikt jeszcze nie został usłyszany przez Twoje węzły.", 14f)) }
-        val top = ranking.firstOrNull()?.pings ?: 1
-        ranking.take(20).forEachIndexed { i, r ->
-            val nick = snap.nick(r.userId)
-            ui.item(content) {
-                setPadding(ui.dp(18), ui.dp(16), ui.dp(18), ui.dp(16))
-                val row = ui.row()
-                row.addView(ui.text("${i + 1}", 15f, M2Ui.MUTED, bold = true).apply { minWidth = ui.dp(26) })
-                row.addView(ui.text(nick, 15f, M2Ui.WHITE, bold = true), ui.weight())
-                row.addView(ui.text(MapperStats.pingsLabel(r.pings), 14f, M2Ui.TEXT))
-                addView(row)
-                addView(ui.bar(r.pings.toDouble() / top, WidgetRenderer.mapperArrowColor(i)), ui.lp().apply {
-                    setMargins(ui.dp(26), ui.dp(6), 0, 0)
-                })
-                // Który mój węzeł go słyszał: znaczniki z liczbą pingów (Observer pierwszy, potem RPT wg liczby).
-                val heard = r.byNode.entries.filter { it.key in byShort }.sortedWith(
-                    compareByDescending<Map.Entry<String, Int>> { byShort[it.key]?.isObserver == true }.thenByDescending { it.value }
-                )
-                heard.chunked(2).forEach { pair ->
-                    val nr = ui.row().apply { setPadding(ui.dp(26), ui.dp(8), 0, 0) }
-                    for ((id, n) in pair) {
-                        val node = byShort.getValue(id)
-                        nr.addView(ui.tag("${node.label} · $n", if (node.isObserver) M2Ui.OBS_BLUE else M2Ui.RPT_ORANGE).apply {
-                            textSize = 12f
-                            setPadding(ui.dp(8), ui.dp(2), ui.dp(8), ui.dp(2))
-                        }, ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = ui.dp(8) })
-                    }
-                    addView(nr)
-                }
-                addView(ui.keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick).apply { setPadding(ui.dp(26), ui.dp(8), 0, 0) })
-            }
-        }
 
         val radius = cfg.nearbyRadiusKm
         ui.section(content, "MAPOWAŁ OBOK · NIE SŁYSZAŁEŚ ≤${GeoMath.km(radius)}")
@@ -629,6 +500,84 @@ class MainActivity : Activity() {
         box.addView(ui.muted(if (cfg.alertDaily) "Push codziennie o 8:00 za poprzedni dzień." else "Push wyłączony w Ustawieniach.", 12f))
         content.addView(box, ui.lp().apply { setMargins(ui.dp(18), ui.dp(8), ui.dp(18), 0) })
         syncFooter(snap)
+    }
+
+    /**
+     * „MAPOWANIE · 24 H”: każdy mapujący usłyszany przez moje węzły w ostatnich 24 h osobno,
+     * z jego ostatnią sesją. Łączy historię mapera z bieżącymi danymi monitoringu (świeższe).
+     */
+    private fun mappingSection() {
+        val cfg = Config(this)
+        val obsShort = MapperApi.shortId(cfg.observerId)
+        val labels = LinkedHashMap<String, String>()
+        if (obsShort.length == 16) labels[obsShort] = "OBSERVER"
+        for ((slot, id) in cfg.rptIds.toSortedMap()) {
+            val sh = MapperApi.shortId(id)
+            if (sh.length == 16 && sh !in labels) labels[sh] = "RPT$slot"
+        }
+        if (labels.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val from = now - MapperApi.KEEP_MS
+        val snap = MapperHistory.snapshot(this)
+        val d = dashboardData ?: ObserverRefresh.latest()
+        val pool = mutableListOf<MapperPing>()
+        snap?.points?.filterTo(pool) { it.tsMs >= from && it.rptId != null && it.rptId in labels }
+        d?.mapping?.pings?.forEach { if (it.tsMs >= from) pool.add(if (it.rptId == null) it.copy(rptId = obsShort) else it) }
+        d?.rptMappings?.forEach { r -> r.state.pings.forEach { if (it.tsMs >= from) pool.add(if (it.rptId == null) it.copy(rptId = r.shortId) else it) } }
+        val pings = pool.filter { it.rptId in labels }.distinctBy { Triple(it.userId, it.tsMs, it.rptId) }
+
+        val center = labels.keys.firstNotNullOfOrNull { id ->
+            snap?.repeaters?.get(id)?.let { r -> if (r.lat != null && r.lon != null) r.lat to r.lon else null }
+        } ?: d?.mapping?.let { m -> if (m.observerLat != null && m.observerLon != null) m.observerLat to m.observerLon else null }
+
+        ui.section(content, "MAPOWANIE · 24 H")
+        val sessions = pings.groupBy { it.userId }
+            .map { (user, list) -> user to MapperStats.splitSessions(list.sortedBy { it.tsMs }).last() }
+            .sortedByDescending { it.second.last().tsMs }
+        if (sessions.isEmpty()) {
+            ui.item(content) { addView(ui.muted("Nikt nie mapował przy Twoich węzłach w ciągu ostatnich 24 h.", 14f)) }
+            return
+        }
+        sessions.forEachIndexed { i, (user, s) ->
+            val nick = snap?.nick(user) ?: MapperMonitor.nick(user) ?: "user $user"
+            val first = s.first(); val last = s.last()
+            val active = now - last.tsMs <= MapperApi.SESSION_GAP_MS
+            ui.item(content) {
+                setPadding(ui.dp(18), ui.dp(14), ui.dp(18), ui.dp(14))
+                val row = ui.row()
+                row.addView(ui.text(nick, 16f, WidgetRenderer.mapperArrowColor(i), bold = true), ui.weight())
+                row.addView(ui.text(if (active) "● W TOKU" else "OSTATNIE", 12f, if (active) M2Ui.GREEN else M2Ui.MUTED, bold = true))
+                addView(row)
+                val minutes = ((last.tsMs - first.tsMs) / 60_000L).coerceAtLeast(0L)
+                val time = if (active) "od ${fmtTime(first.tsMs, "HH:mm")} · ostatni ${TimeFormat.packetAge(now - last.tsMs)} temu"
+                    else "${fmtTime(first.tsMs, "dd.MM HH:mm")}–${fmtTime(last.tsMs, "HH:mm")} ($minutes min)"
+                addView(ui.text(time, 14f, M2Ui.TEXT).apply { setPadding(0, ui.dp(4), 0, 0) })
+                val parts = mutableListOf(MapperStats.pingsLabel(s.distinctBy { it.tsMs }.size))
+                if (center != null) {
+                    s.filter { it.lat != null && it.lon != null }
+                        .minByOrNull { GeoMath.distanceKm(center.first, center.second, it.lat!!, it.lon!!) }
+                        ?.let { p ->
+                            val km = GeoMath.distanceKm(center.first, center.second, p.lat!!, p.lon!!)
+                            parts.add("najbliżej ${GeoMath.km(km)} ${GeoMath.compassLabel(GeoMath.bearingDeg(center.first, center.second, p.lat, p.lon))}")
+                        }
+                }
+                s.mapNotNull { it.observerSnrDb }.maxOrNull()?.let { parts.add("SNR max ${fmt(it)} dB") }
+                addView(ui.muted(parts.joinToString(" · "), 13f))
+                // Które moje węzły go słyszały w tej sesji.
+                val byNode = s.groupBy { it.rptId!! }.mapValues { (_, l) -> l.distinctBy { it.tsMs }.size }
+                val nr = ui.row().apply { setPadding(0, ui.dp(6), 0, 0) }
+                for (id in labels.keys) {
+                    val n = byNode[id] ?: continue
+                    val label = labels.getValue(id)
+                    nr.addView(ui.tag("$label · $n", if (label == "OBSERVER") M2Ui.OBS_BLUE else M2Ui.RPT_ORANGE).apply {
+                        textSize = 12f
+                        setPadding(ui.dp(8), ui.dp(2), ui.dp(8), ui.dp(2))
+                    }, ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = ui.dp(8) })
+                }
+                addView(nr)
+                addView(ui.keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick).apply { setPadding(0, ui.dp(6), 0, 0) })
+            }
+        }
     }
 
     // ---------------------------------------------------------------- pomocnicze
