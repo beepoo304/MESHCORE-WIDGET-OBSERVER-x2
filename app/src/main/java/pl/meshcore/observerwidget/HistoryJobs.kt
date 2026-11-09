@@ -104,7 +104,7 @@ object HistoryJobs {
         val center = MapperHistory.centerOf(mine, snap.repeaters) ?: return
         val now = System.currentTimeMillis()
         val sessions = MapperStats.nearbyUnheard(
-            snap.points, center.first, center.second, cfg.nearbyRadiusKm.toDouble(), mine.toSet(),
+            snap.points, center.first, center.second, cfg.nearbyRadiusKm, mine.toSet(),
             sinceMs = now - DAY_MS, finishedBeforeMs = now - MapperApi.SESSION_GAP_MS
         )
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -158,7 +158,7 @@ object HistoryJobs {
     fun report(cfg: Config, snap: MapperHistory.Snapshot, from: Long, to: Long): MapperStats.Daily {
         val nodes = nodes(cfg, snap)
         val center = MapperHistory.centerOf(nodes.map { it.shortId }, snap.repeaters)
-        return MapperStats.daily(snap.points, nodes, center, cfg.nearbyRadiusKm.toDouble(), from, to)
+        return MapperStats.daily(snap.points, nodes, center, cfg.nearbyRadiusKm, from, to)
     }
 
     private fun hhmm(ms: Long): String =

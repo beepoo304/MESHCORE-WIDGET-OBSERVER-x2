@@ -14,7 +14,7 @@ import java.io.File
  */
 object MapperHistory {
     /** Promień zapisu punktów wokół Observera (maksymalny promień okolicy w ustawieniach). */
-    const val KEEP_RADIUS_KM = Config.MAX_RADIUS_KM.toDouble()
+    const val KEEP_RADIUS_KM = 50.0
 
     private const val PREFS = "mapper_history"
     private const val FILE_POINTS = "mapper_history.txt"

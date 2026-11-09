@@ -43,7 +43,6 @@ class MainActivity : Activity() {
     private var settings: SettingsPane? = null
     private val navItems = mutableMapOf<String, Pair<FrameLayout, Pair<ImageView, TextView>>>()
     private var tab = TAB_STATUS
-    private var peopleDays = 7
     private var dashboardData: WidgetData? = null
     /** Otwarto z ikony mapowania na widgecie – pokaż kartę mapowania także bez danych z 24 h. */
     private var showMapping = false
@@ -483,9 +482,11 @@ class MainActivity : Activity() {
                 greens.getOrNull(i) == true -> M2Ui.GREEN
                 else -> M2Ui.WHITE
             }
-            row.addView(ui.text(c, if (header) 12f else 15f, color, bold = !header && (i == 0 || greens.getOrNull(i) == true)).apply {
+            val size = when { header -> 12f; i == 0 -> 11f; else -> 15f }
+            row.addView(ui.text(c, size, color, bold = !header && (i == 0 || greens.getOrNull(i) == true)).apply {
                 gravity = if (i == 0) Gravity.START else Gravity.END
-            }, ui.weight(if (i == 0) 1.2f else 1f))
+                isSingleLine = true
+            }, ui.weight(if (i == 0) 1.3f else 1f))
         }
         content.addView(row)
         content.addView(View(this).apply { setBackgroundColor(M2Ui.LINE) }, ui.lp(h = ui.dp(1)))
@@ -502,20 +503,17 @@ class MainActivity : Activity() {
 
     private fun renderPeople() {
         content.removeAllViews()
-        val chips = ui.row().apply { setPadding(ui.dp(18), ui.dp(14), ui.dp(18), 0) }
-        chips.addView(ui.chip("7 dni", peopleDays == 7) { peopleDays = 7; renderPeople() })
-        chips.addView(ui.chip("30 dni", peopleDays == 30) { peopleDays = 30; renderPeople() })
-        content.addView(chips)
         val snap = historyOrPlaceholder() ?: return
         val cfg = Config(this)
         val nodes = HistoryJobs.nodes(cfg, snap)
         val mine = nodes.map { it.shortId }.toSet()
-        val now = System.currentTimeMillis()
-        val since = now - peopleDays * 24 * 60 * 60_000L
+        val byShort = nodes.associateBy { it.shortId }
+        val since = 0L
+        val range = snap.points.minOfOrNull { it.tsMs }?.let { "od ${fmtTime(it, "dd.MM.yyyy")}" }
 
-        ui.section(content, "RANKING", "$peopleDays dni")
+        ui.section(content, "RANKING", range)
         val ranking = MapperStats.ranking(snap.points, mine, since)
-        if (ranking.isEmpty()) ui.item(content) { addView(ui.muted("Nikt nie został usłyszany przez Twoje węzły w tym okresie.", 14f)) }
+        if (ranking.isEmpty()) ui.item(content) { addView(ui.muted("Nikt jeszcze nie został usłyszany przez Twoje węzły.", 14f)) }
         val top = ranking.firstOrNull()?.pings ?: 1
         ranking.take(20).forEachIndexed { i, r ->
             val nick = snap.nick(r.userId)
@@ -528,17 +526,44 @@ class MainActivity : Activity() {
                 addView(ui.bar(r.pings.toDouble() / top, WidgetRenderer.mapperArrowColor(i)), ui.lp().apply {
                     setMargins(ui.dp(26), ui.dp(6), 0, 0)
                 })
-                addView(ui.keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick).apply { setPadding(ui.dp(26), ui.dp(3), 0, 0) })
+                // Który mój węzeł go słyszał (Observer pierwszy, potem RPT wg liczby pingów).
+                val heard = r.byNode.entries.sortedWith(
+                    compareByDescending<Map.Entry<String, Int>> { byShort[it.key]?.isObserver == true }.thenByDescending { it.value }
+                )
+                for ((id, n) in heard) {
+                    val node = byShort[id] ?: continue
+                    val nr = ui.row().apply { setPadding(ui.dp(26), ui.dp(5), 0, 0) }
+                    nr.addView(ui.tag(node.label, if (node.isObserver) M2Ui.OBS_BLUE else M2Ui.RPT_ORANGE))
+                    nr.addView(ui.text(node.name ?: ui.shortKey(id), 13f, M2Ui.TEXT).apply {
+                        setPadding(ui.dp(8), 0, ui.dp(8), 0); isSingleLine = true; ellipsize = android.text.TextUtils.TruncateAt.END
+                    }, ui.weight())
+                    nr.addView(ui.text("słyszał ${MapperStats.pingsLabel(n)}", 13f, M2Ui.MUTED))
+                    addView(nr)
+                }
+                addView(ui.row().apply {
+                    setPadding(ui.dp(26), ui.dp(4), 0, 0)
+                    addView(ui.text("klucz mapującego: ", 12f, M2Ui.MUTED))
+                    addView(ui.keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick).apply { setPadding(0, 0, 0, 0) })
+                })
             }
         }
 
         val radius = cfg.nearbyRadiusKm
-        ui.section(content, "MAPOWAŁ OBOK · NIE SŁYSZAŁEŚ ≤$radius km")
-        val center = MapperHistory.centerOf(nodes.map { it.shortId }, snap.repeaters)
+        ui.section(content, "MAPOWAŁ OBOK · NIE SŁYSZAŁEŚ ≤${GeoMath.km(radius)}")
+        val obs = nodes.firstOrNull { it.isObserver && it.hasPos } ?: nodes.firstOrNull { it.hasPos }
+        val center = obs?.let { it.lat!! to it.lon!! }
+        val centerName = when {
+            obs == null -> ""
+            obs.isObserver -> "Observera"
+            else -> obs.label
+        }
         if (center == null) {
             ui.item(content) { addView(ui.muted("Brak pozycji Observera w bazie mappera – nie da się wyznaczyć okolicy.", 14f)) }
         } else {
-            val sessions = MapperStats.nearbyUnheard(snap.points, center.first, center.second, radius.toDouble(), mine, since)
+            if (obs?.isObserver != true) content.addView(ui.muted("Brak pozycji Observera – środek okolicy to ${obs!!.label}.", 12f).apply {
+                setPadding(ui.dp(18), ui.dp(4), ui.dp(18), 0)
+            })
+            val sessions = MapperStats.nearbyUnheard(snap.points, center.first, center.second, radius, mine, since)
             if (sessions.isEmpty()) ui.item(content) { addView(ui.muted("Brak – wszystkich mapujących w okolicy ktoś z Twoich węzłów usłyszał.", 14f)) }
             for (s in sessions.take(30)) {
                 val nick = snap.nick(s.userId)
@@ -548,15 +573,41 @@ class MainActivity : Activity() {
                     row.addView(ui.text("${fmtTime(s.startMs, "dd.MM HH:mm")}–${fmtTime(s.endMs, "HH:mm")}", 13f, M2Ui.MUTED))
                     addView(row)
                     addView(ui.keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick))
-                    addView(ui.text("${GeoMath.km(s.minKm)} ${GeoMath.compassLabel(s.bearingDeg)} od Observera", 14f, M2Ui.TEXT).apply {
+                    addView(ui.text("Mapujący ${GeoMath.km(s.minKm)} ${GeoMath.compassLabel(s.bearingDeg)} od $centerName", 14f, M2Ui.TEXT).apply {
                         setPadding(0, ui.dp(3), 0, 0)
                     })
-                    addView(ui.text("${MapperStats.pingsLabel(s.pings).uppercase()} · 0 USŁYSZANYCH", 12f, WidgetRenderer.ORANGE, bold = true).apply {
+                    addView(ui.text("${MapperStats.pingsLabel(s.pings).uppercase()} · 0 USŁYSZANYCH PRZEZ TWOJE WĘZŁY", 12f, WidgetRenderer.ORANGE, bold = true).apply {
                         setPadding(0, ui.dp(3), 0, 0)
                     })
-                    if (s.heardBy.isNotEmpty()) {
-                        val names = s.heardBy.map { id -> snap.repeaters[id]?.name?.let { "„$it”" } ?: id.take(4).uppercase() }
-                        addView(ui.muted("Słyszał go: ${names.take(3).joinToString(", ")}", 13f))
+                    // Kto go odebrał: repeatery spoza moich, najbliższy mojego Observera pierwszy.
+                    data class Rx(val id: String, val name: String?, val km: Double?, val bearing: Double?, val n: Int)
+                    val rx = s.heardByCounts.map { (id, n) ->
+                        val r = snap.repeaters[id]
+                        val km = if (r?.lat != null && r.lon != null) GeoMath.distanceKm(center.first, center.second, r.lat, r.lon) else null
+                        val br = if (r?.lat != null && r.lon != null) GeoMath.bearingDeg(center.first, center.second, r.lat, r.lon) else null
+                        Rx(id, r?.name, km, br, n)
+                    }.sortedWith(compareBy<Rx> { it.km ?: Double.MAX_VALUE }.thenByDescending { it.n })
+                    if (rx.isEmpty()) {
+                        addView(ui.muted("Żaden repeater z bazy go nie odebrał.", 13f))
+                    } else {
+                        val box = ui.vertical().apply {
+                            background = ui.rounded(M2Ui.PUSH_BG, 10)
+                            setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(8))
+                        }
+                        box.addView(ui.text(if (rx.size == 1) "ODEBRAŁ GO" else "ODEBRAŁY GO (${rx.size})", 11f, M2Ui.GREEN, bold = true))
+                        rx.take(4).forEachIndexed { k, x ->
+                            if (k > 0) box.addView(View(this@MainActivity).apply { setBackgroundColor(M2Ui.LINE) }, ui.lp(h = ui.dp(1)).apply {
+                                setMargins(0, ui.dp(6), 0, 0)
+                            })
+                            box.addView(ui.text(x.name ?: "repeater bez nazwy", if (k == 0) 16f else 14f, M2Ui.WHITE, bold = true).apply {
+                                setPadding(0, ui.dp(4), 0, 0)
+                            })
+                            val where = if (x.km != null) "${GeoMath.km(x.km)} ${GeoMath.compassLabel(x.bearing!!)} od $centerName" else "brak pozycji"
+                            box.addView(ui.text("$where · ${MapperStats.pingsLabel(x.n)}", 13f, if (k == 0) M2Ui.RPT_ORANGE else M2Ui.TEXT))
+                            box.addView(ui.keyRow(x.id, x.name ?: x.id))
+                        }
+                        if (rx.size > 4) box.addView(ui.muted("+${rx.size - 4} kolejnych", 12f))
+                        addView(box, ui.lp().apply { setMargins(0, ui.dp(8), 0, 0) })
                     }
                 }
             }

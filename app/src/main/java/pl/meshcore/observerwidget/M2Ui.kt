@@ -160,6 +160,8 @@ class M2Ui(private val act: Activity) {
             isSingleLine = true
             textSize = 15f
             setTextColor(WHITE)
+            minHeight = dp(48)
+            gravity = Gravity.CENTER_VERTICAL
             if (mono) typeface = Typeface.MONOSPACE
             background = rounded(BG, 8, CHIP_LINE)
             setPadding(dp(12), dp(12), dp(12), dp(10))
@@ -173,17 +175,9 @@ class M2Ui(private val act: Activity) {
         return edit
     }
 
-    /** Dwa pola obok siebie (progi, opóźnienie/cooldown). */
-    fun fieldPair(parent: LinearLayout, l1: String, v1: String, l2: String, v2: String, type: Int): Pair<EditText, EditText> {
-        val r = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL }
-        val a = vertical(); val b = vertical()
-        val e1 = field(a, l1, v1, type); val e2 = field(b, l2, v2, type)
-        (a.getChildAt(0).layoutParams as LinearLayout.LayoutParams).setMargins(0, dp(10), dp(6), 0)
-        (b.getChildAt(0).layoutParams as LinearLayout.LayoutParams).setMargins(dp(6), dp(10), 0, 0)
-        r.addView(a, weight()); r.addView(b, weight())
-        parent.addView(r, lp().apply { setMargins(dp(18), 0, dp(18), 0) })
-        return e1 to e2
-    }
+    /** Dwa pola jedno pod drugim (progi, opóźnienie/cooldown) – pełna szerokość, wartości zawsze widoczne. */
+    fun fieldPair(parent: LinearLayout, l1: String, v1: String, l2: String, v2: String, type: Int): Pair<EditText, EditText> =
+        field(parent, l1, v1, type) to field(parent, l2, v2, type)
 
     /** Przełącznik z opisem (powiadomienia, ekran blokady). */
     fun switchRow(parent: LinearLayout, label: String, on: Boolean, hint: String? = null): Switch {

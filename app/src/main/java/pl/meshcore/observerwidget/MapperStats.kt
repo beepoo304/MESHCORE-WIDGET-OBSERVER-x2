@@ -42,14 +42,18 @@ object MapperStats {
         )
     }
 
-    data class Rank(val userId: Long, val pings: Int, val lastTsMs: Long)
+    /** [byNode]: krótkie ID mojego węzła → ile różnych pingów tego mapującego usłyszał. */
+    data class Rank(val userId: Long, val pings: Int, val lastTsMs: Long, val byNode: Map<String, Int> = emptyMap())
 
     /** Ranking mapujących usłyszanych przez moje węzły od [sinceMs]. */
     fun ranking(points: List<MapperPing>, mine: Set<String>, sinceMs: Long): List<Rank> =
         points.asSequence()
             .filter { it.tsMs >= sinceMs && it.rptId != null && it.rptId in mine }
             .groupBy { it.userId }
-            .map { (user, list) -> Rank(user, list.distinctBy { it.tsMs }.size, list.maxOf { it.tsMs }) }
+            .map { (user, list) ->
+                val byNode = list.groupBy { it.rptId!! }.mapValues { (_, l) -> l.distinctBy { it.tsMs }.size }
+                Rank(user, list.distinctBy { it.tsMs }.size, list.maxOf { it.tsMs }, byNode)
+            }
             .sortedWith(compareByDescending<Rank> { it.pings }.thenByDescending { it.lastTsMs })
 
     data class Session(
@@ -64,7 +68,9 @@ object MapperStats {
         val minKm: Double,
         val bearingDeg: Double,
         /** Krótkie ID innych repeaterów, które słyszały te pingi. */
-        val heardBy: Set<String>
+        val heardBy: Set<String>,
+        /** Krótkie ID innego repeatera → ile różnych pingów sesji usłyszał. */
+        val heardByCounts: Map<String, Int> = emptyMap()
     ) {
         val key: String get() = "$userId:$startMs"
     }
@@ -112,7 +118,9 @@ object MapperStats {
                         userId = user, startMs = s.first().tsMs, endMs = s.last().tsMs,
                         pings = s.distinctBy { it.tsMs }.size, heardByMine = heardMine,
                         minKm = minKm, bearingDeg = bearing,
-                        heardBy = s.mapNotNull { it.rptId }.filter { it !in mine }.toSet()
+                        heardBy = s.mapNotNull { it.rptId }.filter { it !in mine }.toSet(),
+                        heardByCounts = s.filter { it.rptId != null && it.rptId !in mine }
+                            .groupBy { it.rptId!! }.mapValues { (_, l) -> l.distinctBy { it.tsMs }.size }
                     )
                 )
             }

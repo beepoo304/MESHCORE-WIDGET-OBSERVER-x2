@@ -94,7 +94,7 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
         ui.section(v, "OKOLICA")
         radiusLabel = ui.text("", 14f).apply { setPadding(ui.dp(18), ui.dp(8), ui.dp(18), 0) }
         v.addView(radiusLabel)
-        radiusBar = seek(Config.MAX_RADIUS_KM - 1, cfg.nearbyRadiusKm - 1) { updateLabels() }
+        radiusBar = seek((Config.MAX_RADIUS_M - Config.MIN_RADIUS_M) / 100, (Math.round(cfg.nearbyRadiusKm * 10) - 1).toInt()) { updateLabels() }
         v.addView(radiusBar, ui.lp().apply { setMargins(ui.dp(6), 0, ui.dp(6), 0) })
         v.addView(ui.muted("Promień od Observera dla „Mapował obok · nie słyszałeś” (zakładka Ludzie, push i raport).", 12f).apply {
             setPadding(ui.dp(18), 0, ui.dp(18), 0)
@@ -134,8 +134,11 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
 
     private fun updateLabels() {
         if (::intervalBar.isInitialized) intervalLabel.text = "Interwał odświeżania: ${intervalBar.progress + Config.MIN_INTERVAL} s"
-        if (::radiusBar.isInitialized) radiusLabel.text = "Promień okolicy: ${radiusBar.progress + 1} km"
+        if (::radiusBar.isInitialized) radiusLabel.text = "Promień okolicy: ${radiusText()} km"
     }
+
+    private fun radiusKm() = (radiusBar.progress + 1) / 10.0
+    private fun radiusText() = String.format(java.util.Locale.ROOT, "%.1f", radiusKm()).replace('.', ',')
 
     fun updateMonitorButton() {
         val on = Config(act).monitoringEnabled
@@ -303,7 +306,7 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
             cfg.mapperObsPosOk = false
             cfg.mapperObsPosAtMs = 0L
         }
-        val radiusChanged = radiusBar.progress + 1 != cfg.nearbyRadiusKm
+        val radiusChanged = Math.round(radiusKm() * 10) != Math.round(cfg.nearbyRadiusKm * 10)
         cfg.observerId = id
         cfg.mqtt1Host = hosts[0]
         cfg.mqtt2Host = hosts[1]
@@ -312,7 +315,7 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
         cfg.intervalSec = intervalBar.progress + Config.MIN_INTERVAL
         cfg.orangeMin = orange
         cfg.redMin = red
-        cfg.nearbyRadiusKm = radiusBar.progress + 1
+        cfg.nearbyRadiusKm = radiusKm()
         cfg.alertObserver = alertObs.isChecked
         cfg.alertMqtt1 = alertM1.isChecked
         cfg.alertMqtt2 = alertM2.isChecked

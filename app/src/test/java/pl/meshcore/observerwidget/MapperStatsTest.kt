@@ -51,6 +51,8 @@ class MapperStatsTest {
         val r = MapperStats.ranking(pts, mine, sinceMs = 500)
         assertEquals(listOf(1L, 2L), r.map { it.userId })
         assertEquals(2, r[0].pings)
+        assertEquals(mapOf(obs.shortId to 2, rpt.shortId to 1), r[0].byNode)
+        assertEquals(mapOf(obs.shortId to 1), r[1].byNode)
     }
 
     @Test fun nearbyUnheardFindsSessionsWithoutMyReception() {
@@ -70,6 +72,7 @@ class MapperStatsTest {
         assertEquals(1L, s[0].userId)
         assertEquals(2, s[0].pings)
         assertEquals(setOf(other), s[0].heardBy)
+        assertEquals(mapOf(other to 2), s[0].heardByCounts)
         assertTrue(MapperStats.nearbyUnheard(pts, 50.0, 20.0, 10.0, mine, 0, finishedBeforeMs = 1_000_000).isEmpty())
     }
 

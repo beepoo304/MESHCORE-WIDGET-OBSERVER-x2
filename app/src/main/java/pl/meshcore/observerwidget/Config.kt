@@ -85,10 +85,10 @@ class Config(context: Context) {
         get() = prefs.getBoolean("lock_screen_status", true)
         set(v) = prefs.edit().putBoolean("lock_screen_status", v).apply()
 
-    /** Promień „okolicy” Observera (km, 1–50) – do „Mapował obok · nie słyszałeś”. */
-    var nearbyRadiusKm: Int
-        get() = prefs.getInt("nearby_radius_km", 10).coerceIn(1, MAX_RADIUS_KM)
-        set(v) = prefs.edit().putInt("nearby_radius_km", v.coerceIn(1, MAX_RADIUS_KM)).apply()
+    /** Promień „okolicy” Observera (km, 0,1–5, co 0,1) – do „Mapował obok · nie słyszałeś”. Trzymany w metrach. */
+    var nearbyRadiusKm: Double
+        get() = prefs.getInt("nearby_radius_m", 2000).coerceIn(MIN_RADIUS_M, MAX_RADIUS_M) / 1000.0
+        set(v) = prefs.edit().putInt("nearby_radius_m", (Math.round(v * 10) * 100).toInt().coerceIn(MIN_RADIUS_M, MAX_RADIUS_M)).apply()
 
     /** Dzienny raport o 8:00: wczorajsi mapujący przy moich węzłach. */
     var alertDaily: Boolean
@@ -155,7 +155,8 @@ class Config(context: Context) {
         const val MAX_INTERVAL = 60
 
         const val RPT_SLOTS = 5
-        const val MAX_RADIUS_KM = 50
+        const val MIN_RADIUS_M = 100
+        const val MAX_RADIUS_M = 5000
 
         private val HEX64 = Regex("^[0-9a-fA-F]{64}$")
         private val HEX_RPT = Regex("^[0-9a-fA-F]{16,64}$")
