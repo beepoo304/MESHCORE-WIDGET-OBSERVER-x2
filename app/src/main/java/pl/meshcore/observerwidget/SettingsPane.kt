@@ -32,8 +32,6 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
     private lateinit var cooldownField: EditText
     private lateinit var intervalBar: SeekBar
     private lateinit var intervalLabel: TextView
-    private lateinit var radiusBar: SeekBar
-    private lateinit var radiusLabel: TextView
     private lateinit var info: TextView
     private lateinit var apiInfo: TextView
     private lateinit var lockScreen: Switch
@@ -42,7 +40,6 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
     private lateinit var alertM2: Switch
     private lateinit var alertMap: Switch
     private lateinit var alertDaily: Switch
-    private lateinit var alertNearby: Switch
     private val rptBox: LinearLayout = ui.vertical()
     private lateinit var monitorButton: TextView
 
@@ -91,23 +88,12 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
         val (o, r) = ui.fieldPair(v, "Pomarańczowy po (min)", cfg.orangeMin.toString(), "Czerwony po (min)", cfg.redMin.toString(), InputType.TYPE_CLASS_NUMBER)
         orangeField = o; redField = r
 
-        ui.section(v, "OKOLICA")
-        radiusLabel = ui.text("", 14f).apply { setPadding(ui.dp(18), ui.dp(8), ui.dp(18), 0) }
-        v.addView(radiusLabel)
-        radiusBar = seek((Config.MAX_RADIUS_M - Config.MIN_RADIUS_M) / 100, (Math.round(cfg.nearbyRadiusKm * 10) - 1).toInt()) { updateLabels() }
-        v.addView(radiusBar, ui.lp().apply { setMargins(ui.dp(6), 0, ui.dp(6), 0) })
-        v.addView(ui.muted("Promień od Observera dla „Mapował obok · nie słyszałeś” (zakładka Ludzie, push i raport).", 12f).apply {
-            setPadding(ui.dp(18), 0, ui.dp(18), 0)
-        })
-        updateLabels()
-
         ui.section(v, "POWIADOMIENIA PUSH")
         alertObs = ui.switchRow(v, "Observer: brak pakietów", cfg.alertObserver, "Natychmiast po czerwonym progu, niezależnie od MQTT.")
         alertM1 = ui.switchRow(v, "MQTT1: brak połączenia / odbioru", cfg.alertMqtt1)
         alertM2 = ui.switchRow(v, "MQTT2: brak połączenia / odbioru", cfg.alertMqtt2)
         alertMap = ui.switchRow(v, "Mapowanie w zasięgu", cfg.alertMapping, "Nick mapującego raz na sesję (baza mapera meshcoresouth.pl).")
         alertDaily = ui.switchRow(v, "Dzienny raport o 8:00", cfg.alertDaily, "Podsumowanie wczorajszego dnia przy Twoich węzłach.")
-        alertNearby = ui.switchRow(v, "Mapował obok – nie słyszałeś", cfg.alertNearby, "Ktoś mapował w okolicy, a żaden Twój węzeł go nie usłyszał.")
         val (d, c) = ui.fieldPair(v, "Opóźnienie MQTT (min)", cfg.alertDelayMin.toString(), "Cooldown (min, min. 1)", cfg.alertCooldownMin.toString(), InputType.TYPE_CLASS_NUMBER)
         delayField = d; cooldownField = c
 
@@ -134,11 +120,7 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
 
     private fun updateLabels() {
         if (::intervalBar.isInitialized) intervalLabel.text = "Interwał odświeżania: ${intervalBar.progress + Config.MIN_INTERVAL} s"
-        if (::radiusBar.isInitialized) radiusLabel.text = "Promień okolicy: ${radiusText()} km"
     }
-
-    private fun radiusKm() = (radiusBar.progress + 1) / 10.0
-    private fun radiusText() = String.format(java.util.Locale.ROOT, "%.1f", radiusKm()).replace('.', ',')
 
     fun updateMonitorButton() {
         val on = Config(act).monitoringEnabled
@@ -306,7 +288,6 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
             cfg.mapperObsPosOk = false
             cfg.mapperObsPosAtMs = 0L
         }
-        val radiusChanged = Math.round(radiusKm() * 10) != Math.round(cfg.nearbyRadiusKm * 10)
         cfg.observerId = id
         cfg.mqtt1Host = hosts[0]
         cfg.mqtt2Host = hosts[1]
@@ -315,13 +296,12 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
         cfg.intervalSec = intervalBar.progress + Config.MIN_INTERVAL
         cfg.orangeMin = orange
         cfg.redMin = red
-        cfg.nearbyRadiusKm = radiusKm()
         cfg.alertObserver = alertObs.isChecked
         cfg.alertMqtt1 = alertM1.isChecked
         cfg.alertMqtt2 = alertM2.isChecked
         cfg.alertMapping = alertMap.isChecked
         cfg.alertDaily = alertDaily.isChecked
-        cfg.alertNearby = alertNearby.isChecked
+        cfg.alertNearby = false
         cfg.lockScreenStatus = lockScreen.isChecked
         cfg.alertDelayMin = delay
         cfg.alertCooldownMin = cooldown
@@ -331,7 +311,7 @@ class SettingsPane(private val act: Activity, private val ui: M2Ui, private val 
         info.text = "Zapisano"
         ObserverRefresh.ensureTicking(act)
         ObserverRefresh.refreshAll(act)
-        if (observerChanged) nodesChanged() else if (radiusChanged) HistoryJobs.listener?.invoke()
+        if (observerChanged) nodesChanged()
     }
 
     private fun testApi() {

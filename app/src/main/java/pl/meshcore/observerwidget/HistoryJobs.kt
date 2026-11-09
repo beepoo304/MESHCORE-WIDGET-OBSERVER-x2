@@ -67,7 +67,6 @@ object HistoryJobs {
             val ok = MapperHistory.sync(app)
             CompanionKeys.refreshIfStale(app)
             if (ok) {
-                checkNearby(app)
                 checkDaily(app)
             }
         } catch (e: Exception) {

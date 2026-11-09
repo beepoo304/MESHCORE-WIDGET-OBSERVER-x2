@@ -145,7 +145,7 @@ class Config(context: Context) {
     val rptIds: Map<Int, String>
         get() = (1..RPT_SLOTS).associateWith { rptId(it) }.filterValues { it.isNotBlank() }
 
-    val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2 || alertMapping || alertDaily || alertNearby
+    val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2 || alertMapping || alertDaily
 
     companion object {
         const val DEFAULT_MQTT1 = "live.meshcorekk.xyz"

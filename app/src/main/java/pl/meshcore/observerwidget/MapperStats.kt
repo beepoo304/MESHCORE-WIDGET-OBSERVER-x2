@@ -174,8 +174,5 @@ object MapperStats {
             append(" · max ${GeoMath.km(km)}")
             d.maxNode?.let { append(" (${if (it.isObserver) "Observer" else it.label})") }
         }
-        if (d.nearbyUnheard > 0) {
-            append(" · ${d.nearbyUnheard} ${plural(d.nearbyUnheard, "sesja", "sesje", "sesji")} obok bez odbioru")
-        }
     }
 }

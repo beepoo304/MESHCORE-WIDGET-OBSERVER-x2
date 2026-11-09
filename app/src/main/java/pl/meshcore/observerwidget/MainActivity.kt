@@ -53,6 +53,7 @@ class MainActivity : Activity() {
             if (!Config(this@MainActivity).monitoringEnabled) { updateHeader(); return }
             if (!MonitorService.isRunning && ObserverRefresh.isRefreshDue()) ObserverRefresh.refreshAll(applicationContext)
             if (tab == TAB_STATUS) renderStatus()
+            else if (tab == TAB_PEOPLE && System.currentTimeMillis() / 1000 % 10 == 0L) renderPeople()
             updateHeader()
             val now = System.currentTimeMillis()
             handler.postDelayed(this, 1_000L - (now % 1_000L) + 15L)
