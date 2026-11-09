@@ -512,12 +512,16 @@ class MainActivity : Activity() {
         val range = snap.points.minOfOrNull { it.tsMs }?.let { "od ${fmtTime(it, "dd.MM.yyyy")}" }
 
         ui.section(content, "RANKING", range)
+        content.addView(ui.muted("Znacznik = Twój węzeł, który słyszał mapującego · liczba jego pingów.", 12f).apply {
+            setPadding(ui.dp(18), 0, ui.dp(18), ui.dp(4))
+        })
         val ranking = MapperStats.ranking(snap.points, mine, since)
         if (ranking.isEmpty()) ui.item(content) { addView(ui.muted("Nikt jeszcze nie został usłyszany przez Twoje węzły.", 14f)) }
         val top = ranking.firstOrNull()?.pings ?: 1
         ranking.take(20).forEachIndexed { i, r ->
             val nick = snap.nick(r.userId)
             ui.item(content) {
+                setPadding(ui.dp(18), ui.dp(16), ui.dp(18), ui.dp(16))
                 val row = ui.row()
                 row.addView(ui.text("${i + 1}", 15f, M2Ui.MUTED, bold = true).apply { minWidth = ui.dp(26) })
                 row.addView(ui.text(nick, 15f, M2Ui.WHITE, bold = true), ui.weight())
@@ -526,25 +530,22 @@ class MainActivity : Activity() {
                 addView(ui.bar(r.pings.toDouble() / top, WidgetRenderer.mapperArrowColor(i)), ui.lp().apply {
                     setMargins(ui.dp(26), ui.dp(6), 0, 0)
                 })
-                // Który mój węzeł go słyszał (Observer pierwszy, potem RPT wg liczby pingów).
-                val heard = r.byNode.entries.sortedWith(
+                // Który mój węzeł go słyszał: znaczniki z liczbą pingów (Observer pierwszy, potem RPT wg liczby).
+                val heard = r.byNode.entries.filter { it.key in byShort }.sortedWith(
                     compareByDescending<Map.Entry<String, Int>> { byShort[it.key]?.isObserver == true }.thenByDescending { it.value }
                 )
-                for ((id, n) in heard) {
-                    val node = byShort[id] ?: continue
-                    val nr = ui.row().apply { setPadding(ui.dp(26), ui.dp(5), 0, 0) }
-                    nr.addView(ui.tag(node.label, if (node.isObserver) M2Ui.OBS_BLUE else M2Ui.RPT_ORANGE))
-                    nr.addView(ui.text(node.name ?: ui.shortKey(id), 13f, M2Ui.TEXT).apply {
-                        setPadding(ui.dp(8), 0, ui.dp(8), 0); isSingleLine = true; ellipsize = android.text.TextUtils.TruncateAt.END
-                    }, ui.weight())
-                    nr.addView(ui.text("słyszał ${MapperStats.pingsLabel(n)}", 13f, M2Ui.MUTED))
+                heard.chunked(2).forEach { pair ->
+                    val nr = ui.row().apply { setPadding(ui.dp(26), ui.dp(8), 0, 0) }
+                    for ((id, n) in pair) {
+                        val node = byShort.getValue(id)
+                        nr.addView(ui.tag("${node.label} · $n", if (node.isObserver) M2Ui.OBS_BLUE else M2Ui.RPT_ORANGE).apply {
+                            textSize = 12f
+                            setPadding(ui.dp(8), ui.dp(2), ui.dp(8), ui.dp(2))
+                        }, ui.lp(ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = ui.dp(8) })
+                    }
                     addView(nr)
                 }
-                addView(ui.row().apply {
-                    setPadding(ui.dp(26), ui.dp(4), 0, 0)
-                    addView(ui.text("klucz mapującego: ", 12f, M2Ui.MUTED))
-                    addView(ui.keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick).apply { setPadding(0, 0, 0, 0) })
-                })
+                addView(ui.keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick).apply { setPadding(ui.dp(26), ui.dp(8), 0, 0) })
             }
         }
 

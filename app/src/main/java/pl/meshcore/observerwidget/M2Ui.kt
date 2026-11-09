@@ -113,8 +113,8 @@ class M2Ui(private val act: Activity) {
         if (key == null) {
             r.addView(text("klucz nieznany (brak w live API)", 12f, MUTED).apply { setTypeface(typeface, Typeface.ITALIC) })
         } else {
-            r.addView(text(shortKey(key), 12f, MUTED, mono = true))
-            r.addView(copyIcon(key, label))
+            r.addView(text(shortKey(key), 12f, MUTED, mono = true).apply { isSingleLine = true })
+            r.addView(copyIcon(key, label).apply { layoutParams = LinearLayout.LayoutParams(dp(34), dp(24)) })
         }
         return r
     }
