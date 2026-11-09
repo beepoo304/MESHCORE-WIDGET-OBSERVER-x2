@@ -141,11 +141,33 @@ class MainActivity : Activity() {
         ))
         obs?.let { dash.addView(line("Dane z: ${Config.displayHost(it.host)}", 12f, WidgetRenderer.GRAY)) }
         dash.addView(spacer())
+        dash.addView(rptSection())
+        dash.addView(spacer())
         // Karta mapowania: gdy ktoś mapuje lub mapował w ciągu 24 h, albo po kliknięciu MAPPER na widgecie.
         val mapping = d.mapping
         val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < MapperApi.KEEP_MS } == true
         if (showMapping || (mapping != null && (mapping.active || mappingRecent))) {
-            dash.addView(mappingCard(mapping, d, wallClockNow))
+            dash.addView(mappingCard(
+                mapping, wallClockNow,
+                tag = "OBSERVER", tagColor = WidgetRenderer.MAPPER_BLUE,
+                where = "${d.mappingObserverName()} ${d.observerId.take(4)}…",
+                fullKey = Config(this).observerId, keyLabel = "Observera", snrLabel = "SNR u Obs"
+            ))
+            dash.addView(spacer())
+        }
+        // Karty mapowania przy moich repeaterach RPT1–RPT5 (też 24 h od ostatniego pingu).
+        val cfg = Config(this)
+        for (r in d.rptMappings.sortedBy { it.slot }) {
+            val st = r.state
+            val recent = st.pings.lastOrNull()?.let { wallClockNow - it.tsMs < MapperApi.KEEP_MS } == true
+            if (!st.active && !recent) continue
+            if (cfg.rptId(r.slot).isBlank()) continue
+            dash.addView(mappingCard(
+                st, wallClockNow,
+                tag = r.label, tagColor = WidgetRenderer.ORANGE,
+                where = "${r.name ?: "Repeater"} · ${r.shortId.take(4).uppercase()}…",
+                fullKey = cfg.rptId(r.slot), keyLabel = r.label, snrLabel = "SNR u RPT"
+            ))
             dash.addView(spacer())
         }
         dash.addView(brokerCard("MQTT1", d.mqtt1Host, d.broker1, d, now, d.mqtt1Health))
@@ -161,7 +183,10 @@ class MainActivity : Activity() {
      * tytuł z kluczem i ikoną kopiowania, mapujący z kierunkiem i odległością
      * (nick w kolorze strzałki tego mapera na widgecie), statystyki pingów.
      */
-    private fun mappingCard(m: MappingState?, d: WidgetData, nowMs: Long): View {
+    private fun mappingCard(
+        m: MappingState?, nowMs: Long, tag: String, tagColor: Int, where: String,
+        fullKey: String, keyLabel: String, snrLabel: String
+    ): View {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.card_outline)
@@ -171,29 +196,24 @@ class MainActivity : Activity() {
         // Pulsująca kropka w tytule: sekunda jasna, sekunda przyciemniona (jak ikona na widgecie).
         val pulseOn = WidgetRenderer.mappingIconOn(nowMs)
         val titleColor = when {
-            active && pulseOn -> 0xFF4FC3F7.toInt()
-            active -> 0xFF1F6E8F.toInt()
+            active && pulseOn -> tagColor
+            active -> if (tagColor == WidgetRenderer.ORANGE) WidgetRenderer.rptIconColor(false) else 0xFF1F6E8F.toInt()
             else -> WidgetRenderer.GRAY
         }
-        // Linia 1: tytuł + klucz (pierwsze 4 znaki) + ikona kopiowania pełnego (jak w widgecie).
+        // Linia 1: znacznik źródła (OBSERVER niebieski / RPTn pomarańczowy) + stan mapowania.
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        titleRow.addView(line(if (active) "● MAPOWANIE W TOKU" else "OSTATNIE MAPOWANIE", 18f, titleColor, bold = true))
-        titleRow.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
-        titleRow.addView(line("${d.mappingObserverName()} ${d.observerId.take(4)}…", 15f, Color.WHITE))
-        val copy = android.widget.ImageView(this).apply {
-            setImageResource(R.drawable.ic_copy)
-            setPadding(dp(6), dp(2), dp(2), dp(2))
-            contentDescription = "Kopiuj pełny klucz Observera"
-            setOnClickListener {
-                CopyKeyReceiver.fullKey(Config(this@MainActivity).observerId)?.let { key ->
-                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    cm.setPrimaryClip(android.content.ClipData.newPlainText("Klucz Observera", key))
-                    android.widget.Toast.makeText(this@MainActivity, "Skopiowano pełny klucz Observera", android.widget.Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-        titleRow.addView(copy)
+        titleRow.addView(tagView(tag, tagColor))
+        titleRow.addView(line(if (active) "● MAPOWANIE W TOKU" else "OSTATNIE MAPOWANIE", 17f, titleColor, bold = true).apply {
+            setPadding(dp(8), dp(2), 0, dp(2))
+        })
         box.addView(titleRow)
+        // Linia 2: nazwa (Observer / repeater z bazy mapera) + klucz (4 znaki) + kopiowanie pełnego.
+        val whereRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        whereRow.addView(line(where, 15f, Color.WHITE).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        whereRow.addView(copyButton(fullKey, keyLabel))
+        box.addView(whereRow)
         if (m == null) {
             box.addView(line("Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada).", 15f, WidgetRenderer.GRAY))
             return box
@@ -238,10 +258,157 @@ class MainActivity : Activity() {
                 "Pingów: ${pings.size}",
                 "ostatni ${TimeFormat.packetAge(nowMs - last.tsMs)} temu (${timeOf(last.tsMs)})"
             )
-            last.observerSnrDb?.let { parts.add("SNR u Obs: ${fmt(it)} dB") }
+            last.observerSnrDb?.let { parts.add("$snrLabel: ${fmt(it)} dB") }
             box.addView(line(parts.joinToString(" · "), 15f, Color.WHITE))
         }
         return box
+    }
+
+    /** Kolorowy znacznik źródła: OBSERVER / RPT1… (czarny napis na kolorowym tle). */
+    private fun tagView(text: String, color: Int, alpha: Float = 1f) = TextView(this).apply {
+        this.text = text
+        textSize = 12f
+        setTextColor(Color.BLACK)
+        setTypeface(null, android.graphics.Typeface.BOLD)
+        setPadding(dp(8), dp(3), dp(8), dp(3))
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(6).toFloat()
+        }
+        this.alpha = alpha
+    }
+
+    private fun copyButton(fullKey: String, label: String) = android.widget.ImageView(this).apply {
+        setImageResource(R.drawable.ic_copy)
+        setPadding(dp(8), dp(4), dp(4), dp(4))
+        contentDescription = "Kopiuj pełny klucz $label"
+        setOnClickListener {
+            val key = CopyKeyReceiver.fullKey(fullKey) ?: fullKey.takeIf { it.isNotBlank() } ?: return@setOnClickListener
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Klucz $label", key))
+            android.widget.Toast.makeText(this@MainActivity, "Skopiowano klucz $label", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Sekcja „MOJE REPEATERY” na karcie OBSERVER: do 5 kluczy repeaterów (RPT1–RPT5).
+     * Klucz wpisuje się w okienku (panel przerysowuje się co sekundę, więc pole tekstowe
+     * na stałe by znikało). Pod kluczem: czy repeater jest w bazie mappera i jego nazwa.
+     */
+    private fun rptSection(): View {
+        val cfg = Config(this)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.card_outline)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        box.addView(line("MOJE REPEATERY", 15f, Color.WHITE, bold = true))
+        box.addView(line("Mapowanie przy nich: RPT1–RPT5 (pomarańczowe) na widgecie i push.", 12f, WidgetRenderer.GRAY))
+        val ids = cfg.rptIds
+        for ((slot, id) in ids) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, dp(8), 0, 0)
+            }
+            row.addView(tagView("RPT$slot", WidgetRenderer.ORANGE))
+            row.addView(TextView(this).apply {
+                text = if (id.length > 14) "${id.take(8)}…${id.takeLast(4)}" else id
+                textSize = 14f
+                typeface = android.graphics.Typeface.MONOSPACE
+                setTextColor(0xFFDDDDDD.toInt())
+                setPadding(dp(10), dp(4), dp(4), dp(4))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener { editRptDialog(slot) }
+            })
+            row.addView(copyButton(id, "RPT$slot"))
+            row.addView(TextView(this).apply {
+                text = "✕"
+                textSize = 18f
+                setTextColor(Color.WHITE)
+                setPadding(dp(12), dp(2), dp(4), dp(2))
+                contentDescription = "Usuń RPT$slot"
+                setOnClickListener {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Usunąć RPT$slot?")
+                        .setMessage("Klucz ${id.take(8)}… zniknie z widgetu i powiadomień.")
+                        .setPositiveButton("Usuń") { _, _ ->
+                            Config(this@MainActivity).setRptId(slot, "")
+                            renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this@MainActivity))
+                        }
+                        .setNegativeButton("Anuluj", null)
+                        .show()
+                }
+            })
+            box.addView(row)
+            val info = MapperMonitor.rptInfo(MapperApi.shortId(id))
+            val (status, color) = when {
+                info == null -> "sprawdzam w bazie mappera…" to WidgetRenderer.GRAY
+                info.found -> "✓ w bazie mappera: „${info.name ?: "bez nazwy"}”" to WidgetRenderer.GREEN
+                info.name != null -> "„${info.name}” bez pozycji w bazie mappera – bez strzałki i odległości" to WidgetRenderer.ORANGE
+                else -> "✕ brak w bazie mappera – bez nazwy, strzałki i odległości" to WidgetRenderer.ORANGE
+            }
+            box.addView(line(status, 12f, color).apply { setPadding(dp(4), dp(2), 0, 0) })
+        }
+        val free = (1..Config.RPT_SLOTS).firstOrNull { it !in ids }
+        if (free != null) {
+            box.addView(TextView(this).apply {
+                text = "+ dodaj repeater (max ${Config.RPT_SLOTS})"
+                textSize = 14f
+                setTextColor(WidgetRenderer.ORANGE)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(0, dp(12), 0, dp(4))
+                setOnClickListener { editRptDialog(free) }
+            })
+        }
+        return box
+    }
+
+    /** Okienko wpisania/zmiany klucza RPTn (tylko repeater; Observer ma własne pole w Settings). */
+    private fun editRptDialog(slot: Int) {
+        val cfg = Config(this)
+        val input = android.widget.EditText(this).apply {
+            setText(cfg.rptId(slot))
+            hint = "klucz repeatera (64 znaki hex)"
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 14f
+            isSingleLine = true
+        }
+        val wrap = LinearLayout(this).apply {
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("RPT$slot: klucz repeatera")
+            .setView(wrap)
+            .setPositiveButton("Zapisz", null)
+            .setNegativeButton("Anuluj", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val id = input.text.toString().filterNot { it.isWhitespace() }
+                val short = MapperApi.shortId(id)
+                val err = when {
+                    !Config.isValidRptId(id) -> "Klucz: znaki 0-9 i A-F, od 16 do 64 znaków."
+                    short == MapperApi.shortId(cfg.observerId) -> "To klucz Observera – wpisz klucz innego repeatera."
+                    cfg.rptIds.any { (s, other) -> s != slot && MapperApi.shortId(other) == short } -> "Ten repeater jest już na liście."
+                    else -> null
+                }
+                if (err != null) {
+                    input.error = err
+                    return@setOnClickListener
+                }
+                cfg.setRptId(slot, id)
+                dialog.dismiss()
+                renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this))
+                // Od razu sprawdzamy repeater w bazie mappera (nazwa + pozycja do strzałki).
+                thread {
+                    MapperMonitor.lookupRpt(applicationContext, id, 6_000)
+                    runOnUiThread { if (!isFinishing) renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this)) }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun WidgetData.mappingObserverName(): String =

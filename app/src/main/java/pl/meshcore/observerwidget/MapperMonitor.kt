@@ -21,6 +21,13 @@ object MapperMonitor {
     private const val PREFS_NAME = "mapper_state"
     private const val KEY_PINGS = "pings_json"
     private const val KEY_NICKS = "nicks_json"
+    private const val KEY_RPT_PINGS = "rpt_pings_json"
+    private const val KEY_RPT_INFO = "rpt_info_json"
+    /** Krótkie ID repeaterów RPT, dla których historia 24 h została już wczytana. */
+    private const val KEY_RPT_KNOWN = "rpt_known"
+
+    /** Ponowne sprawdzenie RPT, którego nie ma w bazie mapera (użytkownik może go właśnie dodać). */
+    private const val RPT_RETRY_MS = 60 * 60_000L
 
     /** Jak długo trzymamy pozycję Observera w pamięci/prefs (tydzień). */
     private const val POS_TTL_MS = 7 * 24 * 60 * 60_000L
@@ -38,22 +45,39 @@ object MapperMonitor {
     private var obsLat: Double? = null
     private var obsLon: Double? = null
 
+    /** Pingi przy moich repeaterach RPT1–RPT5: krótkie ID repeatera → pomiary posortowane po czasie. */
+    private val rptPings = HashMap<String, ArrayList<MapperPing>>()
+
+    /** Pozycja i nazwa RPT z bazy repeaterów mapera (krótkie ID → info). */
+    data class RptInfo(val lat: Double?, val lon: Double?, val found: Boolean, val name: String?, val atMs: Long)
+
+    private val rptInfo = HashMap<String, RptInfo>()
+
     fun nick(userId: Long): String? = synchronized(nicks) { nicks[userId] }
+
+    /** Co wiemy o repeaterze z bazy mapera (null = jeszcze nie sprawdzano). */
+    fun rptInfo(shortId: String): RptInfo? = synchronized(rptInfo) { rptInfo[shortId] }
 
     /** Czy stan został już wczytany z dysku w tym życiu procesu. */
     private var loaded = false
 
     /** Czyszczenie stanu (np. po zmianie Observera w ustawieniach). Kasuje też zapis na dysku. */
     fun reset(ctx: Context? = null) {
+        // Moje repeatery RPT1–RPT5 nie zależą od Observera: ich historia zostaje.
+        ctx?.let { ensureLoaded(it.applicationContext) }
+        val keepNicks = synchronized(rptPings) { rptPings.values.any { it.isNotEmpty() } }
         synchronized(pings) { pings.clear() }
-        synchronized(nicks) { nicks.clear() }
+        if (!keepNicks) synchronized(nicks) { nicks.clear() }
         synchronized(this) {
             obsLat = null
             obsLon = null
         }
         loaded = true
-        ctx?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)?.edit()
-            ?.remove(KEY_PINGS)?.remove(KEY_NICKS)?.apply()
+        if (ctx != null) {
+            val editor = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().remove(KEY_PINGS)
+            if (!keepNicks) editor.remove(KEY_NICKS)
+            editor.apply()
+        }
     }
 
     /**
@@ -79,6 +103,17 @@ object MapperMonitor {
                 nicks.clear()
                 nicks.putAll(restoredNicks)
             }
+            synchronized(rptPings) {
+                rptPings.clear()
+                for ((id, list) in rptPingsFromJson(prefs.getString(KEY_RPT_PINGS, null))) {
+                    val kept = list.filter { it.tsMs >= cut }.sortedBy { it.tsMs }
+                    if (kept.isNotEmpty()) rptPings[id] = ArrayList(kept)
+                }
+            }
+            synchronized(rptInfo) {
+                rptInfo.clear()
+                rptInfo.putAll(rptInfoFromJson(prefs.getString(KEY_RPT_INFO, null)))
+            }
             loaded = true
         }
     }
@@ -88,9 +123,15 @@ object MapperMonitor {
         val cut = System.currentTimeMillis() - MapperApi.KEEP_MS
         val pingJson = synchronized(pings) { pingsToJson(pings.filter { it.tsMs >= cut }) }
         val nickJson = synchronized(nicks) { nicksToJson(nicks) }
+        val rptJson = synchronized(rptPings) {
+            rptPingsToJson(rptPings.mapValues { (_, v) -> v.filter { it.tsMs >= cut } })
+        }
+        val infoJson = synchronized(rptInfo) { rptInfoToJson(rptInfo) }
         ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putString(KEY_PINGS, pingJson)
             .putString(KEY_NICKS, nickJson)
+            .putString(KEY_RPT_PINGS, rptJson)
+            .putString(KEY_RPT_INFO, infoJson)
             .apply()
     }
 
@@ -99,12 +140,30 @@ object MapperMonitor {
      * (do powiadomienia). Pierwsza tura ustawia tylko punkt startowy w bazie – historia
      * nie wywoła powiadomienia, ale wchodzi do stanu, żeby aplikacja od razu pokazała sesję.
      */
-    fun poll(ctx: Context, observerId: String, timeoutMs: Int): Pair<MappingState?, List<MapperPing>> {
+    /** Wynik jednego odpytania: Observer (jak dotąd) + moje repeatery RPT1–RPT5. */
+    data class PollResult(
+        val state: MappingState?,
+        val fresh: List<MapperPing>,
+        val rpt: List<RptMapping> = emptyList(),
+        val rptFresh: Map<Int, List<MapperPing>> = emptyMap()
+    )
+
+    fun poll(ctx: Context, observerId: String, timeoutMs: Int, rptIds: Map<Int, String> = emptyMap()): PollResult {
         val config = Config(ctx.applicationContext)
         ensureLoaded(ctx.applicationContext)
         val short = MapperApi.shortId(observerId)
-        if (short.length != 16) return state() to emptyList()
+        // Slot → krótkie ID; repeater wpisany drugi raz albo równy Observerowi jest pomijany.
+        val rptShorts = LinkedHashMap<Int, String>()
+        for ((slot, id) in rptIds.toSortedMap()) {
+            val rs = MapperApi.shortId(id)
+            if (rs.length == 16 && rs != short && rs !in rptShorts.values) rptShorts[slot] = rs
+        }
+        pruneRpt(rptShorts.values.toSet())
+        if (short.length != 16) return PollResult(state(), emptyList(), rptStates(rptShorts))
         ensurePosition(ctx.applicationContext, short, timeoutMs)
+        ensureRptInfo(ctx.applicationContext, rptShorts.values, timeoutMs)
+        val bySlot = rptShorts.entries.associate { (slot, rs) -> rs to slot }
+        val rptFresh = HashMap<Int, MutableList<MapperPing>>()
 
         val firstRun = config.mapperLastId <= 0L
         var since = if (firstRun) 0L else config.mapperLastId
@@ -115,7 +174,7 @@ object MapperMonitor {
         while (pages < MAX_PAGES) {
             pages++
             val result = MapperApi.poll(sinceId = since, timeoutMs = timeoutMs)
-                ?: return state() to emptyList() // serwer mapera nie odpowiada: zostaje stan z pamięci
+                ?: return PollResult(state(), emptyList(), rptStates(rptShorts)) // serwer mapera nie odpowiada: zostaje stan z pamięci
             if (result.users.isNotEmpty()) dirty = true
             synchronized(nicks) { nicks.putAll(result.users) }
             if (result.rev != 0 && result.rev != config.mapperRev) {
@@ -123,18 +182,114 @@ object MapperMonitor {
                 // żeby nie odtwarzać starych punktów jako nowych pingów.
                 config.mapperRev = result.rev
                 config.mapperLastId = result.lastId
-                return state() to emptyList()
+                return PollResult(state(), emptyList(), rptStates(rptShorts))
             }
             if (result.rev != 0) config.mapperRev = result.rev
-            for (p in result.points) if (p.rptId == short && add(p)) { fresh.add(p); dirty = true }
+            for (p in result.points) {
+                if (p.rptId == short) {
+                    if (add(p)) { fresh.add(p); dirty = true }
+                } else {
+                    val slot = p.rptId?.let { bySlot[it] } ?: continue
+                    if (addRpt(p.rptId!!, p)) { rptFresh.getOrPut(slot) { mutableListOf() }.add(p); dirty = true }
+                }
+            }
             lastId = maxOf(lastId, result.lastId)
             since = result.lastId
             if (!result.more) break
         }
         config.mapperLastId = lastId
+        // Nowo dodany RPT: jednorazowo dociągamy jego historię z ostatnich 24 h (bez powiadomień).
+        val prefs = ctx.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val known = prefs.getString(KEY_RPT_KNOWN, "").orEmpty().split(',').filter { it.isNotBlank() }.toSet()
+        val newcomers = rptShorts.values.filter { it !in known }.toSet()
+        if (newcomers.isNotEmpty()) {
+            if (firstRun || backfillRpt(newcomers, timeoutMs)) {
+                prefs.edit().putString(KEY_RPT_KNOWN, (known.intersect(rptShorts.values.toSet()) + newcomers).joinToString(",")).apply()
+            }
+            for (rs in newcomers) bySlot[rs]?.let { rptFresh.remove(it) }
+            dirty = true
+        }
         if (dirty) persist(ctx.applicationContext)
         // Pierwsza tura: punkt startowy ustawiony, ale nie powiadamiamy o historii.
-        return state() to if (firstRun) emptyList() else fresh
+        return PollResult(
+            state = state(),
+            fresh = if (firstRun) emptyList() else fresh,
+            rpt = rptStates(rptShorts),
+            rptFresh = if (firstRun) emptyMap() else rptFresh
+        )
+    }
+
+    /** Historia 24 h dla nowo dodanych RPT (od początku bazy, max [MAX_PAGES] stron). true = udało się. */
+    private fun backfillRpt(shorts: Set<String>, timeoutMs: Int): Boolean {
+        var since = 0L
+        var pages = 0
+        while (pages < MAX_PAGES) {
+            pages++
+            val result = MapperApi.poll(sinceId = since, timeoutMs = timeoutMs) ?: return false
+            synchronized(nicks) { nicks.putAll(result.users) }
+            for (p in result.points) if (p.rptId != null && p.rptId in shorts) addRpt(p.rptId, p)
+            since = result.lastId
+            if (!result.more) break
+        }
+        return true
+    }
+
+    /** Usunięty z ustawień RPT: kasujemy jego pingi, żeby karta nie wisiała w aplikacji. */
+    private fun pruneRpt(keep: Set<String>) {
+        synchronized(rptPings) { rptPings.keys.retainAll(keep) }
+    }
+
+    private fun addRpt(shortId: String, p: MapperPing): Boolean = synchronized(rptPings) {
+        val list = rptPings.getOrPut(shortId) { ArrayList() }
+        if (list.any { it.id == p.id }) return false
+        list.add(p)
+        list.sortBy { it.tsMs }
+        val cut = System.currentTimeMillis() - MapperApi.KEEP_MS
+        while (list.isNotEmpty() && list.first().tsMs < cut) list.removeAt(0)
+        true
+    }
+
+    /** Stan mapowania przy każdym wpisanym RPT (także bez pingów – wtedy active=false i pusta lista). */
+    fun rptStates(rptShorts: Map<Int, String>, nowMs: Long = System.currentTimeMillis()): List<RptMapping> =
+        rptShorts.map { (slot, rs) ->
+            val list = synchronized(rptPings) { rptPings[rs]?.toList().orEmpty() }
+            val info = rptInfo(rs)
+            val lat = info?.lat?.takeIf { info.found }
+            val lon = info?.lon?.takeIf { info.found }
+            RptMapping(slot, rs, info?.name, stateOf(list, nowMs, { nick(it) }, lat, lon))
+        }
+
+    /**
+     * Pozycje i nazwy RPT z bazy repeaterów mapera: jedno pobranie listy na wszystkie brakujące.
+     * Znaleziony – cache na tydzień; brak w bazie – ponawiamy co godzinę.
+     */
+    private fun ensureRptInfo(ctx: Context, shorts: Collection<String>, timeoutMs: Int, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        val missing = shorts.filter { rs ->
+            val info = rptInfo(rs)
+            force || info == null || now - info.atMs > (if (info.found) POS_TTL_MS else RPT_RETRY_MS)
+        }
+        if (missing.isEmpty()) return
+        val body = MapperApi.repeatersBody(timeoutMs) ?: return
+        synchronized(rptInfo) {
+            for (rs in missing) {
+                val pos = MapperApi.parseRepeaterPosition(body, rs) ?: continue
+                rptInfo[rs] = RptInfo(
+                    lat = if (pos.found) pos.lat else null, lon = if (pos.found) pos.lon else null,
+                    found = pos.found, name = pos.name, atMs = now
+                )
+            }
+        }
+        persist(ctx)
+    }
+
+    /** Sprawdzenie RPT w bazie mapera na żądanie (np. zaraz po wpisaniu klucza w aplikacji). */
+    fun lookupRpt(ctx: Context, id: String, timeoutMs: Int): RptInfo? {
+        val rs = MapperApi.shortId(id)
+        if (rs.length != 16) return null
+        ensureLoaded(ctx.applicationContext)
+        ensureRptInfo(ctx.applicationContext, listOf(rs), timeoutMs, force = true)
+        return rptInfo(rs)
     }
 
     /** Dodaje pomiar, jeśli jeszcze go nie mamy. true = był nowy. */
@@ -285,6 +440,62 @@ internal fun nicksFromJson(json: String?): Map<Long, String> {
             val id = key.toLongOrNull() ?: continue
             val nick = o.optString(key, "")
             if (nick.isNotBlank()) out[id] = nick
+        }
+        out
+    } catch (_: Exception) {
+        emptyMap()
+    }
+}
+
+/** Pingi RPT na dysk: {krótkie ID: [pingi]}. */
+internal fun rptPingsToJson(map: Map<String, List<MapperPing>>): String {
+    val o = JSONObject()
+    for ((id, list) in map) if (list.isNotEmpty()) o.put(id, JSONArray(pingsToJson(list)))
+    return o.toString()
+}
+
+internal fun rptPingsFromJson(json: String?): Map<String, List<MapperPing>> {
+    if (json.isNullOrBlank()) return emptyMap()
+    return try {
+        val o = JSONObject(json)
+        val out = HashMap<String, List<MapperPing>>()
+        for (key in o.keys()) {
+            val arr = o.optJSONArray(key) ?: continue
+            out[key] = pingsFromJson(arr.toString())
+        }
+        out
+    } catch (_: Exception) {
+        emptyMap()
+    }
+}
+
+internal fun rptInfoToJson(map: Map<String, MapperMonitor.RptInfo>): String {
+    val o = JSONObject()
+    for ((id, i) in map) {
+        val r = JSONObject()
+        i.lat?.let { r.put("la", it) }
+        i.lon?.let { r.put("lo", it) }
+        r.put("f", i.found)
+        i.name?.let { r.put("n", it) }
+        r.put("t", i.atMs)
+        o.put(id, r)
+    }
+    return o.toString()
+}
+
+internal fun rptInfoFromJson(json: String?): Map<String, MapperMonitor.RptInfo> {
+    if (json.isNullOrBlank()) return emptyMap()
+    return try {
+        val o = JSONObject(json)
+        val out = HashMap<String, MapperMonitor.RptInfo>()
+        for (key in o.keys()) {
+            val r = o.optJSONObject(key) ?: continue
+            out[key] = MapperMonitor.RptInfo(
+                lat = r.optNullableDouble("la"), lon = r.optNullableDouble("lo"),
+                found = r.optBoolean("f", false),
+                name = if (r.has("n") && !r.isNull("n")) r.getString("n") else null,
+                atMs = r.optLong("t", 0L)
+            )
         }
         out
     } catch (_: Exception) {

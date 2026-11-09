@@ -298,6 +298,10 @@ object ObserverRefresh {
             if (fresh && data.mappingNew.isNotEmpty()) {
                 Alerts.evaluateMapping(app, data.mapping, data.mappingNew)
             }
+            if (fresh) for ((slot, pings) in data.rptNew) {
+                val rpt = data.rptMappings.firstOrNull { it.slot == slot } ?: continue
+                if (pings.isNotEmpty()) Alerts.evaluateRptMapping(app, rpt, pings)
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Alert evaluation failed", e)
         }
@@ -363,7 +367,7 @@ object ObserverRefresh {
                 else MqttStatusApi.probe(config.fallbackHost, statusTimeout)
             }
             // Baza mapera MeshCore South: czy ktoś mapuje w zasięgu naszego Observera.
-            val mapping = async(Dispatchers.IO) { MapperMonitor.poll(ctx, config.observerId, minOf(timeout, 5_000)) }
+            val mapping = async(Dispatchers.IO) { MapperMonitor.poll(ctx, config.observerId, minOf(timeout, 5_000), config.rptIds) }
             val firstResult = first.await()
             val secondResult = second.await()
             var health1 = firstHealth.await()
@@ -390,7 +394,7 @@ object ObserverRefresh {
             // Zamrożony wiek pakietu: zapamiętujemy ostatnią znaną wartość przy udanym pobraniu,
             // żeby przy padnięciu API brokera licznik nie uciekał w nieskończoność.
             rememberBrokerAges(firstResult, secondResult)
-            val (mappingState, mappingFresh) = mapping.await()
+            val mappingResult = mapping.await()
             base.copy(
                 observer = observer,
                 broker1 = firstResult,
@@ -402,8 +406,10 @@ object ObserverRefresh {
                 broker2FrozenAgeMs = if (secondResult is FetchResult.Ok) null else lastKnownBroker2AgeMs,
                 broker1LastOk = lastOkBroker1,
                 broker2LastOk = lastOkBroker2,
-                mapping = mappingState,
-                mappingNew = mappingFresh
+                mapping = mappingResult.state,
+                mappingNew = mappingResult.fresh,
+                rptMappings = mappingResult.rpt,
+                rptNew = mappingResult.rptFresh
             )
         }
     }

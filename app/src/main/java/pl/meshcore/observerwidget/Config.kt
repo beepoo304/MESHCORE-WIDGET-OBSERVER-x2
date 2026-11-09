@@ -114,6 +114,22 @@ class Config(context: Context) {
         get() = prefs.getLong("mapper_obs_pos_at", 0L)
         set(v) = prefs.edit().putLong("mapper_obs_pos_at", v).apply()
 
+    /**
+     * Klucze „moich repeaterów” RPT1–RPT5 (sloty stałe: usunięcie RPT1 nie przenumerowuje RPT2).
+     * Pusty tekst = slot wolny. Zapis WIELKIMI literami jak klucz Observera.
+     */
+    fun rptId(slot: Int): String =
+        if (slot !in 1..RPT_SLOTS) "" else normalizeId(prefs.getString("rpt_id_$slot", "").orEmpty())
+
+    fun setRptId(slot: Int, id: String) {
+        if (slot !in 1..RPT_SLOTS) return
+        prefs.edit().putString("rpt_id_$slot", normalizeId(id)).apply()
+    }
+
+    /** Zajęte sloty: numer slotu → klucz. */
+    val rptIds: Map<Int, String>
+        get() = (1..RPT_SLOTS).associateWith { rptId(it) }.filterValues { it.isNotBlank() }
+
     val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2 || alertMapping
 
     companion object {
@@ -123,7 +139,13 @@ class Config(context: Context) {
         const val MIN_INTERVAL = 2
         const val MAX_INTERVAL = 60
 
+        const val RPT_SLOTS = 5
+
         private val HEX64 = Regex("^[0-9a-fA-F]{64}$")
+        private val HEX_RPT = Regex("^[0-9a-fA-F]{16,64}$")
+
+        /** Klucz repeatera: pełny (64 znaki) albo co najmniej 16 pierwszych znaków – tyle używa maper. */
+        fun isValidRptId(id: String) = HEX_RPT.matches(id.trim())
         fun isValidId(id: String) = HEX64.matches(id.trim())
 
         fun normalizeId(id: String) = id.trim().uppercase()

@@ -102,6 +102,48 @@ object WidgetRenderer {
         return latest[idx] to idx
     }
 
+    /** Kolor napisu RPT1–RPT5 w belce (mój repeater): pomarańczowy, pulsuje jak MAPPER. */
+    private const val RPT_ORANGE_DIM = 0xFF8A5000.toInt()
+
+    fun rptIconColor(on: Boolean): Int = if (on) ORANGE else RPT_ORANGE_DIM
+
+    /**
+     * Jedna pozycja w belce widgetu: mapowanie przy Observerze („MAPPER”) albo przy moim
+     * repeaterze („RPT1”…). [ping] = ostatni ping danego mapującego z GPS (null = bez strzałki),
+     * [mapperIndex] = numer mapującego w tym źródle (kolor strzałki).
+     */
+    data class HeaderMapping(
+        val label: String,
+        val rpt: Boolean,
+        val state: MappingState,
+        val ping: MapperPing?,
+        val mapperIndex: Int
+    )
+
+    /**
+     * Wszystkie aktywne pozycje belki: najpierw Observer, potem RPT wg numeru slotu;
+     * w każdym źródle po jednej pozycji na mapującego (jak dotąd dla samego Observera).
+     */
+    fun headerMappings(d: WidgetData): List<HeaderMapping> {
+        val out = mutableListOf<HeaderMapping>()
+        fun addSource(label: String, rpt: Boolean, m: MappingState?) {
+            if (m?.active != true) return
+            val latest = latestPingsPerMapper(m)
+            if (latest.isEmpty()) out.add(HeaderMapping(label, rpt, m, null, 0))
+            else latest.forEachIndexed { i, p -> out.add(HeaderMapping(label, rpt, m, p, i)) }
+        }
+        addSource("MAPPER", false, d.mapping)
+        for (r in d.rptMappings.sortedBy { it.slot }) addSource(r.label, true, r.state)
+        return out
+    }
+
+    /** Pozycja belki pokazywana teraz: przy kilku zmiana co 3 s w kółko. */
+    fun headerMapping(d: WidgetData, nowMs: Long): HeaderMapping? {
+        val all = headerMappings(d)
+        if (all.isEmpty()) return null
+        return all[((nowMs / 3_000L) % all.size).toInt()]
+    }
+
     /** Strzałka kierunku mapera (kolor wg mapującego, obrót o azymut) + odległość, np. „1,2km”. */
     fun mappingArrowBitmap(ctx: Context, bearingDeg: Double, distKm: Double, arrowColor: Int = RED): Bitmap {
         val density = ctx.resources.displayMetrics.density
@@ -153,26 +195,31 @@ object WidgetRenderer {
         v.setViewVisibility(R.id.hdr_total_col, totalVisibility)
         v.setOnClickPendingIntent(R.id.widget_root, ObserverRefresh.pendingIntent(ctx))
         v.setOnClickPendingIntent(R.id.obs_name, settingsIntent(ctx))
-        // Słowo MAPPER w nagłówku: tylko gdy ktoś mapuje; puls = naprzemienny kolor, klik otwiera panel w aplikacji.
-        val mappingActive = d.mapping?.active == true
+        // Słowo MAPPER (Observer, niebieskie) albo RPT1–RPT5 (mój repeater, pomarańczowe) w nagłówku:
+        // tylko gdy ktoś mapuje; puls = naprzemienny kolor, klik otwiera panel w aplikacji.
+        val hm = headerMapping(d, nowMs)
+        val mappingActive = hm != null
         v.setViewVisibility(R.id.mapping_icon, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
         v.setViewVisibility(R.id.mapping_divider, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
         // Gdy ktoś mapuje, ikona nadajnika ustępuje miejsca, żeby MAPPER + odległość zawsze się zmieściły.
         v.setViewVisibility(R.id.header_icon, if (mappingActive) android.view.View.GONE else android.view.View.VISIBLE)
-        if (mappingActive) v.setTextColor(R.id.mapping_icon, mappingIconColor(mappingIconOn(nowMs)))
+        if (hm != null) {
+            v.setTextViewText(R.id.mapping_icon, hm.label)
+            val on = mappingIconOn(nowMs)
+            v.setTextColor(R.id.mapping_icon, if (hm.rpt) rptIconColor(on) else mappingIconColor(on))
+        }
         v.setOnClickPendingIntent(R.id.mapping_icon, MainActivity.mappingIntent(ctx))
-        // Strzałka kierunku: czerwona, obrócona w stronę mapera + odległość; przy kilku mapujących zmiana co 3 s.
-        val m = d.mapping
-        val arrow = mappingArrow(m, nowMs)
-        val arrowPing = arrow?.first
-        val obsLat = m?.observerLat
-        val obsLon = m?.observerLon
+        // Strzałka kierunku: obrócona w stronę mapera + odległość od Observera albo od danego RPT;
+        // przy kilku mapujących / kilku źródłach zmiana co 3 s.
+        val arrowPing = hm?.ping
+        val obsLat = hm?.state?.observerLat
+        val obsLon = hm?.state?.observerLon
         val showArrow = mappingActive && arrowPing?.lat != null && arrowPing.lon != null && obsLat != null && obsLon != null
         v.setViewVisibility(R.id.mapping_arrow, if (showArrow) android.view.View.VISIBLE else android.view.View.GONE)
-        if (showArrow && arrow != null && arrowPing != null) {
+        if (showArrow && hm != null && arrowPing != null) {
             val bearing = GeoMath.bearingDeg(obsLat!!, obsLon!!, arrowPing.lat!!, arrowPing.lon!!)
             val dist = GeoMath.distanceKm(obsLat, obsLon, arrowPing.lat, arrowPing.lon!!)
-            v.setImageViewBitmap(R.id.mapping_arrow, mappingArrowBitmap(ctx, bearing, dist, mapperArrowColor(arrow.second)))
+            v.setImageViewBitmap(R.id.mapping_arrow, mappingArrowBitmap(ctx, bearing, dist, mapperArrowColor(hm.mapperIndex)))
         }
 
         val config = Config(ctx)

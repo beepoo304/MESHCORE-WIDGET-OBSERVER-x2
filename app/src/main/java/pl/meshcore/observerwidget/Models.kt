@@ -80,8 +80,28 @@ data class WidgetData(
     /** Stan mapowania w zasięgu Observera; null, gdy brak danych z mapera. */
     val mapping: MappingState? = null,
     /** Nowe pingi mapowania zauważone w tym cyklu (do powiadomienia). */
-    val mappingNew: List<MapperPing> = emptyList()
+    val mappingNew: List<MapperPing> = emptyList(),
+    /** Mapowanie przy „moich repeaterach” RPT1–RPT5 (tylko sloty z wpisanym kluczem). */
+    val rptMappings: List<RptMapping> = emptyList(),
+    /** Nowe pingi przy RPT w tym cyklu, wg numeru slotu (do powiadomień). */
+    val rptNew: Map<Int, List<MapperPing>> = emptyMap()
 )
+
+/**
+ * Mapowanie przy jednym z moich repeaterów (RPT1–RPT5). [state] liczony tak samo jak dla
+ * Observera; jego observerLat/observerLon to pozycja tego repeatera z bazy mapera.
+ */
+data class RptMapping(
+    /** Numer slotu 1–5 (etykieta „RPT1”…). */
+    val slot: Int,
+    /** Pierwsze 16 znaków klucza, małe litery (tak jak rpt w punktach mapera). */
+    val shortId: String,
+    /** Nazwa z bazy repeaterów mapera; null = jeszcze nie sprawdzono albo brak w bazie. */
+    val name: String?,
+    val state: MappingState
+) {
+    val label: String get() = "RPT$slot"
+}
 
 enum class Level { GREEN, ORANGE, RED, UNKNOWN }
 

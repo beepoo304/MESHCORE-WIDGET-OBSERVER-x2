@@ -94,9 +94,56 @@ object Alerts {
                     ping.rssiDbm?.let { append(", RSSI: ${fmt(it)} dBm") }
                 }
             }
-            if (notifyMapping(ctx, Kind.MAPPING, nick, content)) {
+            if (notifyMapping(ctx, Kind.MAPPING.id, "Mapowanie: $nick", content)) {
                 // Zapamiętujemy wszystkich nowych naraz, żeby nie spamić przy kolejnych pingach.
                 prefs.edit().putString("map_notified", (notified + newcomers).joinToString(",")).apply()
+            }
+        }
+    }
+
+    /** Identyfikator powiadomienia o mapowaniu przy RPTn (osobne dla każdego slotu). */
+    private fun rptNotificationId(slot: Int) = 1010 + slot
+
+    /**
+     * Powiadomienie o mapowaniu przy moim repeaterze RPTn: jak dla Observera – raz na sesję
+     * dla każdego mapującego, osobny stan sesji dla każdego slotu.
+     * Treść: „Iron mesh mapuje 1,2 km SW od „Paderewa Dach RPT”.”
+     */
+    fun evaluateRptMapping(ctx: Context, rpt: RptMapping, fresh: List<MapperPing>, nowMs: Long = System.currentTimeMillis()) {
+        val cfg = Config(ctx)
+        if (!cfg.monitoringEnabled || !cfg.alertMapping || fresh.isEmpty()) return
+        synchronized(lock) {
+            val prefs = ctx.applicationContext.getSharedPreferences("alert_state", Context.MODE_PRIVATE)
+            val key = "rpt${rpt.slot}"
+            val lastAt = prefs.getLong("${key}_map_last", 0L)
+            val sameRpt = prefs.getString("${key}_map_id", null) == rpt.shortId
+            val newSession = !sameRpt || lastAt == 0L || nowMs - lastAt > MapperApi.SESSION_GAP_MS
+            val notified = if (newSession) emptySet()
+                else prefs.getString("${key}_map_notified", "").orEmpty().split(',').mapNotNull { it.toLongOrNull() }.toSet()
+            val newcomers = fresh.map { it.userId }.distinct().filter { it !in notified }
+            prefs.edit().putLong("${key}_map_last", nowMs).putString("${key}_map_id", rpt.shortId).apply()
+            if (newcomers.isEmpty()) return
+            val userId = newcomers.last()
+            val nick = MapperMonitor.nick(userId) ?: "nieznany mapujący"
+            val where = rpt.name?.let { "„$it”" } ?: "${rpt.label} (${rpt.shortId.take(4).uppercase()}…)"
+            val content = buildString {
+                append(nick)
+                append(" mapuje")
+                val ping = fresh.lastOrNull { it.userId == userId && it.lat != null && it.lon != null }
+                val lat = rpt.state.observerLat
+                val lon = rpt.state.observerLon
+                if (ping != null && lat != null && lon != null) {
+                    val bearing = GeoMath.bearingDeg(lat, lon, ping.lat!!, ping.lon!!)
+                    val dist = GeoMath.distanceKm(lat, lon, ping.lat, ping.lon!!)
+                    append(" ${GeoMath.km(dist)} ${GeoMath.compassLabel(bearing)} od $where")
+                } else {
+                    append(" przy $where")
+                }
+                fresh.lastOrNull { it.userId == userId }?.observerSnrDb?.let { append(". SNR u RPT: ${fmt(it)} dB") }
+                append('.')
+            }
+            if (notifyMapping(ctx, rptNotificationId(rpt.slot), "Mapowanie przy ${rpt.label}", content)) {
+                prefs.edit().putString("${key}_map_notified", (notified + newcomers).joinToString(",")).apply()
             }
         }
     }
@@ -104,20 +151,21 @@ object Alerts {
     private fun fmt(v: Double): String =
         if (v % 1.0 == 0.0) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
 
-    private fun notifyMapping(ctx: Context, kind: Kind, nick: String, content: String): Boolean {
+    private fun notifyMapping(ctx: Context, id: Int, title: String, content: String): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return false
 
         ensureChannels(ctx)
         val openIntent = PendingIntent.getActivity(
-            ctx, kind.id, Intent(ctx, MainActivity::class.java),
+            ctx, id, Intent(ctx, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(ctx, kind.channel)
+        val notification = NotificationCompat.Builder(ctx, Kind.MAPPING.channel)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
-            .setContentTitle("Mapowanie: $nick")
+            .setContentTitle(title)
             .setContentText(content)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content))
             .setContentIntent(openIntent)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
@@ -125,7 +173,7 @@ object Alerts {
             .build()
 
         return try {
-            NotificationManagerCompat.from(ctx).notify(kind.id, notification)
+            NotificationManagerCompat.from(ctx).notify(id, notification)
             true
         } catch (_: SecurityException) {
             false
@@ -147,6 +195,7 @@ object Alerts {
             cancel(1002)
             cancel(1003)
             cancel(1004)
+            for (slot in 1..Config.RPT_SLOTS) cancel(rptNotificationId(slot))
         }
     }
 
