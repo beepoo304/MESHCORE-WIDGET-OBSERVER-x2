@@ -157,6 +157,8 @@ object WidgetRenderer {
         val mappingActive = d.mapping?.active == true
         v.setViewVisibility(R.id.mapping_icon, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
         v.setViewVisibility(R.id.mapping_divider, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
+        // Gdy ktoś mapuje, ikona nadajnika ustępuje miejsca, żeby MAPPER + odległość zawsze się zmieściły.
+        v.setViewVisibility(R.id.header_icon, if (mappingActive) android.view.View.GONE else android.view.View.VISIBLE)
         if (mappingActive) v.setTextColor(R.id.mapping_icon, mappingIconColor(mappingIconOn(nowMs)))
         v.setOnClickPendingIntent(R.id.mapping_icon, MainActivity.mappingIntent(ctx))
         // Strzałka kierunku: czerwona, obrócona w stronę mapera + odległość; przy kilku mapujących zmiana co 3 s.
