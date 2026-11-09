@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chmurka (kontur) przy MQTTx; kolor nadaje renderer = stan brokera. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="17dp" android:viewportWidth="24" android:viewportHeight="17">
+    <path android:strokeColor="#6B6B6B" android:strokeWidth="2" android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M6.5,15.5h11a4,4 0,0 0,0.6 -7.95A6,6 0,0 0,6.4 6.6a4.5,4.5 0,0 0,0.1 8.9z"/>
+</vector>

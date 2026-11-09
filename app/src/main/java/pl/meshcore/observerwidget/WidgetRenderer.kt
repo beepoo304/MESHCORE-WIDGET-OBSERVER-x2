@@ -156,6 +156,7 @@ object WidgetRenderer {
         // Słowo MAPPER w nagłówku: tylko gdy ktoś mapuje; puls = naprzemienny kolor, klik otwiera panel w aplikacji.
         val mappingActive = d.mapping?.active == true
         v.setViewVisibility(R.id.mapping_icon, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
+        v.setViewVisibility(R.id.mapping_divider, if (mappingActive) android.view.View.VISIBLE else android.view.View.GONE)
         if (mappingActive) v.setTextColor(R.id.mapping_icon, mappingIconColor(mappingIconOn(nowMs)))
         v.setOnClickPendingIntent(R.id.mapping_icon, MainActivity.mappingIntent(ctx))
         // Strzałka kierunku: czerwona, obrócona w stronę mapera + odległość; przy kilku mapujących zmiana co 3 s.
@@ -195,6 +196,9 @@ object WidgetRenderer {
         })
         v.setTextColor(R.id.m1_title, brokerHealthColor(d.mqtt1Health, d.broker1))
         v.setTextColor(R.id.m2_title, brokerHealthColor(d.mqtt2Health, d.broker2))
+        // Chmurka przy MQTTx ma ten sam kolor co napis (stan brokera).
+        v.setInt(R.id.m1_cloud, "setColorFilter", brokerHealthColor(d.mqtt1Health, d.broker1))
+        v.setInt(R.id.m2_cloud, "setColorFilter", brokerHealthColor(d.mqtt2Health, d.broker2))
 
         val effectiveNowMs = if (monitoringEnabled) nowMs
             else config.monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L

@@ -117,7 +117,7 @@ class WidgetInflationTest {
 
         val pairs = listOf(
             R.id.m1_title to R.id.m2_title,
-            R.id.m1_hour to R.id.m2_hour,
+            R.id.m1_hour_col to R.id.m2_hour_col,
             R.id.m1_total_col to R.id.m2_total_col,
             R.id.m1_last to R.id.m2_last
         )

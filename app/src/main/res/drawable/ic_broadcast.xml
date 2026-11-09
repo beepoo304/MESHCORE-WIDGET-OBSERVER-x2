@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ikona nadajnika ((•)) przed MESHCORE. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="20dp" android:viewportWidth="24" android:viewportHeight="20">
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="2" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M5,3a10,10 0,0 0,0 14M19,3a10,10 0,0 1,0 14M8.5,6.5a5,5 0,0 0,0 7M15.5,6.5a5,5 0,0 1,0 7"/>
+    <path android:fillColor="#FFFFFF" android:pathData="M12,10m-1.8,0a1.8,1.8 0,1 1,3.6 0a1.8,1.8 0,1 1,-3.6 0"/>
+</vector>
