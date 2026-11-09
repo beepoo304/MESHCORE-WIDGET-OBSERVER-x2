@@ -16,6 +16,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -277,6 +278,8 @@ object ObserverRefresh {
         if (data != null) lastData = data
         val result = (data ?: lastData ?: emptyData(app)).copy(busy = false)
         evaluateAlerts(app, result, fresh = data != null)
+        // Historia mapera (Zasięg, Ludzie, raport 8:00) – osobny wątek, co kilka minut.
+        if (data != null) HistoryJobs.kick(app)
     }
 
     suspend fun refreshOnce(ctx: Context) {
@@ -287,6 +290,7 @@ object ObserverRefresh {
         lastData = data
         renderAll(app)
         evaluateAlerts(app, data, fresh = true)
+        withContext(Dispatchers.IO) { HistoryJobs.runNow(app) }
         ensureTicking(app)
     }
 

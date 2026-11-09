@@ -85,6 +85,21 @@ class Config(context: Context) {
         get() = prefs.getBoolean("lock_screen_status", true)
         set(v) = prefs.edit().putBoolean("lock_screen_status", v).apply()
 
+    /** Promień „okolicy” Observera (km, 1–50) – do „Mapował obok · nie słyszałeś”. */
+    var nearbyRadiusKm: Int
+        get() = prefs.getInt("nearby_radius_km", 10).coerceIn(1, MAX_RADIUS_KM)
+        set(v) = prefs.edit().putInt("nearby_radius_km", v.coerceIn(1, MAX_RADIUS_KM)).apply()
+
+    /** Dzienny raport o 8:00: wczorajsi mapujący przy moich węzłach. */
+    var alertDaily: Boolean
+        get() = prefs.getBoolean("alert_daily", true)
+        set(v) = prefs.edit().putBoolean("alert_daily", v).apply()
+
+    /** Push, gdy ktoś mapował w okolicy, a żaden z moich węzłów go nie usłyszał. */
+    var alertNearby: Boolean
+        get() = prefs.getBoolean("alert_nearby", true)
+        set(v) = prefs.edit().putBoolean("alert_nearby", v).apply()
+
     /** Punkt startowy odpytań bazy mapera (najnowszy widziany ID punktu). */
     var mapperLastId: Long
         get() = prefs.getLong("mapper_last_id", 0L)
@@ -130,7 +145,7 @@ class Config(context: Context) {
     val rptIds: Map<Int, String>
         get() = (1..RPT_SLOTS).associateWith { rptId(it) }.filterValues { it.isNotBlank() }
 
-    val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2 || alertMapping
+    val anyAlertEnabled: Boolean get() = alertObserver || alertMqtt1 || alertMqtt2 || alertMapping || alertDaily || alertNearby
 
     companion object {
         const val DEFAULT_MQTT1 = "live.meshcorekk.xyz"
@@ -140,6 +155,7 @@ class Config(context: Context) {
         const val MAX_INTERVAL = 60
 
         const val RPT_SLOTS = 5
+        const val MAX_RADIUS_KM = 50
 
         private val HEX64 = Regex("^[0-9a-fA-F]{64}$")
         private val HEX_RPT = Regex("^[0-9a-fA-F]{16,64}$")

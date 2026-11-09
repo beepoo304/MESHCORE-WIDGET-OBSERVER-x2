@@ -22,6 +22,11 @@ object Alerts {
 
     private val lock = Any()
 
+    const val CHANNEL_DAILY = "alerts_daily"
+    const val CHANNEL_NEARBY = "alerts_nearby"
+    const val ID_DAILY = 1020
+    const val ID_NEARBY = 1021
+
     fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
@@ -29,6 +34,8 @@ object Alerts {
         nm.createNotificationChannel(NotificationChannel("alerts_mqtt1", "Awaria MQTT1", NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel("alerts_mqtt2", "Awaria MQTT2", NotificationManager.IMPORTANCE_HIGH))
         nm.createNotificationChannel(NotificationChannel("alerts_mapping", "Mapowanie w zasięgu Observera", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL_DAILY, "Dzienny raport mapowania", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL_NEARBY, "Mapował obok – nie słyszałeś", NotificationManager.IMPORTANCE_HIGH))
     }
 
     fun evaluate(ctx: Context, data: WidgetData, nowMs: Long = System.currentTimeMillis()) {
@@ -151,17 +158,26 @@ object Alerts {
     private fun fmt(v: Double): String =
         if (v % 1.0 == 0.0) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
 
-    private fun notifyMapping(ctx: Context, id: Int, title: String, content: String): Boolean {
+    /** Powiadomienie z historii mapera (raport dzienny, „mapował obok”); tap otwiera [tab] w aplikacji. */
+    fun notifyHistory(ctx: Context, id: Int, channel: String, title: String, content: String, tab: String): Boolean =
+        notifyMapping(ctx, id, title, content, channel, tab)
+
+    private fun notifyMapping(
+        ctx: Context, id: Int, title: String, content: String,
+        channel: String = Kind.MAPPING.channel, tab: String? = null
+    ): Boolean {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return false
 
         ensureChannels(ctx)
+        val open = Intent(ctx, MainActivity::class.java)
+        if (tab != null) open.putExtra(MainActivity.EXTRA_TAB, tab)
         val openIntent = PendingIntent.getActivity(
-            ctx, id, Intent(ctx, MainActivity::class.java),
+            ctx, id, open,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(ctx, Kind.MAPPING.channel)
+        val notification = NotificationCompat.Builder(ctx, channel)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
             .setContentTitle(title)
             .setContentText(content)
@@ -195,6 +211,8 @@ object Alerts {
             cancel(1002)
             cancel(1003)
             cancel(1004)
+            cancel(ID_DAILY)
+            cancel(ID_NEARBY)
             for (slot in 1..Config.RPT_SLOTS) cancel(rptNotificationId(slot))
         }
     }
