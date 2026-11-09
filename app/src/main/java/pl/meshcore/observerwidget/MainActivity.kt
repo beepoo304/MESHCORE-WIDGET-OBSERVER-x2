@@ -166,7 +166,7 @@ class MainActivity : Activity() {
                 st, wallClockNow,
                 tag = r.label, tagColor = WidgetRenderer.ORANGE,
                 where = "${r.name ?: "Repeater"} · ${r.shortId.take(4).uppercase()}…",
-                fullKey = cfg.rptId(r.slot), keyLabel = r.label, snrLabel = "SNR u RPT"
+                fullKey = null, keyLabel = r.label, snrLabel = "SNR u RPT"
             ))
             dash.addView(spacer())
         }
@@ -185,7 +185,7 @@ class MainActivity : Activity() {
      */
     private fun mappingCard(
         m: MappingState?, nowMs: Long, tag: String, tagColor: Int, where: String,
-        fullKey: String, keyLabel: String, snrLabel: String
+        fullKey: String?, keyLabel: String, snrLabel: String
     ): View {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -207,12 +207,12 @@ class MainActivity : Activity() {
             setPadding(dp(8), dp(2), 0, dp(2))
         })
         box.addView(titleRow)
-        // Linia 2: nazwa (Observer / repeater z bazy mapera) + klucz (4 znaki) + kopiowanie pełnego.
+        // Linia 2: nazwa (Observer / repeater z bazy mapera) + klucz (4 znaki); kopiowanie tylko klucza Observera.
         val whereRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
         whereRow.addView(line(where, 15f, Color.WHITE).apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
-        whereRow.addView(copyButton(fullKey, keyLabel))
+        if (fullKey != null) whereRow.addView(copyButton(fullKey, keyLabel))
         box.addView(whereRow)
         if (m == null) {
             box.addView(line("Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada).", 15f, WidgetRenderer.GRAY))
@@ -227,7 +227,7 @@ class MainActivity : Activity() {
             .sortedBy { it.userId }
         if (latest.isNotEmpty() || m.mapperNicks.isNotEmpty()) {
             val sb = android.text.SpannableStringBuilder()
-            sb.append(if (active) "Mapuje: " else "Mapowali: ")
+            sb.append(if (active) "Mapuje: " else "Mapował: ")
             if (latest.isEmpty()) {
                 sb.append(m.mapperNicks.joinToString(", "))
             } else latest.forEachIndexed { i, p ->
