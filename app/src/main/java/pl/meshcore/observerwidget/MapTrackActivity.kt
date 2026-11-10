@@ -27,8 +27,6 @@ class MapTrackActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private var repeaters: Map<String, MapperHistory.Repeater> = emptyMap()
     private var history: MapperHistory.History? = null
-    /** Mapujący zapisani w LOG (z kart Observera/RPT) — tylko oni są na liście MAP. */
-    private var logUsers: Map<Long, String> = emptyMap()
     @Volatile private var loading = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,7 +59,6 @@ class MapTrackActivity : Activity() {
         loading = true
         thread(name = "mapper-history") {
             val timeout = 15_000
-            logUsers = MapperMonitor.logUsers()
             val reps = MapperHistory.repeaters(timeout)
             val hist = MapperHistory.fetch(timeout)
             repeaters = reps
@@ -101,15 +98,37 @@ class MapTrackActivity : Activity() {
             return o.toString()
         }
 
-        /** Sesje do listy rozwijanej: [{id, label}] – tylko mapujący z LOG, najnowsze najpierw. */
+        /** Stacje do wyboru: OBSERVER i dodane RPT1–RPT5: [{id, label}]. */
         @JavascriptInterface
-        fun getSessions(): String {
+        fun getSources(): String {
+            val cfg = Config(applicationContext)
+            val arr = JSONArray()
+            fun name(short: String) = repeaters[short]?.name ?: MapperMonitor.rptInfo(short)?.name
+            val obs = cfg.observerId
+            if (obs.isNotBlank()) {
+                val sh = MapperApi.shortId(obs)
+                arr.put(JSONObject().put("id", sh).put("label", "OBSERVER" + (name(sh)?.let { " · $it" } ?: "")))
+            }
+            for ((slot, id) in cfg.rptIds.toSortedMap()) {
+                val sh = MapperApi.shortId(id)
+                arr.put(JSONObject().put("id", sh).put("label", "RPT$slot" + (name(sh)?.let { " · $it" } ?: "")))
+            }
+            return arr.toString()
+        }
+
+        /** Lista mapujących, których usłyszała stacja: jeden wpis na mapującego (jego najnowsza sesja). */
+        @JavascriptInterface
+        fun getSessions(srcShort: String): String {
             val arr = JSONArray()
             val all = history?.sessions ?: return arr.toString()
-            val sessions = all.filter { it.userId in logUsers }
-            for ((i, s) in sessions.withIndex()) {
+            val cut = System.currentTimeMillis() - Config(applicationContext).mapperKeepEffectiveMs
+            val seen = HashSet<Long>()
+            for (s in all) {                       // posortowane: najnowsze najpierw
+                if (s.endMs < cut) continue
+                if (s.points.none { p -> p.hits.any { it.rptShortId == srcShort } }) continue
+                if (!seen.add(s.userId)) continue
                 val label = "${s.nick ?: "?"} · ${TimeFormat.dayMonth(s.startMs)} ${TimeFormat.hm(s.startMs)}–${TimeFormat.hm(s.endMs)}"
-                arr.put(JSONObject().put("id", i.toString()).put("label", label))
+                arr.put(JSONObject().put("id", "${s.userId}_${s.startMs}").put("label", label))
             }
             return arr.toString()
         }
@@ -118,10 +137,7 @@ class MapTrackActivity : Activity() {
         @JavascriptInterface
         fun getSession(id: String): String {
             val all = history?.sessions ?: return "{}"
-            val sessions = all.filter { it.userId in logUsers }
-            val idx = id.toIntOrNull() ?: return "{}"
-            if (idx !in sessions.indices) return "{}"
-            val s = sessions[idx]
+            val s = all.firstOrNull { "${it.userId}_${it.startMs}" == id } ?: return "{}"
             val pts = JSONArray()
             for (p in s.points) {
                 val h = JSONArray()
