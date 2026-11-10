@@ -18,9 +18,12 @@ import android.net.Uri
 import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
@@ -73,6 +76,11 @@ class MainActivity : Activity() {
             setTextColor(WidgetRenderer.GREEN)
             setTypeface(null, android.graphics.Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        toolbar.addView(Button(this).apply {
+            text = "MAP"
+            setTextColor(Color.WHITE)
+            setOnClickListener { startActivity(Intent(this@MainActivity, MapTrackActivity::class.java)) }
         })
         toolbar.addView(Button(this).apply {
             text = "Settings"
@@ -143,32 +151,41 @@ class MainActivity : Activity() {
         dash.addView(spacer())
         dash.addView(rptSection())
         dash.addView(spacer())
-        // Karta mapowania: gdy ktoś mapuje lub mapował w ciągu 24 h, albo po kliknięciu MAPPER na widgecie.
+        // Zakładka LOG: karty mapowań — najnowsze na górze, widoczne przez czas wybrany
+        // w liście rozwijanej (24 h / 48 h / 3 dni / 10 dni / 30 dni / na stałe).
+        val cfg = Config(this)
+        val keepMs = cfg.mapperKeepEffectiveMs
+        val logCards = mutableListOf<Pair<Long, View>>()
         val mapping = d.mapping
-        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < MapperApi.KEEP_MS } == true
+        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
         if (showMapping || (mapping != null && (mapping.active || mappingRecent))) {
-            dash.addView(mappingCard(
+            logCards.add((mapping?.pings?.lastOrNull()?.tsMs ?: 0L) to mappingCard(
                 mapping, wallClockNow,
                 tag = "OBSERVER", tagColor = WidgetRenderer.MAPPER_BLUE,
                 where = "${d.mappingObserverName()} ${d.observerId.take(4)}…",
-                fullKey = Config(this).observerId, keyLabel = "Observera", snrLabel = "SNR u Obs"
+                fullKey = cfg.observerId, keyLabel = "Observera", snrLabel = "SNR u Obs"
             ))
-            dash.addView(spacer())
         }
-        // Karty mapowania przy moich repeaterach RPT1–RPT5 (też 24 h od ostatniego pingu).
-        val cfg = Config(this)
+        // Karty mapowania przy moich repeaterach RPT1–RPT5 (ten sam wybrany czas trzymania).
         for (r in d.rptMappings.sortedBy { it.slot }) {
             val st = r.state
-            val recent = st.pings.lastOrNull()?.let { wallClockNow - it.tsMs < MapperApi.KEEP_MS } == true
+            val recent = st.pings.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
             if (!st.active && !recent) continue
             if (cfg.rptId(r.slot).isBlank()) continue
-            dash.addView(mappingCard(
+            logCards.add((st.pings.lastOrNull()?.tsMs ?: 0L) to mappingCard(
                 st, wallClockNow,
                 tag = r.label, tagColor = WidgetRenderer.ORANGE,
                 where = "${r.name ?: "Repeater"} · ${r.shortId.take(4).uppercase()}…",
                 fullKey = null, keyLabel = r.label, snrLabel = "SNR u RPT"
             ))
+        }
+        if (logCards.isNotEmpty()) {
+            dash.addView(logHeader(cfg))
             dash.addView(spacer())
+            for ((_, card) in logCards.sortedByDescending { it.first }) {
+                dash.addView(card)
+                dash.addView(spacer())
+            }
         }
         dash.addView(brokerCard("MQTT1", d.mqtt1Host, d.broker1, d, now, d.mqtt1Health))
         dash.addView(spacer())
@@ -419,6 +436,50 @@ class MainActivity : Activity() {
 
     private fun fmt(v: Double): String =
         if (v % 1.0 == 0.0) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
+
+    /** Opcje retencji śladu mapowania w LOG: (wartość ms, −1 = na stałe) → etykieta. */
+    private val keepOptions = listOf(
+        24 * 3600_000L to "24 h",
+        48 * 3600_000L to "48 h",
+        3 * 24 * 3600_000L to "3 dni",
+        10 * 24 * 3600_000L to "10 dni",
+        30 * 24 * 3600_000L to "30 dni",
+        -1L to "na stałe"
+    )
+
+    /** Nagłówek sekcji LOG: tytuł + lista rozwijana „trzymaj ślad …”. */
+    private fun logHeader(cfg: Config): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        row.addView(TextView(this).apply {
+            text = "LOG"
+            textSize = 18f
+            setTextColor(Color.WHITE)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        val spinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, keepOptions.map { it.second }).also {
+                it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            val idx = keepOptions.indexOfFirst { it.first == cfg.mapperKeepMs }
+            if (idx >= 0) setSelection(idx)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    val value = keepOptions[position].first
+                    if (value == cfg.mapperKeepMs) return
+                    cfg.mapperKeepMs = value
+                    MapperMonitor.refreshKeepMs(this@MainActivity)
+                    refresh()
+                }
+            }
+        }
+        row.addView(spinner)
+        return row
+    }
 
     private fun monitoringControl(): View = Button(this).apply {
         val config = Config(this@MainActivity)

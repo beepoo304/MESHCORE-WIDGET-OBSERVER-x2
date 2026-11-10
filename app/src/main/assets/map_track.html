@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>MAP — trasa mapowania</title>
+<link rel="stylesheet" href="file:///android_asset/leaflet/leaflet.css">
+<script src="file:///android_asset/leaflet/leaflet.js"></script>
+<style>
+:root{--ink:#0f2a3a}
+html,body,#m{height:100%;margin:0}
+#m{position:absolute;inset:0}
+#m.base-light .leaflet-tile-pane{filter:grayscale(1) contrast(.75) brightness(1.13)}
+.leaflet-container{background:#dfe7ec}
+#top{position:absolute;z-index:999;top:8px;left:8px;right:8px;display:flex;gap:8px;align-items:center}
+#top select{flex:1;min-width:0;background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:9px;font-size:15px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
+#top button{background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:9px 14px;font-size:15px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
+#info{position:absolute;z-index:999;bottom:8px;left:8px;right:150px;background:#ffffffee;color:var(--ink);padding:8px 12px;border-radius:10px;font-size:13px;font-family:sans-serif;line-height:1.5;box-shadow:0 1px 6px rgba(15,42,58,.25)}
+#legend{position:absolute;z-index:999;bottom:8px;right:8px;background:#ffffffee;border-radius:10px;padding:7px 10px;font:12px sans-serif;color:var(--ink);box-shadow:0 1px 6px rgba(15,42,58,.25)}
+#legbar{width:110px;height:9px;border-radius:5px;margin-top:4px}
+.leaflet-control-attribution{background:#ffffffcc!important;color:#456!important;font-size:10px!important}
+.leaflet-control-attribution a{color:#0284c7!important}
+.leaflet-bar a{background:#fff!important;color:var(--ink)!important;border-color:#b9c8d2!important}
+/* kropka repeatera — jak .rpt w mapperze */
+.rpt{position:relative;white-space:nowrap}
+.rpt i{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border-radius:50%;background:var(--ink);border:2.5px solid #fff;box-shadow:0 0 0 1px rgba(15,42,58,.45)}
+.rpt span{position:absolute;left:12px;top:-10px;font-size:11.5px;font-weight:650;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 4px #fff}
+</style>
+</head>
+<body>
+<div id="m" class="base-light"></div>
+<div id="top"><select id="sel"></select><button id="close">‹ OBSERVER</button></div>
+<div id="legend">Kolor kratki: SNR-u-RPT<div id="legbar"></div><div style="display:flex;justify-content:space-between"><span>−8 dB</span><span>12 dB</span></div></div>
+<div id="info">Wybierz mapującego z listy, aby zobaczyć jego trasę i linie do repeaterów.</div>
+<script>
+/* — — — paleta SNR jak w mapperze (app.js: RAMP.snr = {min:-8, max:12}, STOPS) — — — */
+const STOPS=['#b2182b','#ef8a3c','#f2d15c','#5fb49c','#1b6ca8'];
+const h2rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+function colorAt(t){t=Math.max(0,Math.min(1,t));const x=t*(STOPS.length-1),i=Math.min(STOPS.length-2,Math.floor(x)),f=x-i;
+ const a=h2rgb(STOPS[i]),b=h2rgb(STOPS[i+1]);
+ return '#'+a.map((v,k)=>Math.round(v+(b[k]-v)*f).toString(16).padStart(2,'0')).join('');}
+const snrColor=s=>s==null?'#8a99a3':colorAt((s+8)/20);
+document.getElementById('legbar').style.background='linear-gradient(90deg,'+STOPS.join(',')+')';
+
+/* — — — heksy „plaster miodu” jak w mapperze (HEX0, hexSize, hexRing) — — — */
+const HEX0={lat:50,lon:19},HEX_KX=111320*Math.cos(50*Math.PI/180),HEX_KY=110574,SQ3=Math.sqrt(3);
+const hexSize=z=>z>=17?18:z>=16?28:z>=15?45:z>=14?75:z>=13?130:z>=12?230:z>=11?420:z>=10?750:1400;
+function hexKey(lat,lon,sz){const x=(lon-HEX0.lon)*HEX_KX,y=(lat-HEX0.lat)*HEX_KY;
+ const rq=Math.round(x/(SQ3*sz)),rr=Math.round(y/(1.5*sz)),rs=Math.round((rq+rr)/2);
+ return [rq-2*rs,rr];}
+function hexCenter(q,r,sz){const x=sz*SQ3*(q+r/2),y=sz*1.5*r;return [HEX0.lat+y/HEX_KY,HEX0.lon+x/HEX_KX];}
+function hexRing(q,r,sz){const [cla,clo]=hexCenter(q,r,sz),out=[],R=sz;
+ for(let i=0;i<6;i++){const ang=Math.PI/180*(60*i-30);out.push([cla+R*Math.sin(ang)/HEX_KY,clo+R*Math.cos(ang)/HEX_KX]);}
+ return out;}
+
+const m=L.map('m',{zoomControl:true,attributionControl:true});
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,
+ attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · dane: meshcoresouth.pl/mapper'}).addTo(m);
+m.setView([50.25,19.0],11);
+
+let REPS={}; let sel=null; let selNick='';
+const dataLayer=L.layerGroup().addTo(m); const repLayer=L.layerGroup().addTo(m);
+function esc(s){return String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');}
+const fmtT=ts=>new Date(ts).toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+/* kratki pomiarów sesji: heks z najlepszym SNR-u-RPT, brak odpowiedzi = szary (jak drawPoints) */
+function drawHexes(pts){
+  const sz=hexSize(m.getZoom()),cells=new Map();
+  for(const p of pts){
+    const [q,r]=hexKey(p.lat,p.lon,sz),k=q+':'+r;
+    let c=cells.get(k);if(!c)cells.set(k,c={q,r,pts:[],best:null,hits:0});
+    c.pts.push(p);
+    let best=null;
+    (p.h||[]).forEach(h=>{if(h.snr!=null&&(best===null||h.snr>best))best=h.snr;});
+    if(best!=null&&(c.best===null||best>c.best))c.best=best;
+    if(best!=null)c.hits++;
+  }
+  for(const c of [...cells.values()].sort((x,y)=>(x.best??-1e9)-(y.best??-1e9))){
+    const style=c.best===null
+      ?{stroke:false,fillColor:'#8a99a3',fillOpacity:.3}
+      :{color:'#fff',weight:.6,opacity:.7,fillColor:colorAt((c.best+8)/20),fillOpacity:c.hits>1?.8:.6};
+    L.polygon(hexRing(c.q,c.r,sz),style).addTo(dataLayer)
+      .bindPopup('<b>'+fmtT(c.pts[0].t)+'–'+fmtT(c.pts[c.pts.length-1].t)+'</b><br>'+c.pts.length+' pomiarów w kratce'
+        +(c.best!==null?(' · najlepszy SNR-u-RPT '+c.best+' dB'):' · brak odpowiedzi'));
+  }
+}
+
+function render(pts,nick){
+  dataLayer.clearLayers();repLayer.clearLayers();
+  if(!pts||!pts.length){document.getElementById('info').textContent='Brak danych dla tej sesji.';return;}
+  drawHexes(pts);
+  /* trasa przejazdu: linia przerywana, przerwana przy luce > 2 min lub > 3 km (drawTrack) */
+  const segs=[];let seg=[];let prev=null;
+  for(const p of pts){
+    if(prev&&(p.t-prev.t>120*1000||m.distance([prev.lat,prev.lon],[p.lat,p.lon])>3000)){if(seg.length>1)segs.push(seg);seg=[];}
+    if(!prev||p.lat!==prev.lat||p.lon!==prev.lon)seg.push([p.lat,p.lon]);prev=p;
+  }
+  if(seg.length>1)segs.push(seg);
+  segs.forEach(s=>L.polyline(s,{color:'#6d28d9',weight:2.5,opacity:.8,dashArray:'2 6',interactive:false}).addTo(dataLayer));
+  /* linie do repeaterów: przerywane, kolor = SNR tej pary, biała obwódka (showLinks) */
+  const involved=new Set();pts.forEach(p=>(p.h||[]).forEach(h=>{if(REPS[h.n])involved.add(h.n);}));
+  pts.forEach(p=>(p.h||[]).forEach(h=>{const r=REPS[h.n];if(!r)return;
+    L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:'#fff',weight:5.2,opacity:.7,dashArray:'6 5',interactive:false}).addTo(repLayer);
+    L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:snrColor(h.snr),weight:2.8,opacity:.95,dashArray:'6 5',interactive:false}).addTo(repLayer);
+  }));
+  /* repeatery: wszystkie z bazy przy zoomie ≥ 12 (jak drawRepeaters), poza tym tylko te z trasy */
+  const showAll=m.getZoom()>=12;
+  for(const n in REPS){const r=REPS[n];if(!showAll&&!involved.has(n))continue;
+    const mk=L.marker([r.lat,r.lon],{icon:L.divIcon({className:'',iconSize:[0,0],
+      html:'<div class="rpt"><i></i><span>'+esc(r.name)+'</span></div>'})});
+    mk.bindPopup('<b>📡 '+esc(r.name)+'</b>');
+    mk.addTo(repLayer);
+  }
+  const all=[...pts.map(p=>[p.lat,p.lon]),...Object.values(REPS).filter(r=>showAll||true).map(r=>[r.lat,r.lon])];
+  if(all.length)m.fitBounds(L.latLngBounds(all).pad(0.25));
+  const t0=pts[0].t,t1=pts[pts.length-1].t,nHit=pts.filter(p=>p.h&&p.h.length).length;
+  document.getElementById('info').innerHTML='<b>'+esc(nick)+'</b> · '+new Date(t0).toLocaleDateString('pl-PL')
+    +' · '+fmtT(t0)+'–'+fmtT(t1)+'<br>'+pts.length+' pomiarów · z odpowiedzią: '+nHit
+    +' · repeatery w trasie: '+[...involved].map(n=>esc(REPS[n]?REPS[n].name:n)).join(', ');
+}
+/* przy zmianie zoomu kratki przeliczają rozmiar (hexSize zależy od zoomu) */
+m.on('zoomend',()=>{if(sel!==null)loadSession(sel);});
+document.getElementById('sel').addEventListener('change',e=>{sel=e.target.value;selNick=e.target.options[e.target.selectedIndex].text;if(sel)loadSession(sel);});
+document.getElementById('close').addEventListener('click',()=>{Android&&Android.close();});
+
+function loadSession(id){ if(!window.Android)return;
+  let d;try{d=JSON.parse(Android.getSession(id));}catch(err){return;}
+  selNick=d.nick||selNick; render(d.pts, d.nick); }
+
+/* — — — most JS→Kotlin: dane po wczytaniu historii w tle — — — */
+function fillData(){
+  if(!window.Android)return false;
+  try{ REPS=JSON.parse(Android.getReps()); }catch(e){ REPS={}; }
+  const ss=JSON.parse(Android.getSessions());
+  document.getElementById('sel').innerHTML='<option value="">— wybierz mapującego —</option>'+
+    ss.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');
+  if(!ss.length)document.getElementById('info').textContent='Brak sesji mapowania w bazie mapera (serwer nie odpowiada lub baza pusta).';
+  return true;
+}
+window.__dataReady=function(){ fillData(); };
+if(window.Android){ /* strona gotowa przed danymi: most już istnieje */
+  if(!fillData()) window.__dataReady=function(){};
+}
+</script>
+</body>
+</html>

@@ -34,4 +34,14 @@ object TimeFormat {
     /** Pozostałe pełne sekundy do [targetMs] (zaokrąglone w górę, nigdy ujemne). */
     fun remainingSeconds(targetMs: Long, nowMs: Long): Long =
         ((targetMs - nowMs).coerceAtLeast(0L) + 999L) / 1_000L
+
+    /** „10.11” – dzień i miesiąc (lokalna strefa); do etykiet sesji na MAP. */
+    fun dayMonth(tsMs: Long): String =
+        java.time.Instant.ofEpochMilli(tsMs).atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM"))
+
+    /** „16:57” – godzina i minuta (lokalna strefa); do etykiet sesji na MAP. */
+    fun hm(tsMs: Long): String =
+        java.time.Instant.ofEpochMilli(tsMs).atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
 }

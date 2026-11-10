@@ -61,6 +61,18 @@ object MapperMonitor {
     /** Czy stan został już wczytany z dysku w tym życiu procesu. */
     private var loaded = false
 
+    /**
+     * Jak długo trzymamy pingi (okno LOG) — z ustawień użytkownika (Config.mapperKeepMs).
+     * Domyślnie 24 h; zmiana w zakładce LOG od razu przycina historię przy następnym cyklu.
+     */
+    @Volatile
+    private var keepMs: Long = MapperApi.KEEP_MS
+
+    /** Przeczytaj retencję z ustawień (np. po zmianie w zakładce LOG). */
+    fun refreshKeepMs(ctx: Context) {
+        keepMs = Config(ctx.applicationContext).mapperKeepEffectiveMs
+    }
+
     /** Czyszczenie stanu (np. po zmianie Observera w ustawieniach). Kasuje też zapis na dysku. */
     fun reset(ctx: Context? = null) {
         // Moje repeatery RPT1–RPT5 nie zależą od Observera: ich historia zostaje.
@@ -86,11 +98,12 @@ object MapperMonitor {
      * usługę w tle), karta mapowania w zakładce OBSERVER od razu ma z powrotem swoją historię.
      */
     private fun ensureLoaded(ctx: Context) {
+        refreshKeepMs(ctx)
         if (loaded) return
         synchronized(pings) {
             if (loaded) return
             val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val cut = System.currentTimeMillis() - MapperApi.KEEP_MS
+            val cut = System.currentTimeMillis() - keepMs
             val restored = pingsFromJson(prefs.getString(KEY_PINGS, null))
                 .filter { it.tsMs >= cut }
                 .sortedBy { it.tsMs }
@@ -120,7 +133,7 @@ object MapperMonitor {
 
     /** Zapis okna 24 h pingów + nicków na dysk (asynchronicznie). */
     private fun persist(ctx: Context) {
-        val cut = System.currentTimeMillis() - MapperApi.KEEP_MS
+        val cut = System.currentTimeMillis() - keepMs
         val pingJson = synchronized(pings) { pingsToJson(pings.filter { it.tsMs >= cut }) }
         val nickJson = synchronized(nicks) { nicksToJson(nicks) }
         val rptJson = synchronized(rptPings) {
@@ -150,6 +163,7 @@ object MapperMonitor {
 
     fun poll(ctx: Context, observerId: String, timeoutMs: Int, rptIds: Map<Int, String> = emptyMap()): PollResult {
         val config = Config(ctx.applicationContext)
+        refreshKeepMs(ctx.applicationContext)
         ensureLoaded(ctx.applicationContext)
         val short = MapperApi.shortId(observerId)
         // Slot → krótkie ID; repeater wpisany drugi raz albo równy Observerowi jest pomijany.
@@ -244,7 +258,7 @@ object MapperMonitor {
         if (list.any { it.id == p.id }) return false
         list.add(p)
         list.sortBy { it.tsMs }
-        val cut = System.currentTimeMillis() - MapperApi.KEEP_MS
+        val cut = System.currentTimeMillis() - keepMs
         while (list.isNotEmpty() && list.first().tsMs < cut) list.removeAt(0)
         true
     }
@@ -297,7 +311,7 @@ object MapperMonitor {
         if (pings.any { it.id == p.id }) return false
         pings.add(p)
         pings.sortBy { it.tsMs }
-        val cut = System.currentTimeMillis() - MapperApi.KEEP_MS
+        val cut = System.currentTimeMillis() - keepMs
         while (pings.isNotEmpty() && pings.first().tsMs < cut) pings.removeAt(0)
         true
     }

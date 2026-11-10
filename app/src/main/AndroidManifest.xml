@@ -19,6 +19,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".SettingsActivity" android:exported="false"/>
+        <activity android:name=".MapTrackActivity" android:exported="false"/>
         <receiver android:name=".ObserverWidgetProvider" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>

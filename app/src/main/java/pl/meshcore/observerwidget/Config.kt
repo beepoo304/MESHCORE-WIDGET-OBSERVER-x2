@@ -85,6 +85,19 @@ class Config(context: Context) {
         get() = prefs.getBoolean("lock_screen_status", true)
         set(v) = prefs.edit().putBoolean("lock_screen_status", v).apply()
 
+    /**
+     * Jak długo trzymamy ślad mapowania w zakładce LOG (karty mapujących i historia pingów).
+     * Wartość w ms; −1 = na stałe (bez czyszczenia). Domyślnie 24 h (jak dotychczas).
+     * Wybór w zakładce LOG: 24 h / 48 h / 3 dni / 10 dni / 30 dni / na stałe.
+     */
+    var mapperKeepMs: Long
+        get() = prefs.getLong("mapper_keep_ms", MapperApi.KEEP_MS)
+        set(v) = prefs.edit().putLong("mapper_keep_ms", v).apply()
+
+    /** [mapperKeepMs] w wersji „bezpiecznej do odejmowania”: −1 (na stałe) → bardzo duża liczba. */
+    val mapperKeepEffectiveMs: Long
+        get() = if (mapperKeepMs < 0) Long.MAX_VALUE / 4 else mapperKeepMs
+
     /** Punkt startowy odpytań bazy mapera (najnowszy widziany ID punktu). */
     var mapperLastId: Long
         get() = prefs.getLong("mapper_last_id", 0L)
