@@ -118,6 +118,7 @@ class MainActivity : Activity() {
     }
 
     private fun refresh() {
+        if (logSpinnerOpen) return
         if (!Config(this).monitoringEnabled) {
             renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this))
             return
@@ -273,7 +274,7 @@ class MainActivity : Activity() {
             val last = pings.last()
             val parts = mutableListOf(
                 "Pingów: ${pings.size}",
-                "ostatni ${TimeFormat.packetAge(nowMs - last.tsMs)} temu (${timeOf(last.tsMs)})"
+                "ostatni ping: ${timeOf(last.tsMs)} · ${TimeFormat.dayMonth(last.tsMs)}"
             )
             last.observerSnrDb?.let { parts.add("$snrLabel: ${fmt(it)} dB") }
             box.addView(line(parts.joinToString(" · "), 15f, Color.WHITE))
@@ -438,6 +439,9 @@ class MainActivity : Activity() {
         if (v % 1.0 == 0.0) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
 
     /** Opcje retencji śladu mapowania w LOG: (wartość ms, −1 = na stałe) → etykieta. */
+    /** Lista rozwinięta → ticker nie przerysowuje panelu (inaczej lista znika przed kliknięciem). */
+    private var logSpinnerOpen = false
+
     private val keepOptions = listOf(
         24 * 3600_000L to "24 h",
         48 * 3600_000L to "48 h",
@@ -460,15 +464,23 @@ class MainActivity : Activity() {
             setTypeface(null, android.graphics.Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
-        val spinner = Spinner(this).apply {
+        val spinner = object : Spinner(this) {
+            override fun performClick(): Boolean {
+                logSpinnerOpen = true
+                return super.performClick()
+            }
+        }.apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, keepOptions.map { it.second }).also {
                 it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             }
             val idx = keepOptions.indexOfFirst { it.first == cfg.mapperKeepMs }
             if (idx >= 0) setSelection(idx)
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
+                override fun onNothingSelected(parent: AdapterView<*>?) {
+                    logSpinnerOpen = false
+                }
                 override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    logSpinnerOpen = false
                     val value = keepOptions[position].first
                     if (value == cfg.mapperKeepMs) return
                     cfg.mapperKeepMs = value

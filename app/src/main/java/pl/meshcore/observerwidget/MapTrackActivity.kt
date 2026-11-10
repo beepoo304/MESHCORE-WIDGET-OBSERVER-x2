@@ -27,6 +27,8 @@ class MapTrackActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private var repeaters: Map<String, MapperHistory.Repeater> = emptyMap()
     private var history: MapperHistory.History? = null
+    /** Mapujący zapisani w LOG (z kart Observera/RPT) — tylko oni są na liście MAP. */
+    private var logUsers: Map<Long, String> = emptyMap()
     @Volatile private var loading = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,6 +43,8 @@ class MapTrackActivity : Activity() {
         s.javaScriptEnabled = true
         s.allowFileAccess = true
         s.domStorageEnabled = true
+        s.builtInZoomControls = false          // pinch-zoom Leaflet, nie natywny WebView
+        s.displayZoomControls = false
         webView.addJavascriptInterface(Bridge(), "Android")
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
@@ -57,6 +61,7 @@ class MapTrackActivity : Activity() {
         loading = true
         thread(name = "mapper-history") {
             val timeout = 15_000
+            logUsers = MapperMonitor.logUsers()
             val reps = MapperHistory.repeaters(timeout)
             val hist = MapperHistory.fetch(timeout)
             repeaters = reps
@@ -96,11 +101,12 @@ class MapTrackActivity : Activity() {
             return o.toString()
         }
 
-        /** Sesje do listy rozwijanej: [{id, label}] – najnowsze najpierw. */
+        /** Sesje do listy rozwijanej: [{id, label}] – tylko mapujący z LOG, najnowsze najpierw. */
         @JavascriptInterface
         fun getSessions(): String {
             val arr = JSONArray()
-            val sessions = history?.sessions ?: return arr.toString()
+            val all = history?.sessions ?: return arr.toString()
+            val sessions = all.filter { it.userId in logUsers }
             for ((i, s) in sessions.withIndex()) {
                 val label = "${s.nick ?: "?"} · ${TimeFormat.dayMonth(s.startMs)} ${TimeFormat.hm(s.startMs)}–${TimeFormat.hm(s.endMs)}"
                 arr.put(JSONObject().put("id", i.toString()).put("label", label))
@@ -111,7 +117,8 @@ class MapTrackActivity : Activity() {
         /** Trasa jednej sesji: {nick, pts: [{lat, lon, t, h: [{n, snr, rssi}]}]}. */
         @JavascriptInterface
         fun getSession(id: String): String {
-            val sessions = history?.sessions ?: return "{}"
+            val all = history?.sessions ?: return "{}"
+            val sessions = all.filter { it.userId in logUsers }
             val idx = id.toIntOrNull() ?: return "{}"
             if (idx !in sessions.indices) return "{}"
             val s = sessions[idx]

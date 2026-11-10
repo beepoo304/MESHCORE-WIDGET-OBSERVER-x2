@@ -12,10 +12,9 @@ html,body,#m{height:100%;margin:0}
 #m{position:absolute;inset:0}
 #m.base-light .leaflet-tile-pane{filter:grayscale(1) contrast(.75) brightness(1.13)}
 .leaflet-container{background:#dfe7ec}
-#top{position:absolute;z-index:999;top:8px;left:8px;right:8px;display:flex;gap:8px;align-items:center}
-#top select{flex:1;min-width:0;background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:9px;font-size:15px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
-#top button{background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:9px 14px;font-size:15px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
-#info{position:absolute;z-index:999;bottom:8px;left:8px;right:150px;background:#ffffffee;color:var(--ink);padding:8px 12px;border-radius:10px;font-size:13px;font-family:sans-serif;line-height:1.5;box-shadow:0 1px 6px rgba(15,42,58,.25)}
+#top{position:absolute;z-index:999;top:12px;left:10px;right:10px;display:flex;gap:10px;align-items:center}
+#top select{flex:1;min-width:0;background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:13px;font-size:16px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
+#top button{background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:13px 16px;font-size:16px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
 #legend{position:absolute;z-index:999;bottom:8px;right:8px;background:#ffffffee;border-radius:10px;padding:7px 10px;font:12px sans-serif;color:var(--ink);box-shadow:0 1px 6px rgba(15,42,58,.25)}
 #legbar{width:110px;height:9px;border-radius:5px;margin-top:4px}
 .leaflet-control-attribution{background:#ffffffcc!important;color:#456!important;font-size:10px!important}
@@ -31,7 +30,6 @@ html,body,#m{height:100%;margin:0}
 <div id="m" class="base-light"></div>
 <div id="top"><select id="sel"></select><button id="close">‹ OBSERVER</button></div>
 <div id="legend">Kolor kratki: SNR-u-RPT<div id="legbar"></div><div style="display:flex;justify-content:space-between"><span>−8 dB</span><span>12 dB</span></div></div>
-<div id="info">Wybierz mapującego z listy, aby zobaczyć jego trasę i linie do repeaterów.</div>
 <script>
 /* — — — paleta SNR jak w mapperze (app.js: RAMP.snr = {min:-8, max:12}, STOPS) — — — */
 const STOPS=['#b2182b','#ef8a3c','#f2d15c','#5fb49c','#1b6ca8'];
@@ -53,7 +51,8 @@ function hexRing(q,r,sz){const [cla,clo]=hexCenter(q,r,sz),out=[],R=sz;
  for(let i=0;i<6;i++){const ang=Math.PI/180*(60*i-30);out.push([cla+R*Math.sin(ang)/HEX_KY,clo+R*Math.cos(ang)/HEX_KX]);}
  return out;}
 
-const m=L.map('m',{zoomControl:true,attributionControl:true});
+const m=L.map('m',{zoomControl:false,attributionControl:true,touchZoom:true,doubleClickZoom:true,tap:true,dragging:true});
+L.control.zoom({position:'bottomleft'}).addTo(m);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,
  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · dane: meshcoresouth.pl/mapper'}).addTo(m);
 m.setView([50.25,19.0],11);
@@ -87,7 +86,7 @@ function drawHexes(pts){
 
 function render(pts,nick){
   dataLayer.clearLayers();repLayer.clearLayers();
-  if(!pts||!pts.length){document.getElementById('info').textContent='Brak danych dla tej sesji.';return;}
+  if(!pts||!pts.length){return;}
   drawHexes(pts);
   /* trasa przejazdu: linia przerywana, przerwana przy luce > 2 min lub > 3 km (drawTrack) */
   const segs=[];let seg=[];let prev=null;
@@ -113,10 +112,6 @@ function render(pts,nick){
   }
   const all=[...pts.map(p=>[p.lat,p.lon]),...Object.values(REPS).filter(r=>showAll||true).map(r=>[r.lat,r.lon])];
   if(all.length)m.fitBounds(L.latLngBounds(all).pad(0.25));
-  const t0=pts[0].t,t1=pts[pts.length-1].t,nHit=pts.filter(p=>p.h&&p.h.length).length;
-  document.getElementById('info').innerHTML='<b>'+esc(nick)+'</b> · '+new Date(t0).toLocaleDateString('pl-PL')
-    +' · '+fmtT(t0)+'–'+fmtT(t1)+'<br>'+pts.length+' pomiarów · z odpowiedzią: '+nHit
-    +' · repeatery w trasie: '+[...involved].map(n=>esc(REPS[n]?REPS[n].name:n)).join(', ');
 }
 /* przy zmianie zoomu kratki przeliczają rozmiar (hexSize zależy od zoomu) */
 m.on('zoomend',()=>{if(sel!==null)loadSession(sel);});
@@ -134,7 +129,7 @@ function fillData(){
   const ss=JSON.parse(Android.getSessions());
   document.getElementById('sel').innerHTML='<option value="">— wybierz mapującego —</option>'+
     ss.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');
-  if(!ss.length)document.getElementById('info').textContent='Brak sesji mapowania w bazie mapera (serwer nie odpowiada lub baza pusta).';
+  if(!ss.length)document.getElementById('sel').options[0].text='Brak mapujących w LOG';
   return true;
 }
 window.__dataReady=function(){ fillData(); };

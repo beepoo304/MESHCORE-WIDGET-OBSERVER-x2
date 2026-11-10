@@ -55,6 +55,19 @@ object MapperMonitor {
 
     fun nick(userId: Long): String? = synchronized(nicks) { nicks[userId] }
 
+    /**
+     * Mapujący zapisani w LOG (Observer + RPT1–RPT5): ID konta → nick, z całej trzymanej
+     * historii (nie tylko bieżącej sesji). Zakładka MAP pokazuje trasy tylko tych mapujących.
+     */
+    fun logUsers(): Map<Long, String> {
+        val ids = LinkedHashSet<Long>()
+        synchronized(pings) { pings.forEach { ids.add(it.userId) } }
+        synchronized(rptPings) { rptPings.values.forEach { l -> l.forEach { ids.add(it.userId) } } }
+        val out = LinkedHashMap<Long, String>()
+        for (id in ids) out[id] = nick(id) ?: "?"
+        return out
+    }
+
     /** Co wiemy o repeaterze z bazy mapera (null = jeszcze nie sprawdzano). */
     fun rptInfo(shortId: String): RptInfo? = synchronized(rptInfo) { rptInfo[shortId] }
 
