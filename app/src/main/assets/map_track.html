@@ -7,146 +7,66 @@
 <link rel="stylesheet" href="file:///android_asset/leaflet/leaflet.css">
 <script src="file:///android_asset/leaflet/leaflet.js"></script>
 <style>
-:root{--ink:#0f2a3a}
-html,body,#m{height:100%;margin:0}
-#m{position:absolute;inset:0}
-#m.base-light .leaflet-tile-pane{filter:grayscale(1) contrast(.75) brightness(1.13)}
-.leaflet-container{background:#dfe7ec}
-#top{position:absolute;z-index:999;top:12px;left:10px;right:10px;display:flex;flex-direction:column;gap:8px}
-#top .row{display:flex;gap:10px;align-items:center}
-#top select,#top button{background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:13px;font-size:16px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
-#top select{flex:1;min-width:0}
-#top button{white-space:nowrap;padding:13px 16px}
-#legend{position:absolute;z-index:999;bottom:8px;right:8px;background:#ffffffee;border-radius:10px;padding:7px 10px;font:12px sans-serif;color:var(--ink);box-shadow:0 1px 6px rgba(15,42,58,.25);pointer-events:none}
-#legbar{width:110px;height:9px;border-radius:5px;margin-top:4px}
-.leaflet-control-attribution{background:#ffffffcc!important;color:#456!important;font-size:10px!important}
-.leaflet-control-attribution a{color:#0284c7!important}
-.rpt{position:relative;white-space:nowrap}
-.rpt i{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border-radius:50%;background:var(--ink);border:2.5px solid #fff;box-shadow:0 0 0 1px rgba(15,42,58,.45)}
-.rpt span{position:absolute;left:12px;top:-10px;font-size:11.5px;font-weight:650;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 4px #fff}
+:root{color-scheme:dark;--bg:#111719;--panel:#1b2225;--panel2:#222b2e;--line:#344044;--ink:#f0f4f2;--muted:#a1ada9;--green:#67d78a;--blue:#69b8d2;--shadow:0 10px 32px #0007}
+*{box-sizing:border-box}html,body,#m{height:100%;margin:0}body{font-family:Roboto,"Arial",sans-serif;background:var(--bg);color:var(--ink)}#m{position:absolute;inset:0 0 0}
+.leaflet-container{background:#dfe7ec}.leaflet-control-attribution{background:#111719cc!important;color:#c1cbc7!important;font-size:9px!important;border-radius:6px 0 0 0}.leaflet-control-attribution a{color:var(--green)!important}
+/* Compact glass-like header keeps the map dominant while making selectors readable. */
+#top{position:absolute;z-index:1000;top:calc(env(safe-area-inset-top) + 10px);left:12px;right:12px;display:grid;gap:8px;pointer-events:none}
+.topline,.selector{pointer-events:auto;background:#171e20f2;border:1px solid #ffffff18;box-shadow:var(--shadow);backdrop-filter:blur(14px);border-radius:16px}
+.topline{min-height:54px;padding:8px 12px;display:flex;align-items:center;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}.brandmark{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:#67d78a1c;color:var(--green);font-size:19px;font-weight:800}.brandcopy{min-width:0}.brandtitle{font-size:14px;font-weight:800;letter-spacing:.11em}.brandsub{font-size:11px;color:var(--muted);margin-top:2px}
+#close{border:1px solid #ffffff1b;background:var(--panel2);color:var(--ink);border-radius:11px;min-height:38px;padding:0 12px;font-size:11px;font-weight:750;letter-spacing:.05em}
+.selector{display:flex;align-items:center;gap:9px;padding:0 12px;min-height:48px}.selector .glyph{color:var(--green);font-size:15px;width:18px;text-align:center}.selector select{appearance:none;-webkit-appearance:none;flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);padding:13px 24px 13px 0;font-size:13px;font-weight:600}.selector select option{background:#1b2225;color:#f0f4f2}.chevron{pointer-events:none;color:var(--muted);margin-left:-24px;font-size:12px}
+/* Legend and route status sit above the tab bar. */
+#legend{position:absolute;z-index:999;bottom:calc(76px + env(safe-area-inset-bottom));left:12px;right:12px;max-width:340px;margin-left:auto;background:#171e20f2;border:1px solid #ffffff18;border-radius:15px;padding:10px 12px;color:var(--ink);font-size:11px;box-shadow:var(--shadow);backdrop-filter:blur(14px);pointer-events:none}
+.legend-head{display:flex;align-items:center;justify-content:space-between;font-weight:700}.legend-caption{color:var(--muted);font-size:10px;font-weight:500}.legend-scale{height:7px;border-radius:9px;margin:8px 0 4px}.legend-range{display:flex;justify-content:space-between;color:var(--muted);font-size:9px}
+#bottomnav{position:absolute;z-index:1100;bottom:0;left:0;right:0;padding:7px 10px calc(7px + env(safe-area-inset-bottom));display:flex;justify-content:space-around;gap:6px;background:#111719f2;border-top:1px solid #ffffff14;backdrop-filter:blur(18px)}
+.navitem{flex:1;height:52px;border:0;border-radius:13px;background:transparent;color:#9da8a4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:9px;font-weight:700;letter-spacing:.08em}.navitem .navicon{font-size:17px;line-height:18px}.navitem.active{color:var(--green);background:#67d78a16}
+.rpt{position:relative;white-space:nowrap}.rpt i{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border-radius:50%;background:#17323a;border:2.5px solid #fff;box-shadow:0 0 0 1px #0f2a3a88}.rpt span{position:absolute;left:12px;top:-10px;font-size:11.5px;font-weight:700;color:#0f2a3a;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 4px #fff}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#172023;color:#eef4f1}.leaflet-popup-content{font-size:12px;line-height:1.55}.leaflet-popup-close-button{color:#dbe4e0!important}
+@media(max-width:360px){#legend{left:9px;right:9px}.topline{padding:7px 9px}.brandsub{font-size:10px}#close{padding:0 9px}}
 </style>
 </head>
 <body>
-<div id="m" class="base-light"></div>
+<div id="m"></div>
 <div id="top">
-  <div class="row"><select id="src"></select><button id="close">‹ OBSERVER</button></div>
-  <div class="row"><select id="sel"></select></div>
+ <div class="topline"><div class="brand"><div class="brandmark">⌁</div><div class="brandcopy"><div class="brandtitle">OBSERVER</div><div class="brandsub">MeshCore · trasa mapowania</div></div></div><button id="close">← OBSERVER</button></div>
+ <div class="selector"><span class="glyph">◉</span><select id="src" aria-label="Wybierz stację"></select><span class="chevron">⌄</span></div>
+ <div class="selector"><span class="glyph">⌖</span><select id="sel" aria-label="Wybierz mapującego"></select><span class="chevron">⌄</span></div>
 </div>
-<div id="legend">Kolor kratki: SNR-u-RPT<div id="legbar"></div><div style="display:flex;justify-content:space-between"><span>−8 dB</span><span>12 dB</span></div></div>
+<div id="legend"><div class="legend-head"><span>Jakość łącza · SNR</span><span class="legend-caption">kolor heksów</span></div><div class="legend-scale" id="legbar"></div><div class="legend-range"><span>−8 dB · słaby</span><span>dobry · 12 dB</span></div></div>
+<nav id="bottomnav" aria-label="Nawigacja"><button class="navitem" id="nav-observer"><span class="navicon">◉</span><span>OBSERVER</span></button><button class="navitem active" aria-current="page"><span class="navicon">⌖</span><span>MAP</span></button><button class="navitem" id="nav-settings"><span class="navicon">⚙</span><span>SETTINGS</span></button></nav>
 <script>
-/* Paleta SNR jak w mapperze (RAMP.snr = −8…12 dB, STOPS). */
 const STOPS=['#b2182b','#ef8a3c','#f2d15c','#5fb49c','#1b6ca8'];
 const h2rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
 function colorAt(t){t=Math.max(0,Math.min(1,t));const x=t*(STOPS.length-1),i=Math.min(STOPS.length-2,Math.floor(x)),f=x-i;
- const a=h2rgb(STOPS[i]),b=h2rgb(STOPS[i+1]);
- return '#'+a.map((v,k)=>Math.round(v+(b[k]-v)*f).toString(16).padStart(2,'0')).join('');}
+ const a=h2rgb(STOPS[i]),b=h2rgb(STOPS[i+1]);return '#'+a.map((v,k)=>Math.round(v+(b[k]-v)*f).toString(16).padStart(2,'0')).join('');}
 const snrColor=s=>s==null?'#8a99a3':colorAt((s+8)/20);
 document.getElementById('legbar').style.background='linear-gradient(90deg,'+STOPS.join(',')+')';
-
-/* Siatka heksagonalna jak w mapperze: axial coordinates + cube rounding. */
+/* Axial hex grid with cube-coordinate rounding. */
 const HEX0={lat:50,lon:19},HEX_KX=111320*Math.cos(50*Math.PI/180),HEX_KY=110574,SQ3=Math.sqrt(3);
 const hexSize=z=>z>=17?18:z>=16?28:z>=15?45:z>=14?75:z>=13?130:z>=12?230:z>=11?420:z>=10?750:1400;
-function hexKey(lat,lon,size){
- const x=(lon-HEX0.lon)*HEX_KX,y=(lat-HEX0.lat)*HEX_KY;
- const q=(SQ3/3*x-y/3)/size,r=(2/3*y)/size;
- let cx=q,cz=r,cy=-cx-cz;
- let rx=Math.round(cx),ry=Math.round(cy),rz=Math.round(cz);
- const dx=Math.abs(rx-cx),dy=Math.abs(ry-cy),dz=Math.abs(rz-cz);
- if(dx>dy&&dx>dz)rx=-ry-rz;else if(dy>dz)ry=-rx-rz;else rz=-rx-ry;
- return [rx,rz];
-}
+function hexKey(lat,lon,size){const x=(lon-HEX0.lon)*HEX_KX,y=(lat-HEX0.lat)*HEX_KY;const q=(SQ3/3*x-y/3)/size,r=(2/3*y)/size;
+ let cx=q,cz=r,cy=-cx-cz,rx=Math.round(cx),ry=Math.round(cy),rz=Math.round(cz);const dx=Math.abs(rx-cx),dy=Math.abs(ry-cy),dz=Math.abs(rz-cz);
+ if(dx>dy&&dx>dz)rx=-ry-rz;else if(dy>dz)ry=-rx-rz;else rz=-rx-ry;return [rx,rz];}
 function hexCenter(q,r,size){const x=size*SQ3*(q+r/2),y=size*1.5*r;return [HEX0.lat+y/HEX_KY,HEX0.lon+x/HEX_KX];}
-function hexRing(q,r,size){const [lat,lon]=hexCenter(q,r,size),out=[];
- for(let i=0;i<6;i++){const angle=Math.PI/180*(60*i-30);out.push([lat+size*Math.sin(angle)/HEX_KY,lon+size*Math.cos(angle)/HEX_KX]);}
- return out;}
-
-/* Mapa: gesty palcami, bez przycisków +/−. */
-const m=L.map('m',{zoomControl:false,attributionControl:true,touchZoom:true,doubleClickZoom:true,dragging:true,
- scrollWheelZoom:true,bounceAtZoomLimits:false,zoomSnap:0.5,zoomDelta:1});
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,
- attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · dane: meshcoresouth.pl/mapper'}).addTo(m);
-m.setView([50.25,19.0],11);
-
-let REPS={};let CUR=null;
-const dataLayer=L.layerGroup().addTo(m),repLayer=L.layerGroup().addTo(m);
+function hexRing(q,r,size){const [lat,lon]=hexCenter(q,r,size),out=[];for(let i=0;i<6;i++){const angle=Math.PI/180*(60*i-30);out.push([lat+size*Math.sin(angle)/HEX_KY,lon+size*Math.cos(angle)/HEX_KX]);}return out;}
+const m=L.map('m',{zoomControl:false,attributionControl:true,touchZoom:true,doubleClickZoom:true,dragging:true,scrollWheelZoom:true,bounceAtZoomLimits:false,zoomSnap:.5,zoomDelta:1});
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · dane: meshcoresouth.pl/mapper'}).addTo(m);m.setView([50.25,19],11);
+let REPS={},CUR=null;const dataLayer=L.layerGroup().addTo(m),repLayer=L.layerGroup().addTo(m);
 function esc(s){return String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');}
 const fmtT=ts=>new Date(ts).toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-
-function drawHexes(pts){
- const size=hexSize(Math.round(m.getZoom())),cells=new Map();
- for(const p of pts){
-  const [q,r]=hexKey(p.lat,p.lon,size),key=q+':'+r;
-  let c=cells.get(key);if(!c)cells.set(key,c={q,r,pts:[],best:null,hits:0});
-  c.pts.push(p);
-  let best=null;(p.h||[]).forEach(h=>{if(h.snr!=null&&(best===null||h.snr>best))best=h.snr;});
-  if(best!=null&&(c.best===null||best>c.best))c.best=best;
-  if(best!=null)c.hits++;
- }
- for(const c of [...cells.values()].sort((a,b)=>(a.best??-1e9)-(b.best??-1e9))){
-  const style=c.best===null
-   ?{stroke:true,color:'#fff',weight:.6,opacity:.7,fillColor:'#8a99a3',fillOpacity:.3}
-   :{color:'#fff',weight:.6,opacity:.7,fillColor:colorAt((c.best+8)/20),fillOpacity:c.hits>1?.8:.6};
-  L.polygon(hexRing(c.q,c.r,size),style).addTo(dataLayer)
-   .bindPopup('<b>'+fmtT(c.pts[0].t)+'–'+fmtT(c.pts[c.pts.length-1].t)+'</b><br>'+c.pts.length+' pomiarów w kratce'
-    +(c.best!==null?' · najlepszy SNR-u-RPT '+c.best+' dB':' · brak odpowiedzi'));
- }
-}
-
-/* Znaczniki pomiarów: kółko na każdym punkcie trasy. */
-function drawPoints(pts){
- for(const p of pts){
-  const hit=(p.h||[]).filter(h=>h.snr!=null).sort((a,b)=>b.snr-a.snr)[0],c=hit?snrColor(hit.snr):'#8a99a3';
-  const nm=hit?(REPS[hit.n]&&REPS[hit.n].name||hit.n):'',more=(p.h||[]).length>1?' (+'+((p.h||[]).length-1)+')':'';
-  L.circleMarker([p.lat,p.lon],{radius:hit?6:4,color:'#0f2a3a',weight:1,fillColor:c,fillOpacity:hit?.9:.55})
-   .bindPopup('<b>'+fmtT(p.t)+'</b><br>'+(hit?esc(nm)+' · SNR '+hit.snr+' dB'+more:'brak odpowiedzi')).addTo(dataLayer);
- }
-}
-
-/* Trasa sesji = heksy kolorowane SNR-em, z markerami pomiarów i liniami do RPT. */
-function render(d,fit){
- dataLayer.clearLayers();repLayer.clearLayers();
- const pts=d&&d.pts;if(!pts||!pts.length)return;
- drawHexes(pts);drawPoints(pts);
- const involved=new Set();pts.forEach(p=>(p.h||[]).forEach(h=>{if(REPS[h.n])involved.add(h.n);}));
- pts.forEach(p=>(p.h||[]).forEach(h=>{const r=REPS[h.n];if(!r)return;
-  L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:'#fff',weight:5.2,opacity:.7,dashArray:'6 5',interactive:false}).addTo(repLayer);
-  L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:snrColor(h.snr),weight:2.8,opacity:.95,dashArray:'6 5',interactive:false}).addTo(repLayer);
- }));
- const showAll=m.getZoom()>=12;
- for(const n in REPS){const r=REPS[n];if(!showAll&&!involved.has(n))continue;
-  L.marker([r.lat,r.lon],{icon:L.divIcon({className:'',iconSize:[0,0],
-   html:'<div class="rpt"><i></i><span>'+esc(r.name)+'</span></div>'})})
-   .bindPopup('<b>📡 '+esc(r.name)+'</b>').addTo(repLayer);
- }
- if(fit){const all=[...pts.map(p=>[p.lat,p.lon]),...[...involved].map(n=>[REPS[n].lat,REPS[n].lon])];
-  if(all.length)m.fitBounds(L.latLngBounds(all).pad(0.25));}
-}
-m.on('zoomend',()=>{if(CUR)render(CUR,false);});
-
+function drawHexes(pts){const size=hexSize(Math.round(m.getZoom())),cells=new Map();for(const p of pts){const [q,r]=hexKey(p.lat,p.lon,size),key=q+':'+r;let c=cells.get(key);if(!c)cells.set(key,c={q,r,pts:[],best:null,hits:0});c.pts.push(p);let best=null;(p.h||[]).forEach(h=>{if(h.snr!=null&&(best===null||h.snr>best))best=h.snr;});if(best!=null&&(c.best===null||best>c.best))c.best=best;if(best!=null)c.hits++;}
+ for(const c of [...cells.values()].sort((a,b)=>(a.best??-1e9)-(b.best??-1e9))){const style=c.best===null?{stroke:true,color:'#fff',weight:.6,opacity:.7,fillColor:'#8a99a3',fillOpacity:.3}:{color:'#fff',weight:.6,opacity:.7,fillColor:colorAt((c.best+8)/20),fillOpacity:c.hits>1?.8:.6};L.polygon(hexRing(c.q,c.r,size),style).addTo(dataLayer).bindPopup('<b>'+fmtT(c.pts[0].t)+'–'+fmtT(c.pts[c.pts.length-1].t)+'</b><br>'+c.pts.length+' pomiarów w heksie'+(c.best!==null?' · najlepszy SNR '+c.best+' dB':' · brak odpowiedzi'));}}
+function drawPoints(pts){for(const p of pts){const hit=(p.h||[]).filter(h=>h.snr!=null).sort((a,b)=>b.snr-a.snr)[0],c=hit?snrColor(hit.snr):'#8a99a3',nm=hit?(REPS[hit.n]&&REPS[hit.n].name||hit.n):'',more=(p.h||[]).length>1?' (+'+((p.h||[]).length-1)+')':'';L.circleMarker([p.lat,p.lon],{radius:hit?6:4,color:'#0f2a3a',weight:1,fillColor:c,fillOpacity:hit?.9:.55}).bindPopup('<b>'+fmtT(p.t)+'</b><br>'+(hit?esc(nm)+' · SNR '+hit.snr+' dB'+more:'brak odpowiedzi')).addTo(dataLayer);}}
+function render(d,fit){dataLayer.clearLayers();repLayer.clearLayers();const pts=d&&d.pts;if(!pts||!pts.length)return;drawHexes(pts);drawPoints(pts);const involved=new Set();pts.forEach(p=>(p.h||[]).forEach(h=>{if(REPS[h.n])involved.add(h.n);}));pts.forEach(p=>(p.h||[]).forEach(h=>{const r=REPS[h.n];if(!r)return;L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:'#fff',weight:5.2,opacity:.7,dashArray:'6 5',interactive:false}).addTo(repLayer);L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:snrColor(h.snr),weight:2.8,opacity:.95,dashArray:'6 5',interactive:false}).addTo(repLayer);}));const showAll=m.getZoom()>=12;for(const n in REPS){const r=REPS[n];if(!showAll&&!involved.has(n))continue;L.marker([r.lat,r.lon],{icon:L.divIcon({className:'',iconSize:[0,0],html:'<div class="rpt"><i></i><span>'+esc(r.name)+'</span></div>'})}).bindPopup('<b>📡 '+esc(r.name)+'</b>').addTo(repLayer);}if(fit){const all=[...pts.map(p=>[p.lat,p.lon]),...[...involved].map(n=>[REPS[n].lat,REPS[n].lon])];if(all.length)m.fitBounds(L.latLngBounds(all).pad(.25));}}
+m.on('zoomend',()=>{if(CUR)render(CUR,false)});
 const srcSel=document.getElementById('src'),userSel=document.getElementById('sel');
-function fillSessions(){
- const ss=JSON.parse(Android.getSessions(srcSel.value));
- userSel.innerHTML='<option value="">'+(ss.length?'— wybierz mapującego —':'Brak mapujących w LOG')+'</option>'+
-  ss.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');
- CUR=null;render(null,false);
-}
-srcSel.addEventListener('change',()=>{if(window.Android)fillSessions();});
-userSel.addEventListener('change',()=>{
- if(!userSel.value){CUR=null;render(null,false);return;}
- let d;try{d=JSON.parse(Android.getSession(userSel.value));}catch(e){return;}
- CUR=d;render(d,true);
-});
-document.getElementById('close').addEventListener('click',()=>{if(window.Android)Android.close();});
-
-function fillData(){
- if(!window.Android)return false;
- try{REPS=JSON.parse(Android.getReps());}catch(e){REPS={};}
- const src=JSON.parse(Android.getSources());
- srcSel.innerHTML=src.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');
- if(src.length)fillSessions();
- return true;
-}
-window.__dataReady=function(){fillData();};
+function fillSessions(){const ss=JSON.parse(Android.getSessions(srcSel.value));userSel.innerHTML='<option value="">'+(ss.length?'Wybierz mapującego…':'Brak mapujących w LOG')+'</option>'+ss.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');CUR=null;render(null,false);}
+srcSel.addEventListener('change',()=>{if(window.Android)fillSessions()});userSel.addEventListener('change',()=>{if(!userSel.value){CUR=null;render(null,false);return;}let d;try{d=JSON.parse(Android.getSession(userSel.value))}catch(e){return}CUR=d;render(d,true)});
+document.getElementById('close').addEventListener('click',()=>{if(window.Android)Android.close()});document.getElementById('nav-observer').addEventListener('click',()=>{if(window.Android)Android.close()});document.getElementById('nav-settings').addEventListener('click',()=>{if(window.Android&&Android.openSettings)Android.openSettings()});
+function fillData(){if(!window.Android)return false;try{REPS=JSON.parse(Android.getReps())}catch(e){REPS={}}const src=JSON.parse(Android.getSources());srcSel.innerHTML=src.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');if(src.length)fillSessions();return true;}
+window.__dataReady=function(){fillData()};
 </script>
 </body>
 </html>
