@@ -14,13 +14,13 @@ html,body,#m{height:100%;margin:0}
 .leaflet-container{background:#dfe7ec}
 #top{position:absolute;z-index:999;top:12px;left:10px;right:10px;display:flex;flex-direction:column;gap:8px}
 #top .row{display:flex;gap:10px;align-items:center}
-#top select{flex:1;min-width:0;background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:13px;font-size:16px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
-#top button{background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:13px 16px;font-size:16px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
+#top select,#top button{background:#fff;color:var(--ink);border:1px solid #b9c8d2;border-radius:10px;padding:13px;font-size:16px;font-family:sans-serif;box-shadow:0 1px 4px rgba(15,42,58,.25)}
+#top select{flex:1;min-width:0}
+#top button{white-space:nowrap;padding:13px 16px}
 #legend{position:absolute;z-index:999;bottom:8px;right:8px;background:#ffffffee;border-radius:10px;padding:7px 10px;font:12px sans-serif;color:var(--ink);box-shadow:0 1px 6px rgba(15,42,58,.25);pointer-events:none}
 #legbar{width:110px;height:9px;border-radius:5px;margin-top:4px}
 .leaflet-control-attribution{background:#ffffffcc!important;color:#456!important;font-size:10px!important}
 .leaflet-control-attribution a{color:#0284c7!important}
-/* kropka repeatera — jak .rpt w mapperze */
 .rpt{position:relative;white-space:nowrap}
 .rpt i{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border-radius:50%;background:var(--ink);border:2.5px solid #fff;box-shadow:0 0 0 1px rgba(15,42,58,.45)}
 .rpt span{position:absolute;left:12px;top:-10px;font-size:11.5px;font-weight:650;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff,0 0 4px #fff}
@@ -34,7 +34,7 @@ html,body,#m{height:100%;margin:0}
 </div>
 <div id="legend">Kolor kratki: SNR-u-RPT<div id="legbar"></div><div style="display:flex;justify-content:space-between"><span>−8 dB</span><span>12 dB</span></div></div>
 <script>
-/* paleta SNR jak w mapperze (RAMP.snr = −8…12 dB, STOPS) */
+/* Paleta SNR jak w mapperze (RAMP.snr = −8…12 dB, STOPS). */
 const STOPS=['#b2182b','#ef8a3c','#f2d15c','#5fb49c','#1b6ca8'];
 const h2rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
 function colorAt(t){t=Math.max(0,Math.min(1,t));const x=t*(STOPS.length-1),i=Math.min(STOPS.length-2,Math.floor(x)),f=x-i;
@@ -43,116 +43,100 @@ function colorAt(t){t=Math.max(0,Math.min(1,t));const x=t*(STOPS.length-1),i=Mat
 const snrColor=s=>s==null?'#8a99a3':colorAt((s+8)/20);
 document.getElementById('legbar').style.background='linear-gradient(90deg,'+STOPS.join(',')+')';
 
-/* heksy jak w mapperze — one są trasą sesji (kratka = pomiar na trasie) */
-const HEX0={lat:50,lon:19},HEX_KX=111320*Math.cos(50*Math.PI/180),HEX_KY=110574,SQ3=Math.sqrt(3);
-const hexSize=z=>z>=17?18:z>=16?28:z>=15?45:z>=14?75:z>=13?130:z>=12?230:z>=11?420:z>=10?750:1400;
-function hexKey(lat,lon,sz){const x=(lon-HEX0.lon)*HEX_KX,y=(lat-HEX0.lat)*HEX_KY;
- const rq=Math.round(x/(SQ3*sz)),rr=Math.round(y/(1.5*sz)),rs=Math.round((rq+rr)/2);
- return [rq-2*rs,rr];}
-function hexCenter(q,r,sz){const x=sz*SQ3*(q+r/2),y=sz*1.5*r;return [HEX0.lat+y/HEX_KY,HEX0.lon+x/HEX_KX];}
-function hexRing(q,r,sz){const [cla,clo]=hexCenter(q,r,sz),out=[],R=sz;
- for(let i=0;i<6;i++){const ang=Math.PI/180*(60*i-30);out.push([cla+R*Math.sin(ang)/HEX_KY,clo+R*Math.cos(ang)/HEX_KX]);}
- return out;}
+/* Równomierna siatka kwadratowa, zakotwiczona w stałym punkcie, jak w mapperze. */
+const GRID0={lat:50,lon:19},GRID_KX=111320*Math.cos(50*Math.PI/180),GRID_KY=110574;
+const cellHalfSize=z=>z>=17?18:z>=16?28:z>=15?45:z>=14?75:z>=13?130:z>=12?230:z>=11?420:z>=10?750:1400;
+function gridXY(lat,lon){return [(lon-GRID0.lon)*GRID_KX,(lat-GRID0.lat)*GRID_KY];}
+function cellKey(lat,lon,half){const [x,y]=gridXY(lat,lon),side=2*half;return [Math.floor(x/side),Math.floor(y/side)];}
+function cellRing(ix,iy,half){const side=2*half,x0=ix*side,x1=x0+side,y0=iy*side,y1=y0+side;
+ const ll=(x,y)=>[GRID0.lat+y/GRID_KY,GRID0.lon+x/GRID_KX];
+ return [ll(x0,y0),ll(x1,y0),ll(x1,y1),ll(x0,y1)];}
 
-/* mapa: tylko gesty palcami (bez przycisków +/−) */
+/* Mapa: gesty palcami, bez przycisków +/−. */
 const m=L.map('m',{zoomControl:false,attributionControl:true,touchZoom:true,doubleClickZoom:true,dragging:true,
-  scrollWheelZoom:true,bounceAtZoomLimits:false,zoomSnap:0.5,zoomDelta:1});
+ scrollWheelZoom:true,bounceAtZoomLimits:false,zoomSnap:0.5,zoomDelta:1});
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,
  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · dane: meshcoresouth.pl/mapper'}).addTo(m);
 m.setView([50.25,19.0],11);
 
-let REPS={}; let CUR=null;   // CUR = dane aktualnie wybranej sesji ({nick, pts})
-const dataLayer=L.layerGroup().addTo(m); const repLayer=L.layerGroup().addTo(m);
+let REPS={};let CUR=null;
+const dataLayer=L.layerGroup().addTo(m),repLayer=L.layerGroup().addTo(m);
 function esc(s){return String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');}
 const fmtT=ts=>new Date(ts).toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-function drawHexes(pts){
-  const sz=hexSize(Math.round(m.getZoom())),cells=new Map();
-  for(const p of pts){
-    const [q,r]=hexKey(p.lat,p.lon,sz),k=q+':'+r;
-    let c=cells.get(k);if(!c)cells.set(k,c={q,r,pts:[],best:null,hits:0});
-    c.pts.push(p);
-    let best=null;
-    (p.h||[]).forEach(h=>{if(h.snr!=null&&(best===null||h.snr>best))best=h.snr;});
-    if(best!=null&&(c.best===null||best>c.best))c.best=best;
-    if(best!=null)c.hits++;
-  }
-  for(const c of [...cells.values()].sort((x,y)=>(x.best??-1e9)-(y.best??-1e9))){
-    const style=c.best===null
-      ?{stroke:false,fillColor:'#8a99a3',fillOpacity:.3}
-      :{color:'#fff',weight:.6,opacity:.7,fillColor:colorAt((c.best+8)/20),fillOpacity:c.hits>1?.8:.6};
-    L.polygon(hexRing(c.q,c.r,sz),style).addTo(dataLayer)
-      .bindPopup('<b>'+fmtT(c.pts[0].t)+'–'+fmtT(c.pts[c.pts.length-1].t)+'</b><br>'+c.pts.length+' pomiarów w kratce'
-        +(c.best!==null?(' · najlepszy SNR-u-RPT '+c.best+' dB'):' · brak odpowiedzi'));
-  }
+function drawCells(pts){
+ const half=cellHalfSize(Math.round(m.getZoom())),cells=new Map();
+ for(const p of pts){
+  const [ix,iy]=cellKey(p.lat,p.lon,half),key=ix+':'+iy;
+  let c=cells.get(key);if(!c)cells.set(key,c={ix,iy,pts:[],best:null,hits:0});
+  c.pts.push(p);
+  let best=null;(p.h||[]).forEach(h=>{if(h.snr!=null&&(best===null||h.snr>best))best=h.snr;});
+  if(best!=null&&(c.best===null||best>c.best))c.best=best;
+  if(best!=null)c.hits++;
+ }
+ for(const c of [...cells.values()].sort((a,b)=>(a.best??-1e9)-(b.best??-1e9))){
+  const style=c.best===null
+   ?{stroke:true,color:'#fff',weight:.6,opacity:.7,fillColor:'#8a99a3',fillOpacity:.3}
+   :{color:'#fff',weight:.6,opacity:.7,fillColor:colorAt((c.best+8)/20),fillOpacity:c.hits>1?.8:.6};
+  L.polygon(cellRing(c.ix,c.iy,half),style).addTo(dataLayer)
+   .bindPopup('<b>'+fmtT(c.pts[0].t)+'–'+fmtT(c.pts[c.pts.length-1].t)+'</b><br>'+c.pts.length+' pomiarów w kratce'
+    +(c.best!==null?' · najlepszy SNR-u-RPT '+c.best+' dB':' · brak odpowiedzi'));
+ }
 }
 
-/* znaczniki pomiarów na trasie — jak w mapperze (widok trackera): kółko na każdym pomiarze,
-   promień 6 px przy odpowiedzi (kolor = SNR najlepszego słyszanego RPT, ciemna obwódka),
-   4 px szare bez odpowiedzi; klik = szczegóły pomiaru */
+/* Znaczniki pomiarów: kółko na każdym punkcie trasy. */
 function drawPoints(pts){
-  for(const p of pts){
-    const hit=(p.h||[]).filter(h=>h.snr!=null).sort((a,b)=>b.snr-a.snr)[0];
-    const c=hit?snrColor(hit.snr):'#8a99a3';
-    const nm=hit?(REPS[hit.n]&&REPS[hit.n].name||hit.n):'';
-    const more=(p.h||[]).length>1?' (+'+((p.h||[]).length-1)+')':'';
-    L.circleMarker([p.lat,p.lon],{radius:hit?6:4,color:'#0f2a3a',weight:1,fillColor:c,fillOpacity:hit?.9:.55})
-      .bindPopup('<b>'+fmtT(p.t)+'</b><br>'+(hit?esc(nm)+' · SNR '+hit.snr+' dB'+more:'brak odpowiedzi'))
-      .addTo(dataLayer);
-  }
+ for(const p of pts){
+  const hit=(p.h||[]).filter(h=>h.snr!=null).sort((a,b)=>b.snr-a.snr)[0],c=hit?snrColor(hit.snr):'#8a99a3';
+  const nm=hit?(REPS[hit.n]&&REPS[hit.n].name||hit.n):'',more=(p.h||[]).length>1?' (+'+((p.h||[]).length-1)+')':'';
+  L.circleMarker([p.lat,p.lon],{radius:hit?6:4,color:'#0f2a3a',weight:1,fillColor:c,fillOpacity:hit?.9:.55})
+   .bindPopup('<b>'+fmtT(p.t)+'</b><br>'+(hit?esc(nm)+' · SNR '+hit.snr+' dB'+more:'brak odpowiedzi')).addTo(dataLayer);
+ }
 }
 
-/* rysuje sesję; fit=true tylko przy wyborze sesji (NIE przy zmianie zoomu — to blokowało powiększanie).
-   Trasa sesji = kratki (heksy) jak w mapperze — bez linii przerywanej; cała trasa mapującego
-   ze znacznikami pomiarów, linie do RPT, które go usłyszały. */
+/* Trasa jest złożona z kolorowanych kwadratowych kratek, nie z linii między punktami. */
 function render(d,fit){
-  dataLayer.clearLayers();repLayer.clearLayers();
-  const pts=d&&d.pts;
-  if(!pts||!pts.length)return;
-  drawHexes(pts);
-  drawPoints(pts);   // znaczniki pomiarów na trasie (kółka jak w mapperze)
-  const involved=new Set();pts.forEach(p=>(p.h||[]).forEach(h=>{if(REPS[h.n])involved.add(h.n);}));
-  pts.forEach(p=>(p.h||[]).forEach(h=>{const r=REPS[h.n];if(!r)return;
-    L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:'#fff',weight:5.2,opacity:.7,dashArray:'6 5',interactive:false}).addTo(repLayer);
-    L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:snrColor(h.snr),weight:2.8,opacity:.95,dashArray:'6 5',interactive:false}).addTo(repLayer);
-  }));
-  const showAll=m.getZoom()>=12;
-  for(const n in REPS){const r=REPS[n];if(!showAll&&!involved.has(n))continue;
-    L.marker([r.lat,r.lon],{icon:L.divIcon({className:'',iconSize:[0,0],
-      html:'<div class="rpt"><i></i><span>'+esc(r.name)+'</span></div>'})})
-     .bindPopup('<b>📡 '+esc(r.name)+'</b>').addTo(repLayer);
-  }
-  if(fit){
-    const all=[...pts.map(p=>[p.lat,p.lon]),...[...involved].map(n=>[REPS[n].lat,REPS[n].lon])];
-    if(all.length)m.fitBounds(L.latLngBounds(all).pad(0.25));
-  }
+ dataLayer.clearLayers();repLayer.clearLayers();
+ const pts=d&&d.pts;if(!pts||!pts.length)return;
+ drawCells(pts);drawPoints(pts);
+ const involved=new Set();pts.forEach(p=>(p.h||[]).forEach(h=>{if(REPS[h.n])involved.add(h.n);}));
+ pts.forEach(p=>(p.h||[]).forEach(h=>{const r=REPS[h.n];if(!r)return;
+  L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:'#fff',weight:5.2,opacity:.7,dashArray:'6 5',interactive:false}).addTo(repLayer);
+  L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:snrColor(h.snr),weight:2.8,opacity:.95,dashArray:'6 5',interactive:false}).addTo(repLayer);
+ }));
+ const showAll=m.getZoom()>=12;
+ for(const n in REPS){const r=REPS[n];if(!showAll&&!involved.has(n))continue;
+  L.marker([r.lat,r.lon],{icon:L.divIcon({className:'',iconSize:[0,0],
+   html:'<div class="rpt"><i></i><span>'+esc(r.name)+'</span></div>'})})
+   .bindPopup('<b>📡 '+esc(r.name)+'</b>').addTo(repLayer);
+ }
+ if(fit){const all=[...pts.map(p=>[p.lat,p.lon]),...[...involved].map(n=>[REPS[n].lat,REPS[n].lon])];
+  if(all.length)m.fitBounds(L.latLngBounds(all).pad(0.25));}
 }
-/* po zmianie zoomu tylko przerysowanie kratek (rozmiar heksa zależy od zoomu), bez zmiany widoku */
 m.on('zoomend',()=>{if(CUR)render(CUR,false);});
 
-const srcSel=document.getElementById('src'), userSel=document.getElementById('sel');
+const srcSel=document.getElementById('src'),userSel=document.getElementById('sel');
 function fillSessions(){
-  const ss=JSON.parse(Android.getSessions(srcSel.value));
-  userSel.innerHTML='<option value="">'+(ss.length?'— wybierz mapującego —':'Brak mapujących w LOG')+'</option>'+
-    ss.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');
-  CUR=null; render(null,false);
+ const ss=JSON.parse(Android.getSessions(srcSel.value));
+ userSel.innerHTML='<option value="">'+(ss.length?'— wybierz mapującego —':'Brak mapujących w LOG')+'</option>'+
+  ss.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');
+ CUR=null;render(null,false);
 }
-srcSel.addEventListener('change',()=>{ if(window.Android) fillSessions(); });
+srcSel.addEventListener('change',()=>{if(window.Android)fillSessions();});
 userSel.addEventListener('change',()=>{
-  if(!userSel.value){CUR=null;render(null,false);return;}
-  let d;try{d=JSON.parse(Android.getSession(userSel.value));}catch(e){return;}
-  CUR=d; render(d,true);
+ if(!userSel.value){CUR=null;render(null,false);return;}
+ let d;try{d=JSON.parse(Android.getSession(userSel.value));}catch(e){return;}
+ CUR=d;render(d,true);
 });
-document.getElementById('close').addEventListener('click',()=>{Android&&Android.close();});
+document.getElementById('close').addEventListener('click',()=>{if(window.Android)Android.close();});
 
-/* dane z Kotlina po wczytaniu historii w tle */
 function fillData(){
-  if(!window.Android)return false;
-  try{REPS=JSON.parse(Android.getReps());}catch(e){REPS={};}
-  const src=JSON.parse(Android.getSources());
-  srcSel.innerHTML=src.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');
-  if(src.length)fillSessions();
-  return true;
+ if(!window.Android)return false;
+ try{REPS=JSON.parse(Android.getReps());}catch(e){REPS={};}
+ const src=JSON.parse(Android.getSources());
+ srcSel.innerHTML=src.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>').join('');
+ if(src.length)fillSessions();
+ return true;
 }
 window.__dataReady=function(){fillData();};
 </script>
