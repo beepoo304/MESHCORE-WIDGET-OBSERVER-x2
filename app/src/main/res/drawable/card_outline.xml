@@ -1,6 +1,149 @@
-<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#121719"/>
-    <stroke android:width="1dp" android:color="#67D78A"/>
-    <corners android:radius="12dp"/>
-</shape>
+package pl.meshcore.observerwidget
+
+import android.app.Activity
+import android.graphics.Color
+import android.os.Bundle
+import android.text.InputType
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.SeekBar
+import android.widget.TextView
+
+class SettingsActivity : Activity() {
+    private lateinit var cfg: Config
+    private lateinit var idField: EditText
+    private lateinit var m1Field: EditText
+    private lateinit var m2Field: EditText
+    private lateinit var fbField: EditText
+    private lateinit var timeoutField: EditText
+    private lateinit var orangeField: EditText
+    private lateinit var redField: EditText
+    private lateinit var intervalBar: SeekBar
+    private lateinit var intervalLabel: TextView
+    private lateinit var info: TextView
+    private lateinit var alertObs: CheckBox
+    private lateinit var alertM1: CheckBox
+    private lateinit var alertM2: CheckBox
+    private lateinit var alertMap: CheckBox
+    private lateinit var lockScreen: CheckBox
+    private lateinit var delayField: EditText
+    private lateinit var cooldownField: EditText
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        cfg = Config(this)
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(24))
+            setBackgroundColor(0xFF111315.toInt())
+        }
+
+        root.addView(title("Observer"))
+        root.addView(label("Pełny hash (64 znaki hex)"))
+        idField = field(cfg.observerId)
+        root.addView(idField)
+
+        root.addView(title("API"))
+        root.addView(label("Broker 1"))
+        m1Field = field(cfg.mqtt1Host)
+        root.addView(m1Field)
+        root.addView(label("Broker 2"))
+        m2Field = field(cfg.mqtt2Host)
+        root.addView(m2Field)
+
+        root.addView(title("Monitoring"))
+        root.addView(label("Interwał odświeżania (sekund)"))
+        intervalBar = SeekBar(this).apply {
+            max = 30
+            progress = cfg.intervalSec.coerceIn(5, 30) - 5
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    intervalLabel.text = "${progress + 5}s"
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        intervalLabel = label("${cfg.intervalSec}s")
+        root.addView(intervalBar)
+        root.addView(intervalLabel)
+
+        alertObs = check("Alarm Observera", cfg.alertObserverEnabled)
+        root.addView(alertObs)
+        alertMap = check("Alarm mapowania", cfg.alertMapEnabled)
+        root.addView(alertMap)
+        lockScreen = check("Dane Observera w powiadomieniu", cfg.lockScreenStatus)
+        root.addView(lockScreen)
+
+        root.addView(Button(this).apply {
+            text = "Zapisz i odśwież widget"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0xFF1F282B.toInt())
+            setOnClickListener { save() }
+        })
+
+        info = TextView(this).apply {
+            text = "Gotowe"
+            setTextColor(Color.parseColor("#67D78A"))
+            setPadding(dp(4), dp(12), dp(4), dp(0))
+        }
+        root.addView(info)
+
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(0xFF111315.toInt())
+            addView(root)
+        })
+    }
+
+    private fun save() {
+        cfg.observerId = idField.text.toString().trim()
+        cfg.mqtt1Host = m1Field.text.toString().trim()
+        cfg.mqtt2Host = m2Field.text.toString().trim()
+        cfg.intervalSec = 5 + intervalBar.progress
+        cfg.alertObserverEnabled = alertObs.isChecked
+        cfg.alertMapEnabled = alertMap.isChecked
+        cfg.lockScreenStatus = lockScreen.isChecked
+        cfg.save()
+        info.text = "Zapisano"
+        info.setTextColor(Color.parseColor("#67D78A"))
+    }
+
+    private fun title(t: String): TextView = TextView(this).apply {
+        text = t
+        textSize = 20f
+        setTextColor(Color.parseColor("#67D78A"))
+        setTypeface(null, android.graphics.Typeface.BOLD)
+        setPadding(0, dp(18), 0, dp(4))
+    }
+
+    private fun label(t: String): TextView = TextView(this).apply {
+        text = t
+        textSize = 14f
+        setTextColor(Color.WHITE)
+        setPadding(0, dp(4), 0, dp(4))
+    }
+
+    private fun field(value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText = EditText(this).apply {
+        setText(value)
+        inputType = type
+        setTextColor(Color.WHITE)
+        setSingleLine(true)
+        setBackgroundColor(0xFF1D2427.toInt())
+        setPadding(dp(12), dp(10), dp(12), dp(10))
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    }
+
+    private fun check(label: String, checked: Boolean): CheckBox = CheckBox(this).apply {
+        text = label
+        isChecked = checked
+        setTextColor(Color.WHITE)
+    }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+}
+
