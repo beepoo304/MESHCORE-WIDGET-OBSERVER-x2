@@ -6,9 +6,12 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.graphics.Insets as GInsets
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -62,7 +65,17 @@ class MapTrackActivity : Activity() {
                 loadData()
             }
         }
-        root.applySystemBarsPadding()
+        // Padding natywny na kontenerze, a WebView dostaje insety wyzerowane — inaczej Chromium
+        // przekazuje je do env(safe-area-inset-*) w HTML i paski liczą się podwójnie.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            WindowInsetsCompat.Builder(insets)
+                .setInsets(WindowInsetsCompat.Type.systemBars(), GInsets.NONE)
+                .setInsets(WindowInsetsCompat.Type.displayCutout(), GInsets.NONE)
+                .build()
+        }
+        ViewCompat.requestApplyInsets(root)
         webView.loadUrl("file:///android_asset/map_track.html")
     }
 
