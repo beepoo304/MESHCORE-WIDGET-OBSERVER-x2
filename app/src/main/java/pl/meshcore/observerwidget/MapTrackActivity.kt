@@ -16,8 +16,9 @@ import kotlin.concurrent.thread
 
 /**
  * Zakładka MAP: trasa wybranej sesji mapowania na jasnej mapie jak w meshcoresouth.pl/mapper —
- * heksy (kratki pomiarów) kolorowane SNR-u-RPT, linia przerywana trasy, przerywane linie
- * do repeaterów, które usłyszały pomiary, i wszystkie repeatery z bazy mapera.
+ * heksy (kratki pomiarów) kolorowane SNR-u-RPT tworzą całą trasę mapującego (bez linii
+ * przerywanej), przerywane linie do repeaterów, które usłyszały pomiary, i wszystkie
+ * repeatery z bazy mapera.
  *
  * Rysowanie robi WebView (Leaflet 1.9.4 w assetach, kafelki OpenStreetMap z filtrem
  * jasnym jak w mapperze), a Kotlin podaje dane przez most JS (`Android.*`).

@@ -43,7 +43,7 @@ function colorAt(t){t=Math.max(0,Math.min(1,t));const x=t*(STOPS.length-1),i=Mat
 const snrColor=s=>s==null?'#8a99a3':colorAt((s+8)/20);
 document.getElementById('legbar').style.background='linear-gradient(90deg,'+STOPS.join(',')+')';
 
-/* heksy jak w mapperze */
+/* heksy jak w mapperze — one są trasą sesji (kratka = pomiar na trasie) */
 const HEX0={lat:50,lon:19},HEX_KX=111320*Math.cos(50*Math.PI/180),HEX_KY=110574,SQ3=Math.sqrt(3);
 const hexSize=z=>z>=17?18:z>=16?28:z>=15?45:z>=14?75:z>=13?130:z>=12?230:z>=11?420:z>=10?750:1400;
 function hexKey(lat,lon,sz){const x=(lon-HEX0.lon)*HEX_KX,y=(lat-HEX0.lat)*HEX_KY;
@@ -87,19 +87,14 @@ function drawHexes(pts){
   }
 }
 
-/* rysuje sesję; fit=true tylko przy wyborze sesji (NIE przy zmianie zoomu — to blokowało powiększanie) */
+/* rysuje sesję; fit=true tylko przy wyborze sesji (NIE przy zmianie zoomu — to blokowało powiększanie).
+   Trasa sesji = kratki (heksy) jak w mapperze — bez linii przerywanej; cała trasa mapującego,
+   linie do RPT, które go usłyszały. */
 function render(d,fit){
   dataLayer.clearLayers();repLayer.clearLayers();
   const pts=d&&d.pts;
   if(!pts||!pts.length)return;
   drawHexes(pts);
-  const segs=[];let seg=[];let prev=null;
-  for(const p of pts){
-    if(prev&&(p.t-prev.t>120*1000||m.distance([prev.lat,prev.lon],[p.lat,p.lon])>3000)){if(seg.length>1)segs.push(seg);seg=[];}
-    if(!prev||p.lat!==prev.lat||p.lon!==prev.lon)seg.push([p.lat,p.lon]);prev=p;
-  }
-  if(seg.length>1)segs.push(seg);
-  segs.forEach(s=>L.polyline(s,{color:'#6d28d9',weight:2.5,opacity:.8,dashArray:'2 6',interactive:false}).addTo(dataLayer));
   const involved=new Set();pts.forEach(p=>(p.h||[]).forEach(h=>{if(REPS[h.n])involved.add(h.n);}));
   pts.forEach(p=>(p.h||[]).forEach(h=>{const r=REPS[h.n];if(!r)return;
     L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:'#fff',weight:5.2,opacity:.7,dashArray:'6 5',interactive:false}).addTo(repLayer);
