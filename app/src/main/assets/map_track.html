@@ -43,14 +43,22 @@ function colorAt(t){t=Math.max(0,Math.min(1,t));const x=t*(STOPS.length-1),i=Mat
 const snrColor=s=>s==null?'#8a99a3':colorAt((s+8)/20);
 document.getElementById('legbar').style.background='linear-gradient(90deg,'+STOPS.join(',')+')';
 
-/* Równomierna siatka kwadratowa, zakotwiczona w stałym punkcie, jak w mapperze. */
-const GRID0={lat:50,lon:19},GRID_KX=111320*Math.cos(50*Math.PI/180),GRID_KY=110574;
-const cellHalfSize=z=>z>=17?18:z>=16?28:z>=15?45:z>=14?75:z>=13?130:z>=12?230:z>=11?420:z>=10?750:1400;
-function gridXY(lat,lon){return [(lon-GRID0.lon)*GRID_KX,(lat-GRID0.lat)*GRID_KY];}
-function cellKey(lat,lon,half){const [x,y]=gridXY(lat,lon),side=2*half;return [Math.floor(x/side),Math.floor(y/side)];}
-function cellRing(ix,iy,half){const side=2*half,x0=ix*side,x1=x0+side,y0=iy*side,y1=y0+side;
- const ll=(x,y)=>[GRID0.lat+y/GRID_KY,GRID0.lon+x/GRID_KX];
- return [ll(x0,y0),ll(x1,y0),ll(x1,y1),ll(x0,y1)];}
+/* Siatka heksagonalna jak w mapperze: axial coordinates + cube rounding. */
+const HEX0={lat:50,lon:19},HEX_KX=111320*Math.cos(50*Math.PI/180),HEX_KY=110574,SQ3=Math.sqrt(3);
+const hexSize=z=>z>=17?18:z>=16?28:z>=15?45:z>=14?75:z>=13?130:z>=12?230:z>=11?420:z>=10?750:1400;
+function hexKey(lat,lon,size){
+ const x=(lon-HEX0.lon)*HEX_KX,y=(lat-HEX0.lat)*HEX_KY;
+ const q=(SQ3/3*x-y/3)/size,r=(2/3*y)/size;
+ let cx=q,cz=r,cy=-cx-cz;
+ let rx=Math.round(cx),ry=Math.round(cy),rz=Math.round(cz);
+ const dx=Math.abs(rx-cx),dy=Math.abs(ry-cy),dz=Math.abs(rz-cz);
+ if(dx>dy&&dx>dz)rx=-ry-rz;else if(dy>dz)ry=-rx-rz;else rz=-rx-ry;
+ return [rx,rz];
+}
+function hexCenter(q,r,size){const x=size*SQ3*(q+r/2),y=size*1.5*r;return [HEX0.lat+y/HEX_KY,HEX0.lon+x/HEX_KX];}
+function hexRing(q,r,size){const [lat,lon]=hexCenter(q,r,size),out=[];
+ for(let i=0;i<6;i++){const angle=Math.PI/180*(60*i-30);out.push([lat+size*Math.sin(angle)/HEX_KY,lon+size*Math.cos(angle)/HEX_KX]);}
+ return out;}
 
 /* Mapa: gesty palcami, bez przycisków +/−. */
 const m=L.map('m',{zoomControl:false,attributionControl:true,touchZoom:true,doubleClickZoom:true,dragging:true,
@@ -64,11 +72,11 @@ const dataLayer=L.layerGroup().addTo(m),repLayer=L.layerGroup().addTo(m);
 function esc(s){return String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');}
 const fmtT=ts=>new Date(ts).toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-function drawCells(pts){
- const half=cellHalfSize(Math.round(m.getZoom())),cells=new Map();
+function drawHexes(pts){
+ const size=hexSize(Math.round(m.getZoom())),cells=new Map();
  for(const p of pts){
-  const [ix,iy]=cellKey(p.lat,p.lon,half),key=ix+':'+iy;
-  let c=cells.get(key);if(!c)cells.set(key,c={ix,iy,pts:[],best:null,hits:0});
+  const [q,r]=hexKey(p.lat,p.lon,size),key=q+':'+r;
+  let c=cells.get(key);if(!c)cells.set(key,c={q,r,pts:[],best:null,hits:0});
   c.pts.push(p);
   let best=null;(p.h||[]).forEach(h=>{if(h.snr!=null&&(best===null||h.snr>best))best=h.snr;});
   if(best!=null&&(c.best===null||best>c.best))c.best=best;
@@ -78,7 +86,7 @@ function drawCells(pts){
   const style=c.best===null
    ?{stroke:true,color:'#fff',weight:.6,opacity:.7,fillColor:'#8a99a3',fillOpacity:.3}
    :{color:'#fff',weight:.6,opacity:.7,fillColor:colorAt((c.best+8)/20),fillOpacity:c.hits>1?.8:.6};
-  L.polygon(cellRing(c.ix,c.iy,half),style).addTo(dataLayer)
+  L.polygon(hexRing(c.q,c.r,size),style).addTo(dataLayer)
    .bindPopup('<b>'+fmtT(c.pts[0].t)+'–'+fmtT(c.pts[c.pts.length-1].t)+'</b><br>'+c.pts.length+' pomiarów w kratce'
     +(c.best!==null?' · najlepszy SNR-u-RPT '+c.best+' dB':' · brak odpowiedzi'));
  }
@@ -94,11 +102,11 @@ function drawPoints(pts){
  }
 }
 
-/* Trasa jest złożona z kolorowanych kwadratowych kratek, nie z linii między punktami. */
+/* Trasa sesji = heksy kolorowane SNR-em, z markerami pomiarów i liniami do RPT. */
 function render(d,fit){
  dataLayer.clearLayers();repLayer.clearLayers();
  const pts=d&&d.pts;if(!pts||!pts.length)return;
- drawCells(pts);drawPoints(pts);
+ drawHexes(pts);drawPoints(pts);
  const involved=new Set();pts.forEach(p=>(p.h||[]).forEach(h=>{if(REPS[h.n])involved.add(h.n);}));
  pts.forEach(p=>(p.h||[]).forEach(h=>{const r=REPS[h.n];if(!r)return;
   L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:'#fff',weight:5.2,opacity:.7,dashArray:'6 5',interactive:false}).addTo(repLayer);
