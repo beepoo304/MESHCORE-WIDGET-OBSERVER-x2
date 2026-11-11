@@ -6,7 +6,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.graphics.Insets as GInsets
+import androidx.core.graphics.Insets as XInsets
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.view.WindowCompat
@@ -71,8 +71,8 @@ class MapTrackActivity : Activity() {
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             WindowInsetsCompat.Builder(insets)
-                .setInsets(WindowInsetsCompat.Type.systemBars(), GInsets.NONE)
-                .setInsets(WindowInsetsCompat.Type.displayCutout(), GInsets.NONE)
+                .setInsets(WindowInsetsCompat.Type.systemBars(), XInsets.NONE)
+                .setInsets(WindowInsetsCompat.Type.displayCutout(), XInsets.NONE)
                 .build()
         }
         ViewCompat.requestApplyInsets(root)
