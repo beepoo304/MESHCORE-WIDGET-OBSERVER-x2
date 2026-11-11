@@ -7,6 +7,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.core.view.WindowCompat
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -36,7 +38,17 @@ class MapTrackActivity : Activity() {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             setBackgroundColor(Color.rgb(0xdf, 0xe7, 0xec))
         }
-        setContentView(webView)
+        // WebView ignoruje własny padding (edge-to-edge, targetSdk 35), więc padding robi kontener
+        // wokół niego: mapa i jej paski lądują między paskiem stanu a paskiem nawigacji.
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.rgb(0x11, 0x17, 0x19))
+            addView(webView)
+        }
+        setContentView(root)
+        WindowCompat.getInsetsController(window, root).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
         @SuppressLint("SetJavaScriptEnabled")
         val s = webView.settings
         s.javaScriptEnabled = true
@@ -50,7 +62,7 @@ class MapTrackActivity : Activity() {
                 loadData()
             }
         }
-        webView.applySystemBarsPadding()
+        root.applySystemBarsPadding()
         webView.loadUrl("file:///android_asset/map_track.html")
     }
 
