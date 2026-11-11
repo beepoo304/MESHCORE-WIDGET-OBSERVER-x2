@@ -46,7 +46,7 @@ class SettingsActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(24))
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(0xFF111315.toInt())
         }
         root.addView(title("Observer"))
         root.addView(label("Pełny hash (64 znaki hex)"))
@@ -77,9 +77,9 @@ class SettingsActivity : Activity() {
         }
         root.addView(intervalBar)
         updateIntervalLabel()
-        root.addView(label("Licznik odświeżania i wiek pakietu zmieniają się co sekundę dzięki usłudze w tle (stałe, ciche powiadomienie „Monitoring Observera aktywny”). Przy wyłączonym ekranie dane nadal są pobierane co interwał, a widget dorysowuje się w ciągu sekundy po włączeniu ekranu (częściowy wakelock chroni pętlę przed Doze)."))
+        root.addView(label("Licznik odświeżania i wiek pakietu zmieniają się co sekundę dzięki usłudze w tle (stałe, ciche powiadomienie „Monitoring Observera aktywny”). Przy wyłączeniu monitoring działa jedynie widget i statystyki w aplikacji i nie ma alarmów. Możesz też obowiązkowo odświeżać ręcznie."))
         lockScreen = check("Dane Observera w powiadomieniu (ekran blokady)", cfg.lockScreenStatus); root.addView(lockScreen)
-        root.addView(label("Stałe powiadomienie pokazuje status, pakiety/h i wiek ostatniego pakietu obu brokerów, a po rozwinięciu także MAPPER z kierunkiem i odległością. Treść odświeża się po każdym pobraniu danych. Jeśli nie widać go na ekranie blokady: Ustawienia telefonu → Powiadomienia → Ekran blokady → pokazuj wszystkie (także ciche)."))
+        root.addView(label("Stałe powiadomienie pokazuje status, pakiety/h i wiek ostatniego pakietu obu brokerów, a po rozwinięciu także MAPPER z kierunkiem i odległością. Treść odświeża się co sekundę, a panel jest zintegrowany z widgetem."))
 
         root.addView(title("Progi koloru czasu pakietu"))
         root.addView(label("Pomarańczowy po (min)"))
@@ -96,22 +96,26 @@ class SettingsActivity : Activity() {
         delayField = field(cfg.alertDelayMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(delayField)
         root.addView(label("Cooldown między powiadomieniami (min, min. 1)"))
         cooldownField = field(cfg.alertCooldownMin.toString(), InputType.TYPE_CLASS_NUMBER); root.addView(cooldownField)
-        root.addView(label("Alarm Observera jest niezależny od statusów MQTT i przychodzi natychmiast po przekroczeniu czerwonego progu, a w treści podaje nazwę API, z którego przyszły dane (gdy oba nie odpowiadają – obie). Opóźnienie (min) dotyczy tylko alarmów MQTT; 0 = natychmiast. Powiadomienie o mapowaniu przychodzi z nickiem mapującego raz na sesję (i przy zmianie mapującego), gdy ktoś mapuje w zasięgu Observera – dane z publicznej bazy mapera meshcoresouth.pl."))
+        root.addView(label("Alarm Observera jest niezależny od statusów MQTT i przychodzi natychmiast po przekroczeniu czerwonego progu, a w treści podaje nazwę API, z którego przyszły dane. Alarm mapowania jest wysyłany tylko jeśli ktoś faktycznie mapuje w zasięgu Observera."))
 
-        info = label("").apply { setTextColor(Color.parseColor("#6EF015")) }
+        info = label("").apply { setTextColor(Color.parseColor("#67D78A")) }
         root.addView(info)
 
         root.addView(Button(this).apply {
             text = "Zapisz i odśwież widget"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0xFF1F282B.toInt())
             setOnClickListener { save() }
         })
         root.addView(Button(this).apply {
             text = "Sprawdź API i pobierz nazwę Observera"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0xFF1F282B.toInt())
             setOnClickListener { testApi() }
         })
 
         setContentView(ScrollView(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(0xFF111315.toInt())
             addView(root)
             applySystemBarsPadding()
         })
@@ -160,7 +164,6 @@ class SettingsActivity : Activity() {
             info.text = "Podaj poprawne adresy hostów API (bez spacji)"
             return
         }
-        // Zmiana Observera = nowy ID w bazie mapera: reset stanu mapowania i pozycji RPT.
         if (id != cfg.observerId) {
             MapperMonitor.reset(applicationContext)
             cfg.mapperLastId = 0L
@@ -187,7 +190,7 @@ class SettingsActivity : Activity() {
         cfg.alertCooldownMin = cooldown
         Alerts.ensureChannels(this)
         RefreshWorker.sync(this)
-        info.setTextColor(Color.parseColor("#6EF015"))
+        info.setTextColor(Color.parseColor("#67D78A"))
         info.text = "Zapisano"
         ObserverRefresh.ensureTicking(this)
         ObserverRefresh.refreshAll(this)
@@ -233,8 +236,9 @@ class SettingsActivity : Activity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun title(t: String) = TextView(this).apply {
-        text = t; textSize = 20f; setTextColor(Color.parseColor("#6EF015"))
+        text = t; textSize = 20f; setTextColor(Color.parseColor("#67D78A"))
         setPadding(0, dp(18), 0, dp(4))
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
 
     private fun label(t: String) = TextView(this).apply {
@@ -244,6 +248,9 @@ class SettingsActivity : Activity() {
 
     private fun field(value: String, type: Int = InputType.TYPE_CLASS_TEXT) = EditText(this).apply {
         setText(value); inputType = type; setTextColor(Color.WHITE); setSingleLine(true)
+        setBackgroundColor(0xFF1D2427.toInt())
+        setPadding(dp(12), dp(10), dp(12), dp(10))
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 }
+
