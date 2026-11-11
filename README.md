@@ -86,6 +86,7 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 
 ## Historia wersji
 
+- **2.5.4** — MAP: znaczniki pomiarów na trasie sesji jak w mapperze — kółko na każdym pomiarze mapującego (promień 6 px przy odpowiedzi, kolor = SNR najlepszego słyszanego RPT, ciemna obwódka; 4 px szare bez odpowiedzi), klik = czas + RPT + SNR. Dalej bez przerywanej linii trasy.
 - **2.5.3** — MAP: cała trasa sesji mapującego przedstawiona kratkami (heksami) jak w mapperze — usunięta przerywana linia trasy (`drawTrack`); wybór stacji OBSERVER/RPT i mapującego bez zmian, linie do RPT, które złapały pomiary, bez zmian.
 - **2.5.2** — MAP: naprawiony zoom palcami (mapa nie wraca już do widoku startowego), bez przycisków +/−; wybór stacji OBSERVER / RPT1–RPT5 i lista mapujących (jeden wpis na mapującego, najnowsza sesja). Widget: klucz zawsze z widocznymi pierwszymi znakami.
 - **2.5.0** — zakładki **LOG** i **MAP**:

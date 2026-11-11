@@ -87,14 +87,30 @@ function drawHexes(pts){
   }
 }
 
+/* znaczniki pomiarów na trasie — jak w mapperze (widok trackera): kółko na każdym pomiarze,
+   promień 6 px przy odpowiedzi (kolor = SNR najlepszego słyszanego RPT, ciemna obwódka),
+   4 px szare bez odpowiedzi; klik = szczegóły pomiaru */
+function drawPoints(pts){
+  for(const p of pts){
+    const hit=(p.h||[]).filter(h=>h.snr!=null).sort((a,b)=>b.snr-a.snr)[0];
+    const c=hit?snrColor(hit.snr):'#8a99a3';
+    const nm=hit?(REPS[hit.n]&&REPS[hit.n].name||hit.n):'';
+    const more=(p.h||[]).length>1?' (+'+((p.h||[]).length-1)+')':'';
+    L.circleMarker([p.lat,p.lon],{radius:hit?6:4,color:'#0f2a3a',weight:1,fillColor:c,fillOpacity:hit?.9:.55})
+      .bindPopup('<b>'+fmtT(p.t)+'</b><br>'+(hit?esc(nm)+' · SNR '+hit.snr+' dB'+more:'brak odpowiedzi'))
+      .addTo(dataLayer);
+  }
+}
+
 /* rysuje sesję; fit=true tylko przy wyborze sesji (NIE przy zmianie zoomu — to blokowało powiększanie).
-   Trasa sesji = kratki (heksy) jak w mapperze — bez linii przerywanej; cała trasa mapującego,
-   linie do RPT, które go usłyszały. */
+   Trasa sesji = kratki (heksy) jak w mapperze — bez linii przerywanej; cała trasa mapującego
+   ze znacznikami pomiarów, linie do RPT, które go usłyszały. */
 function render(d,fit){
   dataLayer.clearLayers();repLayer.clearLayers();
   const pts=d&&d.pts;
   if(!pts||!pts.length)return;
   drawHexes(pts);
+  drawPoints(pts);   // znaczniki pomiarów na trasie (kółka jak w mapperze)
   const involved=new Set();pts.forEach(p=>(p.h||[]).forEach(h=>{if(REPS[h.n])involved.add(h.n);}));
   pts.forEach(p=>(p.h||[]).forEach(h=>{const r=REPS[h.n];if(!r)return;
     L.polyline([[p.lat,p.lon],[r.lat,r.lon]],{color:'#fff',weight:5.2,opacity:.7,dashArray:'6 5',interactive:false}).addTo(repLayer);
