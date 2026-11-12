@@ -28,7 +28,7 @@ class BottomNav(ctx: Context, private val onSelect: (Int) -> Unit) : LinearLayou
         add(R.drawable.ic_nav_observer, "Observer")
         add(R.drawable.ic_nav_map, tr("Mapa", "Map"))
         add(R.drawable.ic_nav_log, "Log")
-        add(R.drawable.ic_nav_outage, tr("Przestoje", "Outages"))
+        add(R.drawable.ic_nav_stats, tr("Statystyki", "Stats"))
         add(R.drawable.ic_nav_settings, tr("Ustawienia", "Settings"))
     }
 
@@ -79,7 +79,7 @@ class BottomNav(ctx: Context, private val onSelect: (Int) -> Unit) : LinearLayou
 
     /**
      * Jedna wspólna wielkość podpisów (≤ 11 sp), a szerokość kolumny = podpis + równy odstęp:
-     * przerwy między sąsiednimi podpisami są jednakowe (np. „Przestoje” dokładnie pośrodku
+     * przerwy między sąsiednimi podpisami są jednakowe (np. „Statystyki” dokładnie pośrodku
      * między „Log” a „Ustawienia”), mimo różnej długości słów.
      */
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {

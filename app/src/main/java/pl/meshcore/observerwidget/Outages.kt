@@ -82,7 +82,7 @@ object OutageEngine {
     }
 }
 
-/** Rejestr przestojów w SharedPreferences „outages” (zapis z [Alerts.evaluate], odczyt w karcie Przestoje). */
+/** Rejestr przestojów w SharedPreferences „outages” (zapis z [Alerts.evaluate], odczyt w karcie Statystyki → Przestoje). */
 object Outages {
     private const val PREFS = "outages"
     private val lock = Any()

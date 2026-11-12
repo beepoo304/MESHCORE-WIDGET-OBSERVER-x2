@@ -37,7 +37,7 @@ object Alerts {
         if (!Config(ctx).monitoringEnabled || !data.configured) return
         val cfg = Config(ctx)
         val assessment = AlertEngine.assess(data.observer?.let { o -> o.lastPacketMs?.minus(o.serverOffsetMs) }, nowMs, cfg.redMin, data.mqtt1Health, data.mqtt2Health)
-        // Rejestr przestojów (karta Przestoje) – niezależny od włączenia powiadomień.
+        // Rejestr przestojów (Statystyki → Przestoje) – niezależny od włączenia powiadomień.
         val observerLast = data.observer?.let { o -> o.lastPacketMs?.minus(o.serverOffsetMs) }
         Outages.record(ctx, OutageKind.OBSERVER, assessment.observer, nowMs, startHintMs = observerLast)
         Outages.record(ctx, OutageKind.MQTT1, data.mqtt1Health, nowMs)

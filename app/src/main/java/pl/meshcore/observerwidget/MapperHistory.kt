@@ -43,7 +43,26 @@ object MapperHistory {
      * null = serwer nie odpowiada. [maxPages] ogranicza rozmiar pobieranej historii.
      */
     fun fetch(timeoutMs: Int, maxPages: Int = MAX_PAGES): History? {
-        var since = 0L
+        val raw = fetchPoints(timeoutMs, maxPages) ?: return null
+        return History(buildSessions(raw.points, raw.users))
+    }
+
+    /** Surowe punkty bazy mapera + nicki (pod statystyki repeaterów). */
+    data class Raw(val points: List<MapperPing>, val users: Map<Long, String>, val lastId: Long) {
+        /** Doklejenie nowszych punktów (dociągnięcie od [lastId]); powtórzone ID pomijane. */
+        operator fun plus(newer: Raw): Raw {
+            val ids = HashSet<Long>(points.size * 2)
+            points.forEach { ids.add(it.id) }
+            return Raw(points + newer.points.filter { ids.add(it.id) }, users + newer.users, maxOf(lastId, newer.lastId))
+        }
+    }
+
+    /**
+     * Baza punktów stronami od [sinceId] (0 = od początku); null = serwer nie odpowiada.
+     * Dociągnięcie tylko nowych punktów = [sinceId] z poprzedniego [Raw.lastId].
+     */
+    fun fetchPoints(timeoutMs: Int, maxPages: Int = MAX_PAGES, sinceId: Long = 0L): Raw? {
+        var since = sinceId
         val points = mutableListOf<MapperPing>()
         val users = mutableMapOf<Long, String>()
         var pages = 0
@@ -55,7 +74,7 @@ object MapperHistory {
             since = result.lastId
             if (!result.more) break
         }
-        return History(buildSessions(points, users))
+        return Raw(points, users, since)
     }
 
     /** Klucz grupowania: ten sam mapujący, czas i pozycja = jedno miejsce trasy z kilkoma hitami. */

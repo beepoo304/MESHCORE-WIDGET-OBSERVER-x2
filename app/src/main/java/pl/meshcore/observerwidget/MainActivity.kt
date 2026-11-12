@@ -37,9 +37,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
- * Aplikacja z dolnym paskiem (styl M2): Observer · Mapa · Log · Przestoje · Ustawienia.
+ * Aplikacja z dolnym paskiem (styl M2): Observer · Mapa · Log · Statystyki · Ustawienia.
  * Observer = stan Observera, brokery MQTT, „Mapują teraz”, moje repeatery; Log = wpisy mapowań
- * (osobno dla każdego mapującego); Przestoje = rejestr [Outages]; Mapa = [MapScreen];
+ * (osobno dla każdego mapującego); Statystyki = [RepeaterStats] + rejestr [Outages]; Mapa = [MapScreen];
  * Ustawienia = [SettingsScreen].
  */
 class MainActivity : Activity() {
@@ -170,17 +170,19 @@ class MainActivity : Activity() {
             when (t) {
                 TAB_OBSERVER -> obsScroll.smoothScrollTo(0, 0)
                 TAB_LOG -> logScroll.smoothScrollTo(0, 0)
-                TAB_OUTAGES -> outScroll.smoothScrollTo(0, 0)
+                TAB_STATS -> outScroll.smoothScrollTo(0, 0)
                 TAB_SETTINGS -> settingsScroll?.smoothScrollTo(0, 0)
             }
             return
         }
         tab = t
         nav.select(t)
+        // Trwający przestój (czerwona kropka na pasku) → od razu widok Przestoje.
+        if (t == TAB_STATS && Outages.anyOngoing(this, System.currentTimeMillis())) statsMode = 1
         hideKeyboard()
         obsScroll.visibility = if (t == TAB_OBSERVER) View.VISIBLE else View.GONE
         logScroll.visibility = if (t == TAB_LOG) View.VISIBLE else View.GONE
-        outScroll.visibility = if (t == TAB_OUTAGES) View.VISIBLE else View.GONE
+        outScroll.visibility = if (t == TAB_STATS) View.VISIBLE else View.GONE
         if (t == TAB_MAP) {
             val map = mapScreen ?: MapScreen(this, embedded = true) { selectTab(TAB_OBSERVER) }.also {
                 mapScreen = it
@@ -219,11 +221,11 @@ class MainActivity : Activity() {
     private fun render(d: WidgetData) {
         dashboardData = d
         nav.setBadge(TAB_OBSERVER, d.configured && (d.mqtt1Health == Health.BAD || d.mqtt2Health == Health.BAD))
-        nav.setBadge(TAB_OUTAGES, Outages.anyOngoing(this, System.currentTimeMillis()))
+        nav.setBadge(TAB_STATS, Outages.anyOngoing(this, System.currentTimeMillis()))
         when (tab) {
             TAB_OBSERVER -> renderDashboard(d)
             TAB_LOG -> renderLog(d)
-            TAB_OUTAGES -> renderOutages()
+            TAB_STATS -> renderStats()
         }
     }
 
@@ -889,58 +891,315 @@ class MainActivity : Activity() {
         }
     }
 
-    // ───────────────────────────── PRZESTOJE ─────────────────────────────
+    // ───────────────────────────── STATYSTYKI ─────────────────────────────
 
-    /**
-     * Rejestr przestojów: niedostępność MQTT1/MQTT2 i przerwy w wysyłaniu pakietów przez Observera
-     * (≥ 1 min, 30 dni). U góry podsumowanie 24 h, niżej lista wg dni; „Wyczyść” = reset.
-     */
-    private fun renderOutages() {
-        outDash.removeAllViews()
-        val cfg = Config(this)
+    /** Statystyki: 0 = Repeatery (z bazy mapera), 1 = Przestoje (rejestr [Outages]). */
+    private var statsMode = 0
+    /** Indeks okresu w [STATS_PERIODS] — wspólny dla obu widoków. */
+    private var statsPeriod = 1
+    /** Wybrany węzeł: 0 = Observer, 1–5 = slot RPT. */
+    private var statsNode = 0
+
+    /** Baza punktów mapera w pamięci: pobierana raz, potem tylko dociągane nowe punkty. */
+    private var statsRaw: MapperHistory.Raw? = null
+    private var statsReps: Map<String, MapperHistory.Repeater> = emptyMap()
+    private var statsLoadedAt = 0L
+    private var statsLoading = false
+    private var statsError = false
+    /** Ostatni wynik i jego klucz (węzeł, okres, wersja danych) — bez liczenia co sekundę. */
+    private var statsKey: Any? = null
+    private var statsResult: RepeaterStats.Result? = null
+
+    private val statsPeriods get() = listOf(
+        24 * 3600_000L to "24 h",
+        7 * 24 * 3600_000L to tr("7 dni", "7 days"),
+        30 * 24 * 3600_000L to tr("30 dni", "30 days"),
+        0L to tr("Całość", "All")
+    )
+
+    /** Pobranie bazy mapera w tle: pełne przy pierwszym razie, potem tylko punkty nowsze od ostatniego ID. */
+    private fun loadStatsData(force: Boolean = false) {
+        if (statsLoading) return
         val now = System.currentTimeMillis()
-        val list = Outages.all(this, now)
-        val clear = Ui.text(this, tr("Wyczyść", "Clear"), 13f, if (list.isEmpty()) Ui.MUTED else Ui.RED, bold = true).apply {
-            setPadding(dp(12), dp(4), dp(12), dp(4))
-            background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
-            contentDescription = tr("Wyczyść przestoje", "Clear outages")
-            setOnClickListener {
-                if (list.isEmpty()) return@setOnClickListener
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle(tr("Wyczyścić przestoje?", "Clear outages?"))
-                    .setMessage(tr("Usunie ${list.size} ${entriesWord(list.size)}. Trwający przestój będzie liczony od nowa.",
-                        "This removes ${list.size} ${entriesWord(list.size)}. An ongoing outage will be counted from scratch."))
-                    .setPositiveButton(tr("Wyczyść", "Clear")) { _, _ ->
-                        Outages.clear(this@MainActivity, System.currentTimeMillis())
-                        rerender()
-                    }
-                    .setNegativeButton(tr("Anuluj", "Cancel"), null)
-                    .show()
+        if (!force && statsRaw != null && now - statsLoadedAt < STATS_RELOAD_MS) return
+        statsLoading = true
+        statsError = false
+        val old = statsRaw
+        thread(name = "repeater-stats") {
+            val timeout = 15_000
+            MapperApi.configure(applicationContext)
+            val reps = MapperHistory.repeaters(timeout)
+            val fresh = MapperHistory.fetchPoints(timeout, sinceId = old?.lastId ?: 0L)
+            runOnUiThread {
+                statsLoading = false
+                if (fresh == null) statsError = true
+                else {
+                    statsRaw = if (old == null) fresh else old + fresh
+                    if (reps.isNotEmpty()) statsReps = reps
+                    statsLoadedAt = System.currentTimeMillis()
+                    statsKey = null
+                }
+                if (!isFinishing && tab == TAB_STATS) rerender()
             }
         }
-        outDash.addView(Ui.topBar(this, tr("PRZESTOJE", "OUTAGES"), tr("MQTT1, MQTT2 i Observer · przerwy ≥ 1 min · 30 dni", "MQTT1, MQTT2 and Observer · gaps ≥ 1 min · 30 days"), clear))
+    }
+
+    private fun renderStats() {
+        outDash.removeAllViews()
+        val now = System.currentTimeMillis()
+        val outages = statsMode == 1
+        val right: View = if (outages) {
+            val list = Outages.all(this, now)
+            Ui.text(this, tr("Wyczyść", "Clear"), 13f, if (list.isEmpty()) Ui.MUTED else Ui.RED, bold = true).apply {
+                setPadding(dp(12), dp(4), dp(12), dp(4))
+                background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
+                contentDescription = tr("Wyczyść przestoje", "Clear outages")
+                setOnClickListener {
+                    if (list.isEmpty()) return@setOnClickListener
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(tr("Wyczyścić przestoje?", "Clear outages?"))
+                        .setMessage(tr("Usunie ${list.size} ${entriesWord(list.size)}. Trwający przestój będzie liczony od nowa.",
+                            "This removes ${list.size} ${entriesWord(list.size)}. An ongoing outage will be counted from scratch."))
+                        .setPositiveButton(tr("Wyczyść", "Clear")) { _, _ ->
+                            Outages.clear(this@MainActivity, System.currentTimeMillis())
+                            rerender()
+                        }
+                        .setNegativeButton(tr("Anuluj", "Cancel"), null)
+                        .show()
+                }
+            }
+        } else {
+            val label = when {
+                statsLoading -> "⟳ …"
+                statsLoadedAt > 0L -> "⟳ ${TimeFormat.hm(statsLoadedAt)}"
+                else -> "⟳"
+            }
+            Ui.text(this, label, 13f, Ui.MUTED, bold = true).apply {
+                setPadding(dp(12), dp(4), dp(12), dp(4))
+                background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
+                contentDescription = tr("Odśwież dane mappera", "Refresh mapper data")
+                setOnClickListener { loadStatsData(force = true); rerender() }
+            }
+        }
+        outDash.addView(Ui.topBar(
+            this, tr("STATYSTYKI", "STATS"),
+            if (outages) tr("Przerwy w pracy MQTT1, MQTT2 i Observera", "Downtime of MQTT1, MQTT2 and Observer")
+            else tr("Dane z mappera · ${MapperApi.host(Config(this).mapperApi)}", "Mapper data · ${MapperApi.host(Config(this).mapperApi)}"),
+            right
+        ))
+        outDash.addView(chipRow(listOf(tr("Repeatery", "Repeaters"), tr("Przestoje", "Outages")), statsMode, segmented = true) {
+            statsMode = it
+            outScroll.scrollTo(0, 0)
+            rerender()
+        })
+        // Przestoje mają historię 30 dni: „Całość” wyszarzona, liczona jak 30 dni.
+        val period = if (outages && statsPeriods[statsPeriod].first == 0L) 2 else statsPeriod
+        outDash.addView(chipRow(statsPeriods.map { it.second }, period, disabled = if (outages) setOf(3) else emptySet()) {
+            statsPeriod = it
+            rerender()
+        })
+        if (outages) renderOutages(statsPeriods[period].first, statsPeriods[period].second, now)
+        else renderRepeaterStats(now)
+        outDash.addView(Ui.spacer(this, 16))
+    }
+
+    /** Rząd przełączników (chipy); [segmented] = dwa pola na całą szerokość. */
+    private fun chipRow(labels: List<String>, selected: Int, segmented: Boolean = false, disabled: Set<Int> = emptySet(), onPick: (Int) -> Unit): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(16), dp(if (segmented) 10 else 4), dp(16), dp(4))
+        }
+        labels.forEachIndexed { i, label ->
+            val on = i == selected
+            val off = i in disabled
+            val chip = Ui.text(this, label, if (segmented) 13f else 12f, when {
+                on -> Ui.GREEN
+                off -> Ui.OUTLINE
+                else -> Ui.SUBTEXT
+            }, bold = on).apply {
+                gravity = Gravity.CENTER
+                maxLines = 1
+                background = if (on) Ui.rounded(this@MainActivity, 0xFF1F3A2A.toInt(), if (segmented) 18 else 8, 0xFF2F5A3E.toInt())
+                    else Ui.rounded(this@MainActivity, 0x00000000, if (segmented) 18 else 8, Ui.OUTLINE)
+                setPadding(dp(8), dp(if (segmented) 8 else 5), dp(8), dp(if (segmented) 8 else 5))
+                if (!off) {
+                    isClickable = true
+                    setOnClickListener { if (!on) onPick(i) }
+                }
+            }
+            val lp = if (segmented) LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                else LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            if (i > 0) lp.marginStart = dp(6)
+            row.addView(chip, lp)
+        }
+        if (segmented) return row
+        return android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    /** Statystyki repeatera jak na /mapper: podsumowanie, bilans łącza, top mapujący. */
+    private fun renderRepeaterStats(now: Long) {
+        val cfg = Config(this)
+        val nodes = buildList {
+            if (cfg.observerId.isNotBlank()) add(0 to cfg.observerId)
+            cfg.rptIds.forEach { (slot, id) -> add(slot to id) }
+        }
+        if (nodes.isEmpty()) {
+            outDash.addView(infoItem(tr("Wpisz w Ustawieniach klucz Observera albo swoich RPT, żeby zobaczyć ich statystyki.",
+                "Enter the Observer key or your RPT keys in Settings to see their stats."), Ui.ORANGE))
+            return
+        }
+        if (nodes.none { it.first == statsNode }) statsNode = nodes.first().first
+        val nodeLabel = { slot: Int -> if (slot == 0) "OBSERVER" else "RPT$slot" }
+        outDash.addView(chipRow(nodes.map { nodeLabel(it.first) }, nodes.indexOfFirst { it.first == statsNode }) {
+            statsNode = nodes[it].first
+            rerender()
+        })
+        loadStatsData()
+        val raw = statsRaw
+        if (raw == null) {
+            outDash.addView(infoItem(
+                if (statsError) tr("Nie udało się pobrać danych mappera. Dotknij ⟳, żeby spróbować ponownie.", "Could not download mapper data. Tap ⟳ to try again.")
+                else tr("Wczytuję bazę mappera… (pierwsze pobranie trwa chwilę)", "Loading the mapper database… (the first download takes a moment)"),
+                if (statsError) Ui.ORANGE else Ui.MUTED))
+            return
+        }
+        val short = MapperApi.shortId(nodes.first { it.first == statsNode }.second)
+        val rep = statsReps[short]
+        val (periodMs, periodLabel) = statsPeriods[statsPeriod]
+        val key = listOf(short, statsPeriod, statsLoadedAt, rep?.lat, rep?.lon)
+        if (key != statsKey) {
+            statsResult = RepeaterStats.compute(raw.points, raw.users, short, rep?.lat, rep?.lon,
+                if (periodMs > 0L) now - periodMs else 0L)
+            statsKey = key
+        }
+        val r = statsResult
+        outDash.addView(Ui.section(this, tr("Podsumowanie", "Summary"), "${rep?.name ?: nodeLabel(statsNode)} · $periodLabel"))
+        if (statsError) outDash.addView(infoItem(tr("Odświeżenie się nie udało – pokazuję wcześniejsze dane.", "Refresh failed – showing earlier data."), Ui.ORANGE))
+        if (r == null) {
+            outDash.addView(infoItem(tr("Brak odpowiedzi tego repeatera w bazie mappera w wybranym okresie.",
+                "No responses from this repeater in the mapper database for the selected period."), Ui.MUTED))
+            return
+        }
+        val silentDays = (now - r.lastMs) / (24 * 3600_000L)
+        if (silentDays >= 2 && r.silentPings >= 5) {
+            outDash.addView(infoItem(tr("Nie odpowiada od $silentDays dni, choć w jego zasięgu było od tego czasu ${pingCount(r.silentPings)}. Możliwa awaria albo zmiana klucza.",
+                "No response for $silentDays days, although there were ${pingCount(r.silentPings)} in its range since then. Possible failure or key change."), Ui.ORANGE))
+        }
+        val noPos = tr("brak pozycji RPT", "no RPT position")
+        val tiles = listOf(
+            statTile(tr("Pingi z odpowiedzią", "Pings answered"), "${r.pings}", tr("${r.measurements} ${measureWord(r.measurements)}", "${r.measurements} measurements"), Ui.GREEN),
+            statTile(tr("Mapujący", "Mappers"), "${r.users}", tr("${r.days} ${if (r.days == 1) "dzień" else "dni"} z odpowiedzią", "${r.days} ${if (r.days == 1) "day" else "days"} with responses")),
+            statTile(tr("Maks. zasięg", "Max range"), r.far?.let { GeoMath.km(it.km) } ?: "—", r.far?.let { f -> f.snr?.let { "SNR ${db(it)}" } ?: "" } ?: noPos),
+            statTile(tr("Praktyczny zasięg", "Practical range"), r.practicalKm?.let { "~" + GeoMath.km(it) } ?: "—",
+                if (r.practicalKm != null) tr("¾ odpowiedzi z SNR ≥ −5 dB", "¾ of responses with SNR ≥ −5 dB")
+                else if (rep?.lat == null) noPos else tr("za mało danych", "not enough data"), Ui.GREEN),
+            statTile(tr("Słyszymy RPT", "We hear RPT"), r.downAvg?.let { db(it) } ?: "—", r.downBest?.let { tr("najlepszy ${db(it)}", "best ${db(it)}") } ?: ""),
+            statTile(tr("RPT słyszy nas", "RPT hears us"), r.upAvg?.let { db(it) } ?: "—", r.upBest?.let { tr("najlepszy ${db(it)}", "best ${db(it)}") } ?: ""),
+            statTile(tr("RSSI średni", "Avg RSSI"), r.rssiAvg?.let { "${Math.round(it)} dBm" } ?: "—", ""),
+            statTile(tr("Pokrycie", "Coverage"), "${num(r.coverKm2)} km²", tr("tylko on: ${num(r.onlyKm2)} km²", "only it: ${num(r.onlyKm2)} km²"))
+        )
+        for (i in tiles.indices step 2) {
+            outDash.addView(Ui.kvRow(this, tiles[i], tiles[i + 1]).apply { setPadding(dp(16), dp(6), dp(16), 0) })
+        }
+
+        r.balanceDiff?.let { diff ->
+            outDash.addView(Ui.section(this, tr("Bilans łącza", "Link balance")))
+            outDash.addView(Ui.kvRow(this,
+                Ui.kv(this, tr("my → RPT", "us → RPT"), db(r.upAvg!!), Ui.BLUE),
+                Ui.kv(this, tr("RPT → my", "RPT → us"), db(r.downAvg!!), Ui.GREEN),
+                Ui.kv(this, tr("różnica", "difference"), db(diff), if (kotlin.math.abs(diff) <= RepeaterStats.BALANCED_DB) Ui.GREEN else Ui.ORANGE)
+            ).apply { setPadding(dp(16), 0, dp(16), 0) })
+            outDash.addView(Ui.text(this, when {
+                kotlin.math.abs(diff) <= RepeaterStats.BALANCED_DB -> tr("Łącze zrównoważone – repeater słyszy nas podobnie jak my jego.", "Balanced link – the repeater hears us about as well as we hear it.")
+                diff > 0 -> tr("Repeater słyszy nas wyraźnie słabiej niż my jego – warto sprawdzić jego odbiór (antena, kabel, zakłócenia).", "The repeater hears us clearly worse than we hear it – check its reception (antenna, cable, interference).")
+                else -> tr("My słyszymy repeater wyraźnie słabiej niż on nas – możliwa słaba moc nadawania albo antena.", "We hear the repeater clearly worse than it hears us – possibly low TX power or antenna.")
+            }, 11f, Ui.MUTED).apply { setPadding(dp(16), dp(6), dp(16), 0) })
+        }
+
+        if (r.topUsers.isNotEmpty()) {
+            outDash.addView(Ui.section(this, tr("Top mapujący", "Top mappers"), tr("pomiary", "measurements")))
+            val max = r.topUsers.first().second.coerceAtLeast(1)
+            r.topUsers.forEachIndexed { i, (name, count) ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(16), dp(6), dp(16), dp(6))
+                }
+                row.addView(Ui.text(this, "${i + 1}", 13f, Ui.MUTED, bold = true), LinearLayout.LayoutParams(dp(20), ViewGroup.LayoutParams.WRAP_CONTENT))
+                row.addView(Ui.text(this, name, 14f, Ui.TEXT).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                val bar = FrameLayout(this).apply { background = Ui.rounded(this@MainActivity, Ui.PANEL, 3) }
+                bar.addView(View(this).apply { background = Ui.rounded(this@MainActivity, Ui.GREEN, 3) },
+                    FrameLayout.LayoutParams(dp(70) * count / max, ViewGroup.LayoutParams.MATCH_PARENT))
+                row.addView(bar, LinearLayout.LayoutParams(dp(70), dp(5)).apply { marginStart = dp(8); marginEnd = dp(10) })
+                row.addView(Ui.text(this, "$count", 14f, Ui.TEXT, bold = true).apply { gravity = Gravity.END },
+                    LinearLayout.LayoutParams(dp(44), ViewGroup.LayoutParams.WRAP_CONTENT))
+                outDash.addView(row)
+            }
+        }
+        outDash.addView(Ui.text(this, tr("Ostatnia odpowiedź: ${TimeFormat.dayMonth(r.lastMs)} ${TimeFormat.hm(r.lastMs)} · liczone jak „Statystyki repeatera” na stronie mappera.",
+            "Last response: ${TimeFormat.dayMonth(r.lastMs)} ${TimeFormat.hm(r.lastMs)} · computed like “Repeater stats” on the mapper website."), 10f, Ui.MUTED)
+            .apply { setPadding(dp(16), dp(12), dp(16), 0) })
+    }
+
+    /** Kafelek statystyki: etykieta, duża wartość, dopisek. */
+    private fun statTile(label: String, value: String, sub: String, color: Int = Ui.TEXT): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = Ui.rounded(this@MainActivity, Ui.PANEL, 10)
+        setPadding(dp(9), dp(8), dp(9), dp(8))
+        addView(Ui.text(this@MainActivity, label.uppercase(), 9f, Ui.MUTED).apply { letterSpacing = 0.06f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+        addView(Ui.text(this@MainActivity, value, 17f, color, bold = true).apply { maxLines = 1 })
+        addView(Ui.text(this@MainActivity, sub.ifEmpty { " " }, 10f, Ui.MUTED).apply { maxLines = 2 })
+    }
+
+    /** „+4,2 dB” (przecinek po polsku). */
+    private fun db(v: Double): String = (if (v > 0) "+" else "") + num(v) + " dB"
+
+    private fun num(v: Double): String {
+        val s = String.format(java.util.Locale.US, "%.1f", v)
+        return if (L10n.en) s else s.replace('.', ',')
+    }
+
+    private fun measureWord(n: Int) = when {
+        n == 1 -> "pomiar"
+        n % 10 in 2..4 && n % 100 !in 12..14 -> "pomiary"
+        else -> "pomiarów"
+    }
+
+    /**
+     * Rejestr przestojów: niedostępność MQTT1/MQTT2 i przerwy w wysyłaniu pakietów przez Observera.
+     * U góry suma czasu i dostępność w wybranym okresie, niżej historia (30 dni, przerwy ≥ 1 min).
+     */
+    private fun renderOutages(periodMs: Long, periodLabel: String, now: Long) {
+        val cfg = Config(this)
+        val list = Outages.all(this, now)
         if (!cfg.monitoringEnabled) {
             outDash.addView(infoItem(tr("Monitoring zatrzymany – przestoje nie są teraz rejestrowane.", "Monitoring stopped – outages are not being recorded now."), Ui.ORANGE))
         }
 
-        outDash.addView(Ui.section(this, tr("Ostatnie 24 h", "Last 24 h")))
-        val day = 24 * 3600_000L
-        val summary = OutageKind.values().map { k ->
-            val total = OutageEngine.totalInWindow(list, k, now, day)
-            val count = list.count { it.kind == k && (it.endMs ?: now) > now - day }
+        outDash.addView(Ui.section(this, tr("Podsumowanie", "Summary"), tr("ostatnie $periodLabel", "last $periodLabel")))
+        val totals = OutageKind.values().map { k -> k to OutageEngine.totalInWindow(list, k, now, periodMs) }
+        val summary = totals.map { (k, total) ->
             val ongoing = list.any { it.kind == k && it.endMs == null }
-            Ui.kv(
-                this, k.label,
-                if (count == 0) "0" else "$count × ${duration(total)}",
-                when {
-                    ongoing -> Ui.RED
-                    count > 0 -> Ui.ORANGE
-                    else -> Ui.GREEN
-                }
-            )
+            Ui.kv(this, k.label, if (total == 0L) "0 min" else duration(total), when {
+                ongoing -> Ui.RED
+                total > 0L -> Ui.ORANGE
+                else -> Ui.GREEN
+            })
         }
-        outDash.addView(Ui.kvRow(this, summary[0], summary[1], summary[2]).apply { setPadding(dp(16), dp(4), dp(16), dp(8)) })
+        outDash.addView(Ui.kvRow(this, summary[0], summary[1], summary[2]).apply { setPadding(dp(16), dp(4), dp(16), 0) })
+        val avail = totals.map { (k, total) ->
+            val pct = 100.0 * (1.0 - total.toDouble() / periodMs).coerceIn(0.0, 1.0)
+            val txt = if (total == 0L) "100%" else num(minOf(pct, 99.9)) + "%"
+            Ui.kv(this, k.label, txt, if (total == 0L) Ui.GREEN else Ui.ORANGE)
+        }
+        outDash.addView(Ui.text(this, tr("Dostępność w okresie", "Uptime in period"), 11f, Ui.MUTED).apply { setPadding(dp(16), dp(10), dp(16), 0) })
+        outDash.addView(Ui.kvRow(this, avail[0], avail[1], avail[2]).apply { setPadding(dp(16), dp(2), dp(16), dp(4)) })
 
+        outDash.addView(Ui.section(this, tr("Historia", "History"), tr("30 dni · przerwy ≥ 1 min", "30 days · gaps ≥ 1 min")))
         if (list.isEmpty()) {
             outDash.addView(infoItem(tr("Brak przestojów. Każda niedostępność MQTT1/MQTT2 i przerwa w pakietach Observera (dłuższa niż próg czerwony) trafi tutaj.",
                 "No outages. Every MQTT1/MQTT2 unavailability and gap in Observer packets (longer than the red threshold) will show up here."), Ui.MUTED))
@@ -951,13 +1210,12 @@ class MainActivity : Activity() {
         for (o in list) {
             val d = Instant.ofEpochMilli(o.startMs).atZone(ZoneId.systemDefault()).toLocalDate()
             if (first || d != lastDay) {
-                outDash.addView(Ui.section(this, dayLabel(d)))
+                outDash.addView(Ui.section(this, dayLabel(d), color = Ui.MUTED))
                 lastDay = d
                 first = false
             } else outDash.addView(Ui.divider(this))
             outDash.addView(outageItem(o, now))
         }
-        outDash.addView(Ui.spacer(this, 16))
     }
 
     private fun outageItem(o: Outage, now: Long): View {
@@ -1056,8 +1314,10 @@ class MainActivity : Activity() {
         const val TAB_OBSERVER = 0
         const val TAB_MAP = 1
         const val TAB_LOG = 2
-        const val TAB_OUTAGES = 3
+        const val TAB_STATS = 3
         const val TAB_SETTINGS = 4
+        /** Dociągnięcie nowych punktów mappera najwcześniej po tylu ms (wejście na kartę). */
+        private const val STATS_RELOAD_MS = 10 * 60_000L
 
         /** Ikona mapowania na widgecie: otwiera aplikację na karcie Log z kartą mapowania. */
         fun mappingIntent(ctx: Context): PendingIntent =
