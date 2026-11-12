@@ -378,10 +378,6 @@ class MainActivity : Activity() {
         if (r is FetchResult.Fail) {
             box.addView(Ui.text(this, "API niedostępne: ${r.reason}", 11f, Ui.RED).apply { setPadding(0, dp(6), 0, 0) })
         }
-        if (health == Health.BAD) {
-            box.addView(Ui.text(this, "Powiadomienie po ${cfg.alertDelayMin} min · ponownie co ${cfg.alertCooldownMin} min", 11f, Ui.MUTED)
-                .apply { setPadding(0, dp(4), 0, 0) })
-        }
         return box
     }
 
@@ -772,7 +768,7 @@ class MainActivity : Activity() {
         addView(sourceHeader(src, null))
         addView(Ui.text(
             this@MainActivity,
-            if (noData) "Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada)." else "Brak mapowań w wybranym zakresie.",
+            if (noData) "Brak danych mapowania (API mapera ${MapperApi.host(Config(this@MainActivity).mapperApi)} nie odpowiada)." else "Brak mapowań w wybranym zakresie.",
             13f, Ui.MUTED
         ))
     }

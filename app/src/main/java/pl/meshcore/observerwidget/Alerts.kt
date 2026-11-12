@@ -40,8 +40,9 @@ object Alerts {
         Outages.record(ctx, OutageKind.OBSERVER, assessment.observer, nowMs, startHintMs = observerLast)
         Outages.record(ctx, OutageKind.MQTT1, data.mqtt1Health, nowMs)
         Outages.record(ctx, OutageKind.MQTT2, data.mqtt2Health, nowMs)
-        val delayMs = cfg.alertDelayMin * 60_000L
-        val cooldownMs = cfg.alertCooldownMin * 60_000L
+        // Bez opóźnienia i cooldownu: alarm = natychmiastowy PUSH (raz na epizod awarii).
+        val delayMs = 0L
+        val cooldownMs = 0L
 
         // Alarm Observera: natychmiast po przekroczeniu progu czerwonego (bez opóźnienia).
         // Gdy żaden API nie odpowiada, też alarmujemy – wtedy w treści podajemy oba.

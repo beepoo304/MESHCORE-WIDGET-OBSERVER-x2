@@ -37,8 +37,7 @@ class SettingsScreen(private val activity: Activity) {
     private lateinit var alertM2: Switch
     private lateinit var alertMap: Switch
     private lateinit var lockScreen: Switch
-    private lateinit var delayField: EditText
-    private lateinit var cooldownField: EditText
+    private lateinit var mapperField: EditText
 
     /** Zawartość ekranu (bez przewijania – opakowuje ją wywołujący). */
     fun build(): View {
@@ -61,6 +60,9 @@ class SettingsScreen(private val activity: Activity) {
         m2Field = field(root, "MQTT2 / drugie API", cfg.mqtt2Host)
         fbField = field(root, "API zapasowe (nagłówek, gdy oba powyższe nie działają)", cfg.fallbackHost)
         timeoutField = field(root, "Timeout zapytań (s, 2–30)", cfg.timeoutSec.toString(), InputType.TYPE_CLASS_NUMBER)
+        mapperField = field(root, "API mapera (action=points / repeaters)", cfg.mapperApi,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        root.addView(note("Zmiana API mapera czyści dotychczasowy stan mapowania."))
         root.addView(Ui.outlineButton(activity, "Test API · sprawdź i pobierz nazwę Observera") { testApi() })
         testResult = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -86,7 +88,7 @@ class SettingsScreen(private val activity: Activity) {
         }
         root.addView(intervalBar)
         updateIntervalLabel()
-        root.addView(note("Licznik odświeżania i wiek pakietu zmieniają się co sekundę dzięki usłudze w tle (stałe, ciche powiadomienie „Monitoring Observera aktywny”). Przy wyłączonym ekranie dane nadal są pobierane co interwał, a widget dorysowuje się w ciągu sekundy po włączeniu ekranu (częściowy wakelock chroni pętlę przed Doze)."))
+        root.addView(note("Dane pobierane są co interwał, także przy wyłączonym ekranie."))
         val thresholds = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(16), 0, dp(16), 0)
@@ -94,23 +96,16 @@ class SettingsScreen(private val activity: Activity) {
         orangeField = field(thresholds, "Pomarańczowy po (min)", cfg.orangeMin.toString(), InputType.TYPE_CLASS_NUMBER, inRow = true)
         redField = field(thresholds, "Czerwony po (min)", cfg.redMin.toString(), InputType.TYPE_CLASS_NUMBER, inRow = true)
         root.addView(thresholds)
-        root.addView(note("Progi koloru czasu ostatniego pakietu (zielony → pomarańczowy → czerwony)."))
+        root.addView(note("Kolor wieku ostatniego pakietu: zielony → pomarańczowy → czerwony."))
 
         root.addView(Ui.section(activity, "Powiadomienia"))
         alertObs = toggle(root, "Observer: brak pakietów (niezależnie od MQTT)", cfg.alertObserver)
         alertM1 = toggle(root, "MQTT1: brak połączenia / brak odbioru", cfg.alertMqtt1)
         alertM2 = toggle(root, "MQTT2: brak połączenia / brak odbioru", cfg.alertMqtt2)
-        alertMap = toggle(root, "Mapowanie: ktoś mapuje w zasięgu Observera (pingi mapera meshcoresouth.pl)", cfg.alertMapping)
-        val timing = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(16), 0, dp(16), 0)
-        }
-        delayField = field(timing, "Opóźnienie alarmu (min)", cfg.alertDelayMin.toString(), InputType.TYPE_CLASS_NUMBER, inRow = true)
-        cooldownField = field(timing, "Cooldown (min, min. 1)", cfg.alertCooldownMin.toString(), InputType.TYPE_CLASS_NUMBER, inRow = true)
-        root.addView(timing)
-        root.addView(note("Alarm Observera jest niezależny od statusów MQTT i przychodzi natychmiast po przekroczeniu czerwonego progu, a w treści podaje nazwę API, z którego przyszły dane (gdy oba nie odpowiadają – obie). Opóźnienie (min) dotyczy tylko alarmów MQTT; 0 = natychmiast. Powiadomienie o mapowaniu przychodzi z nickiem mapującego raz na sesję (i przy zmianie mapującego), gdy ktoś mapuje w zasięgu Observera – dane z publicznej bazy mapera meshcoresouth.pl."))
+        alertMap = toggle(root, "Mapowanie: ktoś mapuje w zasięgu Observera", cfg.alertMapping)
+        root.addView(note("Alarm przychodzi od razu (PUSH), mapowanie – raz na sesję z nickiem."))
         lockScreen = toggle(root, "Dane Observera w powiadomieniu (ekran blokady)", cfg.lockScreenStatus)
-        root.addView(note("Stałe powiadomienie pokazuje status, pakiety/h i wiek ostatniego pakietu obu brokerów, a po rozwinięciu także MAPPER z kierunkiem i odległością. Treść odświeża się po każdym pobraniu danych. Jeśli nie widać go na ekranie blokady: Ustawienia telefonu → Powiadomienia → Ekran blokady → pokazuj wszystkie (także ciche)."))
+        root.addView(note("Brak na ekranie blokady? Włącz w telefonie pokazywanie cichych powiadomień."))
 
         info = Ui.text(activity, "", 14f, Ui.GREEN).apply { setPadding(dp(16), dp(12), dp(16), 0) }
         root.addView(info)
@@ -140,16 +135,6 @@ class SettingsScreen(private val activity: Activity) {
             timeoutField.error = "Timeout musi wynosić 2–30 s"
             return
         }
-        val delay = delayField.text.toString().toIntOrNull()
-        if (delay == null || delay !in 0..1440) {
-            delayField.error = "Opóźnienie musi wynosić 0–1440 min"
-            return
-        }
-        val cooldown = cooldownField.text.toString().toIntOrNull()
-        if (cooldown == null || cooldown !in 1..10080) {
-            cooldownField.error = "Cooldown musi wynosić 1–10080 min"
-            return
-        }
         val hosts = listOf(m1Field.text.toString().trim(), m2Field.text.toString().trim())
         val fallback = fbField.text.toString().trim()
         val validHost: (String) -> Boolean = { host ->
@@ -161,8 +146,14 @@ class SettingsScreen(private val activity: Activity) {
             info.text = "Podaj poprawne adresy hostów API (bez spacji)"
             return
         }
-        // Zmiana Observera = nowy ID w bazie mapera: reset stanu mapowania i pozycji RPT.
-        if (id != cfg.observerId) {
+        val mapperRaw = mapperField.text.toString().trim()
+        if (mapperRaw.isNotEmpty() && !validHost(mapperRaw)) {
+            mapperField.error = "Podaj poprawny adres API mapera (bez spacji)"
+            return
+        }
+        val mapperApi = MapperApi.normalizeBase(mapperRaw)
+        // Zmiana Observera albo API mapera = inna baza/ID: reset stanu mapowania i pozycji RPT.
+        if (id != cfg.observerId || mapperApi != MapperApi.normalizeBase(cfg.mapperApi)) {
             MapperMonitor.reset(activity.applicationContext)
             cfg.mapperLastId = 0L
             cfg.mapperRev = 0
@@ -172,6 +163,8 @@ class SettingsScreen(private val activity: Activity) {
             cfg.mapperObsPosAtMs = 0L
         }
         cfg.observerId = id
+        cfg.mapperApi = mapperApi
+        MapperApi.base = mapperApi
         cfg.mqtt1Host = hosts[0]
         cfg.mqtt2Host = hosts[1]
         cfg.fallbackHost = fallback
@@ -184,8 +177,6 @@ class SettingsScreen(private val activity: Activity) {
         cfg.alertMqtt2 = alertM2.isChecked
         cfg.alertMapping = alertMap.isChecked
         cfg.lockScreenStatus = lockScreen.isChecked
-        cfg.alertDelayMin = delay
-        cfg.alertCooldownMin = cooldown
         Alerts.ensureChannels(activity)
         RefreshWorker.sync(activity)
         info.setTextColor(Ui.GREEN)
@@ -203,11 +194,13 @@ class SettingsScreen(private val activity: Activity) {
         val hosts = listOf(m1Field.text.toString(), m2Field.text.toString(), fbField.text.toString())
             .filter { it.isNotBlank() }
         val timeout = (timeoutField.text.toString().toIntOrNull() ?: 6).coerceIn(2, 30) * 1000
+        val mapperApi = MapperApi.normalizeBase(mapperField.text.toString())
         testResult.removeAllViews()
-        testResult.addView(Ui.text(activity, "Sprawdzam ${hosts.size} ${if (hosts.size == 1) "host" else "hosty"}…", 14f, Ui.SUBTEXT)
+        testResult.addView(Ui.text(activity, "Sprawdzam ${hosts.size} ${if (hosts.size == 1) "host" else "hosty"} i API mapera…", 14f, Ui.SUBTEXT)
             .apply { setPadding(0, dp(8), 0, dp(4)) })
         thread {
             val results = hosts.map { h -> Triple(h, ObserverApi.fetch(h, id, timeout), MqttStatusApi.fetch(h, timeout)) }
+            val mapperOk = MapperApi.check(mapperApi, timeout)
             activity.runOnUiThread {
                 testResult.removeAllViews()
                 for ((h, obs, mqtt) in results) {
@@ -233,6 +226,17 @@ class SettingsScreen(private val activity: Activity) {
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                     ).apply { topMargin = dp(8) })
                 }
+                val box = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = Ui.rounded(activity, Ui.PANEL, 8)
+                    setPadding(dp(12), dp(8), dp(12), dp(8))
+                }
+                box.addView(Ui.text(activity, "Mapper · ${MapperApi.host(mapperApi)}", 14f, Ui.TEXT, bold = true))
+                box.addView(Ui.text(activity, if (mapperOk) "✓ API mapera: odpowiada" else "✕ API mapera: brak odpowiedzi lub błąd",
+                    13f, if (mapperOk) Ui.GREEN else Ui.RED))
+                testResult.addView(box, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(8) })
             }
         }
     }

@@ -176,6 +176,7 @@ object MapperMonitor {
 
     fun poll(ctx: Context, observerId: String, timeoutMs: Int, rptIds: Map<Int, String> = emptyMap()): PollResult {
         val config = Config(ctx.applicationContext)
+        MapperApi.configure(ctx)
         refreshKeepMs(ctx.applicationContext)
         ensureLoaded(ctx.applicationContext)
         val short = MapperApi.shortId(observerId)

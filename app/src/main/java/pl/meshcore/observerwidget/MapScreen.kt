@@ -102,6 +102,7 @@ class MapScreen(
         loading = true
         thread(name = "mapper-history") {
             val timeout = 15_000
+            MapperApi.configure(activity)
             val reps = MapperHistory.repeaters(timeout)
             val hist = MapperHistory.fetch(timeout)
             repeaters = reps

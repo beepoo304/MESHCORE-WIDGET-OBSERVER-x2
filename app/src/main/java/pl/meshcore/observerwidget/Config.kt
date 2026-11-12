@@ -65,16 +65,6 @@ class Config(context: Context) {
         get() = prefs.getBoolean("alert_mqtt2", false)
         set(v) = prefs.edit().putBoolean("alert_mqtt2", v).apply()
 
-    /** Stan awarii musi trwać tyle minut, zanim wyślemy powiadomienie. */
-    var alertDelayMin: Int
-        get() = prefs.getInt("alert_delay_min", 2).coerceAtLeast(0)
-        set(v) = prefs.edit().putInt("alert_delay_min", v.coerceAtLeast(0)).apply()
-
-    /** Minimalny odstęp między kolejnymi powiadomieniami tego samego rodzaju. */
-    var alertCooldownMin: Int
-        get() = prefs.getInt("alert_cooldown_min", 15).coerceAtLeast(1)
-        set(v) = prefs.edit().putInt("alert_cooldown_min", v.coerceAtLeast(1)).apply()
-
     /** Powiadomienie, gdy ktoś mapuje w zasięgu Observera (pingi mapera MeshCore South). */
     var alertMapping: Boolean
         get() = prefs.getBoolean("alert_mapping", true)
@@ -90,6 +80,11 @@ class Config(context: Context) {
      * Wartość w ms; −1 = na stałe (bez czyszczenia). Domyślnie 24 h (jak dotychczas).
      * Wybór w zakładce LOG: 24 h / 48 h / 3 dni / 10 dni / 30 dni / na stałe.
      */
+    /** Adres API mapera (action=points / action=repeaters). Zmiana = reset stanu mapowania. */
+    var mapperApi: String
+        get() = prefs.getString("mapper_api", null)?.takeIf { it.isNotBlank() } ?: MapperApi.DEFAULT_BASE
+        set(v) = prefs.edit().putString("mapper_api", MapperApi.normalizeBase(v)).apply()
+
     var mapperKeepMs: Long
         get() = prefs.getLong("mapper_keep_ms", MapperApi.KEEP_MS)
         set(v) = prefs.edit().putLong("mapper_keep_ms", v).apply()

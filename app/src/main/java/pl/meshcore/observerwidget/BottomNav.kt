@@ -59,9 +59,10 @@ class BottomNav(ctx: Context, private val onSelect: (Int) -> Unit) : LinearLayou
             textSize = 11f
             gravity = Gravity.CENTER
             isSingleLine = true
-            setPadding(0, Ui.dp(ctx, 3), 0, 0)
+            includeFontPadding = false
+            setPadding(0, Ui.dp(ctx, 4), 0, 0)
         }
-        cell.addView(label)
+        cell.addView(label, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         addView(cell, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         tabs.add(Tab(pill, iv, label, badge))
         paint(index, false)
@@ -74,6 +75,24 @@ class BottomNav(ctx: Context, private val onSelect: (Int) -> Unit) : LinearLayou
         t.label.setTextColor(color)
         t.label.setTypeface(null, if (on) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
         t.pill.background = if (on) Ui.rounded(context, Ui.PILL, 15) else null
+    }
+
+    /**
+     * Jedna wspólna wielkość podpisów: największa (≤ 11 sp), przy której najdłuższy podpis
+     * (pogrubiony, jak na aktywnej karcie) mieści się w kolumnie z marginesem – równy pasek.
+     */
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w <= 0 || tabs.isEmpty()) return
+        val avail = w / tabs.size - Ui.dp(context, 6)
+        val paint = android.text.TextPaint().apply { typeface = android.graphics.Typeface.DEFAULT_BOLD }
+        var size = 11f
+        while (size > 8f) {
+            paint.textSize = android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, size, resources.displayMetrics)
+            if (tabs.all { paint.measureText(it.label.text.toString()) <= avail }) break
+            size -= 0.5f
+        }
+        post { tabs.forEach { it.label.textSize = size } }
     }
 
     fun select(i: Int) {

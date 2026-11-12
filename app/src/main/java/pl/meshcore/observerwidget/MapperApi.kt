@@ -31,6 +31,38 @@ object MapperApi {
     /** Jak długo trzymamy pomiary w pamięci (na potrzeby panelu w aplikacji – karta widać 24 h). */
     const val KEEP_MS = 24 * 60 * 60_000L
 
+    /** Domyślny adres API mapera (zmienialny w Ustawieniach: „API mapera”). */
+    const val DEFAULT_BASE = "https://meshcoresouth.pl/mapper/api.php"
+
+    /** Adres API używany przez [poll] i [repeatersBody]; ustawiany z konfiguracji przez [configure]. */
+    @Volatile var base: String = DEFAULT_BASE
+
+    fun configure(ctx: android.content.Context) {
+        base = normalizeBase(Config(ctx.applicationContext).mapperApi)
+    }
+
+    /** Adres z Ustawień: bez spacji, bez „?…”, domyślnie https://; pusty = [DEFAULT_BASE]. */
+    fun normalizeBase(raw: String?): String {
+        var s = raw?.trim().orEmpty().substringBefore('?').substringBefore('#')
+        if (s.isEmpty()) return DEFAULT_BASE
+        if (!s.startsWith("http://") && !s.startsWith("https://")) s = "https://$s"
+        return s
+    }
+
+    fun pointsUrl(base: String, sinceId: Long, limit: Int = 20000): String =
+        "${normalizeBase(base)}?action=points&since=$sinceId&limit=$limit"
+
+    fun repeatersUrl(base: String): String = "${normalizeBase(base)}?action=repeaters"
+
+    /** Host do wyświetlania w tekstach (np. meshcoresouth.pl). */
+    fun host(base: String): String = try { URL(normalizeBase(base)).host } catch (_: Exception) { base }
+
+    /** Test API: true, gdy action=repeaters odpowiada JSON-em z ok:true. */
+    fun check(base: String, timeoutMs: Int): Boolean {
+        val body = get(repeatersUrl(base), timeoutMs) ?: return false
+        return try { JSONObject(body).optBoolean("ok", false) } catch (_: Exception) { false }
+    }
+
     data class PollResult(
         /** Najnowszy ID punktu w bazie (globalnie) – punkt startowy kolejnego odpytania. */
         val lastId: Long,
@@ -44,7 +76,7 @@ object MapperApi {
     /** Odpytanie o punkty nowsze niż [sinceId]; null, gdy serwer nie odpowie lub odpowie błędem. */
     fun poll(sinceId: Long, timeoutMs: Int): PollResult? {
         val url = try {
-            URL("https://meshcoresouth.pl/mapper/api.php?action=points&since=$sinceId&limit=20000")
+            URL(pointsUrl(base, sinceId))
         } catch (_: Exception) {
             return null
         }
@@ -137,30 +169,24 @@ object MapperApi {
     }
 
     /** Surowa odpowiedź action=repeaters (jedno pobranie wystarcza dla Observera i wszystkich RPT). null = błąd. */
-    fun repeatersBody(timeoutMs: Int): String? {
-        val url = try {
-            URL("https://meshcoresouth.pl/mapper/api.php?action=repeaters")
-        } catch (_: Exception) {
-            return null
+    fun repeatersBody(timeoutMs: Int): String? = get(repeatersUrl(base), timeoutMs)
+
+    private fun get(url: String, timeoutMs: Int): String? = try {
+        val c = URL(url).openConnection() as HttpURLConnection
+        try {
+            c.connectTimeout = timeoutMs.coerceAtLeast(1)
+            c.readTimeout = timeoutMs.coerceAtLeast(1)
+            c.requestMethod = "GET"
+            c.useCaches = false
+            c.setRequestProperty("Accept", "application/json")
+            if (c.responseCode !in 200..299) null else c.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            c.disconnect()
         }
-        return try {
-            val c = url.openConnection() as HttpURLConnection
-            try {
-                c.connectTimeout = timeoutMs.coerceAtLeast(1)
-                c.readTimeout = timeoutMs.coerceAtLeast(1)
-                c.requestMethod = "GET"
-                c.useCaches = false
-                c.setRequestProperty("Accept", "application/json")
-                val code = c.responseCode
-                if (code !in 200..299) null else c.inputStream.bufferedReader().use { it.readText() }
-            } finally {
-                c.disconnect()
-            }
-        } catch (_: IOException) {
-            null
-        } catch (_: Exception) {
-            null
-        }
+    } catch (_: IOException) {
+        null
+    } catch (_: Exception) {
+        null
     }
 
     /** Wynik szukania pozycji: found=false = serwer odpowiedział, ale nie ma takiego repeatera w bazie. */

@@ -15,7 +15,7 @@ Dokumentacja jest celowo szczegółowa, żeby kolejne osoby (i asystenci AI) mog
    - obok MAPPER **strzałka kierunku w kolorze mapującego** (obracana o azymut, 8 kierunków) z odległością mapera od Observera, np. `→ 1,6km`; 1. mapujący = czerwony, 2. = żółty, 3. = fioletowy, kolejni dalej z palety (`WidgetRenderer.MAPPER_ARROW_COLORS`, cyklicznie); przy kilku mapujących strzałka zmienia mapera co 3 s w kółko (ostatni ping każdego z nich), aż mapowanie zniknie (3 min po ostatnim pingu); pozycja Observera z `api.php?action=repeaters` (cache w prefs, tydzień),
    - klik na MAPPER otwiera aplikację z **kompaktową kartą mapowania (2–3 linijki)**, widoczną 24 h od ostatniego pinga: tytuł + klucz (pierwsze 4 znaki + ikonka kopiowania pełnego), mapujący z kierunkiem (16 sektorów) i odległością od Observera (nick w kolorze strzałki tego mapera na widgecie), liczba pingów + czas ostatniego pinga + SNR u Observera,
    - **powiadomienie PUSH** z nickiem mapującego (raz na sesję i przy zmianie mapującego).
-3. **Powiadomienia PUSH o awariach**: Observer nie wysyła pakietów (natychmiast po przekroczeniu czerwonego progu), MQTT1/MQTT2 martwe (z opóźnieniem i cooldownem).
+3. **Powiadomienia PUSH o awariach**: Observer nie wysyła pakietów (natychmiast po przekroczeniu czerwonego progu), MQTT1/MQTT2 martwe — wszystkie od razu (od 2.8.0 bez opóźnienia i cooldownu; raz na epizod awarii).
 4. **Aplikacja** (styl M2, dolny pasek 5 kart): **Observer** (stan Observera z hashem do skopiowania, brokery MQTT z oceną GOOD/BAD, odliczaniem i „Odśwież teraz”, „Mapują teraz”, start/stop monitoringu, moje repeatery) · **Mapa** · **Log** (osobny wpis dla każdego mapującego: kierunek i odległość, klucz mapującego, statystyki z datą; retencja śladu) · **Przestoje** (niedostępność MQTT1/MQTT2 i przerwy w pakietach Observera ≥ 1 min, 30 dni, podsumowanie 24 h, reset) · **Ustawienia**.
 
 ## Źródła danych (API)
@@ -24,7 +24,7 @@ Dokumentacja jest celowo szczegółowa, żeby kolejne osoby (i asystenci AI) mog
 |---|---|---|
 | Dane Observera | `GET {host}/api/observers/{hash64}` | hosty: MQTT1/MQTT2 + fallback (CoreScope). Odpowiedź: `id, name, model, firmware, packet_count, packetsLastHour, last_packet_at, last_seen`. ID rozróżnia wielkość liter — próbujemy WIELKIMI, przy 404 małymi. |
 | Zdrowie brokera | `GET {host}/api/mqtt/status` | `sampleAt`, `watchdogLastTickUnix`, `sources[]` (connected, lastPacketUnix). GOOD/BAD/UNKNOWN. |
-| **Mapowanie** | `GET https://meshcoresouth.pl/mapper/api.php?action=points&since={id}&limit=20000` | Publiczna baza mapera. Patrz niżej. |
+| **Mapowanie** | `GET {API mapera}?action=points&since={id}&limit=20000` | Publiczna baza mapera; adres w Ustawieniach → „API mapera” (domyślnie `https://meshcoresouth.pl/mapper/api.php`). Patrz niżej. |
 
 ### Format danych mapera (kluczowe!)
 
@@ -53,7 +53,7 @@ Sesja mapowania = pomiary połączone przerwami ≤ 5 min (`MapperApi.SESSION_GA
 - `ObserverRefresh.kt` — serce: `collect()` pobiera równolegle oba brokery + statusy + fallback + mapera; `RefreshGate` chroni przed nakładaniem cykli; harmonogram wyrównany do pełnej sekundy; zamraża wiek pakietu brokera przy padnięciu jego API; `lastData` w pamięci.
 - `MonitorService.kt` — usługa pierwszoplanowa (specialUse): tyka co 1 s (tylko rysowanie przy włączonym ekranie; pobieranie danych zawsze), częściowy wakelock 10 min odnawiany w pętli. AlarmManager tylko rezerwa, WorkManager co 15 min zapas.
 - `WidgetRenderer.kt` — RemoteViews; warianty compact/full; słowo MAPPER w nagłówku widgetu pulsuje kolorem (`mappingIconOn`, okres 2 s: 1,2 s jasny / 0,8 s przyciemniony niebieski).
-- `Alerts.kt` + `AlertEngine.kt` — powiadomienia: Observer (natychmiast), MQTT1/2 (opóźnienie + cooldown, automat stanów w `AlertEngine`), mapowanie (`evaluateMapping`: raz na sesję i przy zmianie mapującego; stan w prefs `alert_state`, klucze `map_user`/`map_last`). Kanały: `alerts_observer/mqtt1/mqtt2/mapping`, ID 1001–1004.
+- `Alerts.kt` + `AlertEngine.kt` — powiadomienia: Observer (natychmiast), MQTT1/2 (od 2.8.0 natychmiast: delay = cooldown = 0, automat stanów w `AlertEngine`), mapowanie (`evaluateMapping`: raz na sesję i przy zmianie mapującego; stan w prefs `alert_state`, klucze `map_user`/`map_last`). Kanały: `alerts_observer/mqtt1/mqtt2/mapping`, ID 1001–1004.
 - `MainActivity.kt` — aplikacja z dolnym paskiem (`BottomNav.kt`): karty Observer / Mapa / Log / Przestoje / Ustawienia, ticker 1 s przerysowuje widoczną kartę; `mappingIntent()` = PendingIntent z `EXTRA_SHOW_MAPPING` (klik MAPPER na widgecie → karta Log).
 - `Ui.kt` — wspólna paleta i elementy w stylu M2 (pasek tytułu, sekcje, wiersze, przyciski-pigułki, kafelki wartości). Tylko aplikacja – widget ma własne kolory.
 - `Outages.kt` — rejestr przestojów: `OutageEngine` (czysta logika: BAD otwiera, GOOD zamyka, UNKNOWN bez zmian, < 1 min pomijane, retencja 30 dni / 300 wpisów) + `Outages` (SharedPreferences „outages”, zapis z `Alerts.evaluate`, zamknięcie przy zatrzymaniu monitoringu).
@@ -90,6 +90,7 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 
 ## Historia wersji
 
+- **2.8.0** — równe kolumny dolnego paska z etykietami dopasowanymi do szerokości; krótsze opisy w Ustawieniach; nowe pole „API mapera” (`MapperApi.base`, `Config.mapperApi`; zmiana czyści stan mapowania; Test API sprawdza też mapera); usunięte „Opóźnienie alarmu” i „Cooldown” — alarm przychodzi od razu jako PUSH; Mapa: górne pola nie wychodzą poza ekran (długie nazwy skracane „…”). Widget bez zmian.
 - **2.7.0** — nowa karta Przestoje (MQTT1, MQTT2, Observer; reset); Log: osobny wpis dla każdego mapującego, kierunek i odległość w osobnej linii, klucz mapującego z kopiowaniem (albo „brak klucza”), statystyki z datą; hash Observera (6 znaków + kopiowanie) pod nazwą; odliczanie i „Odśwież teraz” przy brokerach; wynik Test API od razu pod przyciskiem. Widget bez zmian.
 - **2.6.0** — nowy wygląd aplikacji w stylu M2 (bez zmian w widgecie i funkcjach): dolny pasek z 4 kartami Observer · Mapa · Log · Ustawienia; stan brokerów MQTT (GOOD/BAD/UNKNOWN, zapasowy) połączony z kartą Observer; sekcja „Mapują teraz” (wiersz na każdego mapującego, OBSERVER/RPTn bez nazw repeaterów); Log pogrupowany dniami; Ustawienia w sekcjach; na mapie minimalna legenda SNR i szare kafelki jak w mapperze; czerwona kropka na karcie Observer przy brokerze BAD.
 - **2.5.4** — MAP: znaczniki pomiarów na trasie sesji jak w mapperze — kółko na każdym pomiarze mapującego (promień 6 px przy odpowiedzi, kolor = SNR najlepszego słyszanego RPT, ciemna obwódka; 4 px szare bez odpowiedzi), klik = czas + RPT + SNR. Dalej bez przerywanej linii trasy.
