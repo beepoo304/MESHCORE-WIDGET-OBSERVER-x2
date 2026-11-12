@@ -114,6 +114,7 @@ class SettingsScreen(private val activity: Activity) {
         info = Ui.text(activity, "", 14f, Ui.GREEN).apply { setPadding(dp(16), dp(12), dp(16), 0) }
         root.addView(info)
         root.addView(Ui.button(activity, tr("Zapisz i odśwież widget", "Save and refresh widget"), primary = true) { save() })
+        root.addView(footer())
         return root
     }
 
@@ -241,6 +242,39 @@ class SettingsScreen(private val activity: Activity) {
                 testResult.addView(box, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = dp(8) })
+            }
+        }
+    }
+
+    /** Stopka jak w M2: wersja, kod na GitHub i wsparcie na Ko-fi (linki otwierają przeglądarkę). */
+    private fun footer(): View {
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(20), dp(16), dp(8))
+        }
+        box.addView(View(activity).apply { setBackgroundColor(Ui.LINE) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+        val (name, code) = runCatching {
+            val pi = activity.packageManager.getPackageInfo(activity.packageName, 0)
+            pi.versionName to (if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode else @Suppress("DEPRECATION") pi.versionCode.toLong())
+        }.getOrDefault("?" to 0L)
+        box.addView(Ui.text(activity, tr("Observer Widget · wersja $name ($code)", "Observer Widget · version $name ($code)"), 12f, Ui.MUTED)
+            .apply { setPadding(0, dp(16), 0, 0) })
+        box.addView(Ui.text(activity, tr("Open source na GitHub", "Open source on GitHub"), 12f, Ui.MUTED)
+            .apply { setPadding(0, dp(8), 0, 0) })
+        box.addView(link("github.com/beepoo304/MESHCORE-WIDGET-OBSERVER-x2", "https://github.com/beepoo304/MESHCORE-WIDGET-OBSERVER-x2"))
+        box.addView(Ui.text(activity, tr("Wesprzyj na Ko-fi", "Support on Ko-fi"), 12f, Ui.MUTED)
+            .apply { setPadding(0, dp(10), 0, 0) })
+        box.addView(link("ko-fi.com/beepoo304", "https://ko-fi.com/beepoo304"))
+        return box
+    }
+
+    private fun link(label: String, url: String) = Ui.text(activity, label, 13f, Ui.GREEN).apply {
+        setPadding(0, dp(4), 0, dp(4))
+        isClickable = true
+        setOnClickListener {
+            runCatching {
+                activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
             }
         }
     }

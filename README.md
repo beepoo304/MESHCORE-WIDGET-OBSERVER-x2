@@ -67,7 +67,7 @@ Layouty widgetu: `res/layout/widget_observer.xml` (full) i `widget_observer_comp
 
 ## CI/CD (`.github/workflows/`)
 
-- Build: testy jednostkowe (Robolectric) → `assembleDebug`/`assembleRelease` → APK do artefaktu i **GitHub Release „latest”** (stały klucz podpisu w repo, więc APK instaluje się jako aktualizacja). Stabilny link do najnowszego APK: `https://github.com/beepoo304/observerWidget_newPLan/releases/latest/download/ObserverWidget.apk`
+- Build: testy jednostkowe (Robolectric) → `assembleDebug`/`assembleRelease` → APK do artefaktu i **GitHub Release „latest”** (stały klucz podpisu w repo, więc APK instaluje się jako aktualizacja). Stabilny link do najnowszego APK: `https://github.com/beepoo304/MESHCORE-WIDGET-OBSERVER-x2/releases/latest/download/ObserverWidget.apk`
 - Dodatkowy job: test widgetu na prawdziwym emulatorze (AppWidgetHost, API 34).
 
 ## Jak zbudować
@@ -90,6 +90,7 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 
 ## Historia wersji
 
+- **2.9.1** — stopka Ustawień jak w M2: wersja aplikacji, link do kodu na GitHub (repo przemianowane na MESHCORE-WIDGET-OBSERVER-x2) i do Ko-fi.
 - **2.9.0** — język aplikacji PL / EN (Ustawienia → „Język · Language”; `L10n` + `tr(pl, en)`, `Config.appLanguage`, `ObserverApp` wczytuje język przy starcie procesu) — po angielsku także powiadomienia PUSH, stałe powiadomienie i mapa; widget zostaje po polsku. Dwuklik widgetu otwiera aplikację na karcie Ustawienia (z dolnym paskiem i powrotem). Progi „Pomarańczowy/Czerwony (min)” wyrównane. Dolny pasek: równe odstępy między podpisami.
 - **2.8.0** — równe kolumny dolnego paska z etykietami dopasowanymi do szerokości; krótsze opisy w Ustawieniach; nowe pole „API mapera” (`MapperApi.base`, `Config.mapperApi`; zmiana czyści stan mapowania; Test API sprawdza też mapera); usunięte „Opóźnienie alarmu” i „Cooldown” — alarm przychodzi od razu jako PUSH; Mapa: górne pola nie wychodzą poza ekran (długie nazwy skracane „…”). Widget bez zmian.
 - **2.7.0** — nowa karta Przestoje (MQTT1, MQTT2, Observer; reset); Log: osobny wpis dla każdego mapującego, kierunek i odległość w osobnej linii, klucz mapującego z kopiowaniem (albo „brak klucza”), statystyki z datą; hash Observera (6 znaków + kopiowanie) pod nazwą; odliczanie i „Odśwież teraz” przy brokerach; wynik Test API od razu pod przyciskiem. Widget bez zmian.
