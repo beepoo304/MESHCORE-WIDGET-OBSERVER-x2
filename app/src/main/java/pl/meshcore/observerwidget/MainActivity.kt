@@ -2,43 +2,59 @@ package pl.meshcore.observerwidget
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlarmManager
 import android.app.AlertDialog
 import android.app.PendingIntent
-import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.net.Uri
-import android.provider.Settings
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
-import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
-import kotlinx.coroutines.runBlocking
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
-/** Panel główny (OBSERVER): dashboard z kartami brokerów i mapowania, Settings jako osobny ekran. */
+/**
+ * Aplikacja z dolnym paskiem (styl M2): Observer · Mapa · Log · Ustawienia.
+ * Observer = stan Observera, brokery MQTT, „Mapują teraz”, moje repeatery; Log = karty mapowań;
+ * Mapa = [MapScreen]; Ustawienia = [SettingsScreen]. Dane i logika bez zmian – tylko prezentacja.
+ */
 class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val busy = AtomicBoolean(false)
+    private lateinit var nav: BottomNav
+    private lateinit var content: FrameLayout
+    private lateinit var obsScroll: ScrollView
     private lateinit var dash: LinearLayout
+    private lateinit var logScroll: ScrollView
+    private lateinit var logDash: LinearLayout
+    private var settingsScroll: ScrollView? = null
+    private var mapScreen: MapScreen? = null
+    private var tab = -1
     private var dashboardData: WidgetData? = null
-    /** Otwarto z ikony mapowania na widgecie – pokaż/rozwiń kartę mapowania. */
+    /** Otwarto z ikony mapowania na widgecie – karta Log z kartą mapowania Observera. */
     private var showMapping = false
 
     /** Co sekundę: przerysowanie z danych w pamięci; pobieranie tylko gdy licznik dojdzie do zera. */
@@ -63,53 +79,37 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(M2_BG)
+            setBackgroundColor(Ui.BG)
         }
-        val toolbar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            setBackgroundColor(M2_BG)
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-        }
-        toolbar.addView(TextView(this).apply {
-            text = "Observer"
-            textSize = 18f
-            setTextColor(M2_ACCENT)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            letterSpacing = 0.04f
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        fun navBtn(label: String, onClick: () -> Unit) = Button(this).apply {
-            text = label
-            setTextColor(M2_TEXT)
-            setAllCaps(false)
-            textSize = 13f
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFF1E2225.toInt())
-                setStroke(dp(1), 0xFF2A3033.toInt())
-                cornerRadius = dp(10).toFloat()
-            }
-            setPadding(dp(12), dp(6), dp(12), dp(6))
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                marginStart = dp(8)
-            }
-            setOnClickListener { onClick() }
-        }
-        toolbar.addView(navBtn("Mapa") { startActivity(Intent(this@MainActivity, MapTrackActivity::class.java)) })
-        toolbar.addView(navBtn("Ustawienia") { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) })
-        root.addView(toolbar)
-
-        dash = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(16))
-        }
-        // Panel przewijany w pionie: karta mapowania może być wysoka i nie może zasłaniać kart brokerów.
-        root.addView(ScrollView(this).apply { addView(dash) }, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
+        content = FrameLayout(this)
+        dash = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        obsScroll = ScrollView(this).apply { addView(dash) }
+        logDash = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        logScroll = ScrollView(this).apply { addView(logDash) }
+        content.addView(obsScroll, matchParent())
+        content.addView(logScroll, matchParent())
+        root.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        nav = BottomNav(this) { selectTab(it) }
+        root.addView(nav)
         setContentView(root)
         root.applySystemBarsPadding()
-        refresh()
+
+        selectTab(if (showMapping) TAB_LOG else savedInstanceState?.getInt(STATE_TAB, TAB_OBSERVER) ?: TAB_OBSERVER)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_SHOW_MAPPING, false)) {
+            showMapping = true
+            selectTab(TAB_LOG)
+            logScroll.scrollTo(0, 0)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(STATE_TAB, tab)
     }
 
     override fun onResume() {
@@ -127,327 +127,400 @@ class MainActivity : Activity() {
         handler.removeCallbacks(ticker)
     }
 
+    override fun onDestroy() {
+        mapScreen?.destroy()
+        super.onDestroy()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        val map = mapScreen
+        when {
+            tab == TAB_MAP && map != null && map.canGoBack() -> map.goBack()
+            tab != TAB_OBSERVER -> selectTab(TAB_OBSERVER)
+            else -> super.onBackPressed()
+        }
+    }
+
+    /** Przełączenie karty dolnego paska: widoczny jest tylko jeden ekran. */
+    private fun selectTab(t: Int) {
+        if (t == tab) {
+            // Ponowne dotknięcie aktywnej karty: przewinięcie na górę.
+            when (t) {
+                TAB_OBSERVER -> obsScroll.smoothScrollTo(0, 0)
+                TAB_LOG -> logScroll.smoothScrollTo(0, 0)
+                TAB_SETTINGS -> settingsScroll?.smoothScrollTo(0, 0)
+            }
+            return
+        }
+        tab = t
+        nav.select(t)
+        hideKeyboard()
+        obsScroll.visibility = if (t == TAB_OBSERVER) View.VISIBLE else View.GONE
+        logScroll.visibility = if (t == TAB_LOG) View.VISIBLE else View.GONE
+        if (t == TAB_MAP) {
+            val map = mapScreen ?: MapScreen(this, embedded = true) { selectTab(TAB_OBSERVER) }.also {
+                mapScreen = it
+                content.addView(it.view, matchParent())
+            }
+            map.view.visibility = View.VISIBLE
+            map.onShown()
+        } else mapScreen?.view?.visibility = View.GONE
+        // Ustawienia budowane od nowa przy każdym wejściu: pola pokazują bieżący zapis.
+        settingsScroll?.let { content.removeView(it) }
+        settingsScroll = null
+        if (t == TAB_SETTINGS) {
+            val sv = ScrollView(this).apply { addView(SettingsScreen(this@MainActivity).build()) }
+            settingsScroll = sv
+            content.addView(sv, matchParent())
+        }
+        refresh()
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        content.windowToken?.let { imm.hideSoftInputFromWindow(it, 0) }
+    }
+
     private fun refresh() {
         if (logSpinnerOpen) return
         if (!Config(this).monitoringEnabled) {
-            renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this))
+            render(dashboardData ?: ObserverRefresh.emptyData(this))
             return
         }
         if (!MonitorService.isRunning && ObserverRefresh.isRefreshDue()) ObserverRefresh.refreshAll(applicationContext)
-        renderDashboard(ObserverRefresh.latest() ?: ObserverRefresh.emptyData(this, busy = true))
+        render(ObserverRefresh.latest() ?: ObserverRefresh.emptyData(this, busy = true))
     }
+
+    /** Przerysowanie tylko widocznej karty (Mapa i Ustawienia mają własny stan). */
+    private fun render(d: WidgetData) {
+        dashboardData = d
+        nav.setBadge(TAB_OBSERVER, d.configured && (d.mqtt1Health == Health.BAD || d.mqtt2Health == Health.BAD))
+        when (tab) {
+            TAB_OBSERVER -> renderDashboard(d)
+            TAB_LOG -> renderLog(d)
+        }
+    }
+
+    private fun rerender() = render(dashboardData ?: ObserverRefresh.emptyData(this))
+
+    // ───────────────────────────── OBSERVER ─────────────────────────────
 
     private fun renderDashboard(d: WidgetData) {
         dash.removeAllViews()
-        dashboardData = d
         val cfg = Config(this)
         val wallClockNow = System.currentTimeMillis()
         val now = if (cfg.monitoringEnabled) wallClockNow
             else cfg.monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
+        // Stan LIVE/IDLE liczony tym samym (po zatrzymaniu zamrożonym) czasem co wiek pakietów.
+        val live = if (d.configured) WidgetRenderer.liveState(d, if (now > 0L) now else wallClockNow) else null
 
-        dash.addView(sectionTitle("Obserwator"))
-        dash.addView(monitoringControl())
-        dash.addView(smallSpacer())
+        dash.addView(Ui.topBar(
+            this, "OBSERVER",
+            if (cfg.monitoringEnabled) "Monitoring aktywny · co ${cfg.intervalSec} s" else "Monitoring zatrzymany",
+            live?.let { Ui.text(this, it.first, 13f, appColor(it.second), bold = true).apply { letterSpacing = 0.05f } }
+        ))
         if (!cfg.monitoringEnabled) {
-            dash.addView(infoCard("Monitoring zatrzymany. Dane nie są odświeżane, alarmy są wyłączone.", M2_ORANGE))
-            dash.addView(spacer())
+            dash.addView(infoItem("Monitoring zatrzymany. Dane nie są odświeżane, alarmy są wyłączone.", Ui.ORANGE))
         }
         if (!d.configured) {
-            dash.addView(infoCard("Wejdź w Settings i wpisz pełny hash Observera (64 znaki).", M2_ORANGE))
+            dash.addView(infoItem("Wejdź w Ustawienia i wpisz pełny hash Observera (64 znaki).", Ui.ORANGE))
+            dash.addView(Ui.button(this, "Otwórz Ustawienia", primary = true) { selectTab(TAB_SETTINGS) })
+            dash.addView(monitoringControl())
             return
         }
-        dash.addView(observerCard(d))
-        dash.addView(spacer())
 
-        dash.addView(sectionTitle("Brokery MQTT"))
-        dash.addView(brokerCard("MQTT1", d.mqtt1Host, d.broker1, d, now, d.mqtt1Health))
-        dash.addView(smallSpacer())
-        dash.addView(brokerCard("MQTT2", d.mqtt2Host, d.broker2, d, now, d.mqtt2Health))
-        dash.addView(spacer())
+        mappingNowSection(d, cfg, wallClockNow)
 
-        mappingHistorySection(d, cfg, wallClockNow)?.let { sec ->
-            dash.addView(sectionTitle("Historia mapowań"))
-            dash.addView(sec)
-            dash.addView(spacer())
+        dash.addView(Ui.section(this, "Observer"))
+        dash.addView(observerItem(d))
+
+        val ok = listOf(d.mqtt1Health, d.mqtt2Health).count { it == Health.GOOD }
+        dash.addView(Ui.section(this, "Brokery MQTT", "$ok / 2 OK", rightColor = when (ok) {
+            2 -> Ui.GREEN
+            1 -> Ui.ORANGE
+            else -> Ui.RED
+        }))
+        dash.addView(brokerItem("MQTT1", d.mqtt1Host, d.broker1, now, d.mqtt1Health, d.broker1FrozenAgeMs, cfg))
+        dash.addView(Ui.divider(this))
+        dash.addView(brokerItem("MQTT2", d.mqtt2Host, d.broker2, now, d.mqtt2Health, d.broker2FrozenAgeMs, cfg))
+        if (cfg.fallbackHost.isNotBlank()) {
+            dash.addView(Ui.divider(this))
+            dash.addView(fallbackItem(cfg, d.fallbackHealth))
         }
+        dash.addView(thresholdLegend(cfg))
 
-        dash.addView(sectionTitle("Moje repeatery"))
-        dash.addView(rptSection())
-        dash.addView(spacer())
+        dash.addView(monitoringControl())
+
+        dash.addView(Ui.section(this, "Moje repeatery", "RPT1–RPT${Config.RPT_SLOTS}"))
+        dash.addView(rptSection(d))
 
         val fetchedAt = d.observer?.fetchedAtMs ?: now
-        dash.addView(line(
-            "Pobrano ${DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(fetchedAt).atZone(ZoneId.systemDefault()))} · następne za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), cfg.monitoringEnabled)}",
-            12f, M2_MUTED
-        ))
+        dash.addView(Ui.text(
+            this,
+            "Pobrano ${timeOf(fetchedAt)} · następne za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), cfg.monitoringEnabled)}",
+            11f, Ui.MUTED
+        ).apply { setPadding(dp(16), dp(12), dp(16), dp(16)) })
     }
 
-    private fun observerCard(d: WidgetData): View {
-        val box = cardBox()
+    private fun observerItem(d: WidgetData): View {
+        val box = Ui.item(this)
         val obs = d.observer
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-        }
-        header.addView(TextView(this).apply {
-            text = obs?.name ?: "—"
-            textSize = 20f
-            setTextColor(M2_TEXT)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        val live = WidgetRenderer.liveState(d, System.currentTimeMillis())
-        header.addView(line(live.first, 12f, live.second, bold = true))
-        box.addView(header)
-        box.addView(line(
-            listOfNotNull(obs?.model, obs?.firmware?.let { "fw $it" }, d.observerId.take(4).uppercase()).joinToString("  ·  "),
-            13f, M2_SUBTEXT
-        ))
-        obs?.let { box.addView(line("Dane z: ${Config.displayHost(it.host)}", 12f, M2_MUTED)) }
+        box.addView(Ui.text(this, obs?.name ?: "—", 17f, Ui.TEXT, bold = true))
+        box.addView(Ui.text(
+            this,
+            listOfNotNull(obs?.model, obs?.firmware?.let { "fw $it" }, d.observerId.take(4).uppercase()).joinToString(" · "),
+            12f, Ui.SUBTEXT
+        ).apply { setPadding(0, dp(3), 0, 0) })
+        obs?.let { box.addView(Ui.text(this, "Dane z: ${Config.displayHost(it.host)}", 11f, Ui.MUTED)) }
         return box
     }
 
-    private fun mappingHistorySection(d: WidgetData, cfg: Config, wallClockNow: Long): View? {
-        val keepMs = cfg.mapperKeepEffectiveMs
-        val logCards = mutableListOf<Pair<Long, View>>()
-        val mapping = d.mapping
-        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
-        if (showMapping || (mapping != null && (mapping.active || mappingRecent))) {
-            logCards.add((mapping?.pings?.lastOrNull()?.tsMs ?: 0L) to mappingCard(
-                mapping, wallClockNow,
-                tag = "OBSERVER", tagColor = WidgetRenderer.MAPPER_BLUE,
-                where = "${d.mappingObserverName()} ${d.observerId.take(4)}…",
-                fullKey = cfg.observerId, keyLabel = "Observera", snrLabel = "SNR u Obs"
-            ))
+    /**
+     * Wiersz brokera: stan serwera (GOOD/BAD/UNKNOWN) + to, co Observer do niego wysłał
+     * (pakiety/h, razem, wiek ostatniego pakietu) – te same wartości co na widgecie.
+     */
+    private fun brokerItem(
+        title: String, host: String, r: FetchResult?, now: Long, health: Health, frozenAgeMs: Long?, cfg: Config
+    ): View {
+        val box = Ui.item(this)
+        val head = SpannableStringBuilder().apply {
+            append(title)
+            setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(ForegroundColorSpan(healthColor(health)), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(RelativeSizeSpan(1.2f), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val s = length
+            append("  ${Config.displayHost(host)}")
+            setSpan(ForegroundColorSpan(Ui.MUTED), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        for (r in d.rptMappings.sortedBy { it.slot }) {
-            val st = r.state
-            val recent = st.pings.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
-            if (!st.active && !recent) continue
-            if (cfg.rptId(r.slot).isBlank()) continue
-            logCards.add((st.pings.lastOrNull()?.tsMs ?: 0L) to mappingCard(
-                st, wallClockNow,
-                tag = r.label, tagColor = WidgetRenderer.ORANGE,
-                where = "${r.name ?: "Repeater"} · ${r.shortId.take(4).uppercase()}…",
-                fullKey = null, keyLabel = r.label, snrLabel = "SNR u RPT"
-            ))
+        box.addView(Ui.row(this, Ui.text(this, head, 13f, Ui.TEXT).apply {
+            isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+        }, healthLabel(health)))
+
+        val t = WidgetRenderer.brokerTexts(r, compact = false, frozenAgeMs = frozenAgeMs, orangeMin = cfg.orangeMin, redMin = cfg.redMin)
+        val (lastText, lastColor) = when {
+            r is FetchResult.Ok && r.snapshot.lastPacketMs != null -> {
+                val age = r.snapshot.lastPacketAgeMs(now) ?: 0L
+                TimeFormat.packetAge(age) to levelColor(Status.level(age, cfg.orangeMin, cfg.redMin))
+            }
+            t.lastLevel != null -> (t.last ?: "—") to levelColor(t.lastLevel)
+            else -> (t.last ?: "—") to Ui.MUTED
         }
-        if (logCards.isEmpty()) return null
-        val wrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        wrap.addView(mappingHeader(cfg))
-        wrap.addView(smallSpacer())
-        for ((_, card) in logCards.sortedByDescending { it.first }) {
-            wrap.addView(card)
-            wrap.addView(smallSpacer())
+        val valueColor = if (r is FetchResult.Ok) Ui.TEXT else Ui.MUTED
+        box.addView(Ui.kvRow(
+            this,
+            Ui.kv(this, "Pakiety / h", t.hour, valueColor),
+            Ui.kv(this, "Razem", t.total, valueColor),
+            Ui.kv(this, "Ostatni", lastText, lastColor)
+        ))
+        if (r is FetchResult.Fail) {
+            box.addView(Ui.text(this, "API niedostępne: ${r.reason}", 11f, Ui.RED).apply { setPadding(0, dp(6), 0, 0) })
         }
-        return wrap
+        if (health == Health.BAD) {
+            box.addView(Ui.text(this, "Powiadomienie po ${cfg.alertDelayMin} min · ponownie co ${cfg.alertCooldownMin} min", 11f, Ui.MUTED)
+                .apply { setPadding(0, dp(4), 0, 0) })
+        }
+        return box
     }
 
-    private fun mappingHeader(cfg: Config): View {
+    private fun fallbackItem(cfg: Config, health: Health): View {
+        val box = Ui.item(this)
+        val head = SpannableStringBuilder().apply {
+            append("Zapasowy")
+            setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            append("  ${Config.displayHost(cfg.fallbackHost)}")
+        }
+        box.addView(Ui.row(this, Ui.text(this, head, 13f, Ui.MUTED).apply {
+            isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+        }, healthLabel(health)))
+        box.addView(Ui.text(this, "Używany, gdy oba brokery milczą", 11f, Ui.MUTED))
+        return box
+    }
+
+    /** Legenda kolorów wieku ostatniego pakietu (progi z bieżących ustawień). */
+    private fun thresholdLegend(cfg: Config): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(dp(2), 0, dp(2), 0)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(4))
         }
-        row.addView(TextView(this).apply {
-            text = "Zakres"
-            textSize = 13f
-            setTextColor(M2_MUTED)
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        val spinner = object : Spinner(this) {
-            override fun performClick(): Boolean {
-                logSpinnerOpen = true
-                return super.performClick()
-            }
-        }.apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, keepOptions.map { it.second }).also {
-                it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-            val idx = keepOptions.indexOfFirst { it.first == cfg.mapperKeepMs }
-            if (idx >= 0) setSelection(idx)
-            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onNothingSelected(parent: AdapterView<*>?) { logSpinnerOpen = false }
-                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                    logSpinnerOpen = false
-                    val value = keepOptions[position].first
-                    if (value == cfg.mapperKeepMs) return
-                    cfg.mapperKeepMs = value
-                    MapperMonitor.refreshKeepMs(this@MainActivity)
-                    refresh()
-                }
-            }
+        fun entry(color: Int, label: String) {
+            row.addView(Ui.dot(this, color))
+            row.addView(Ui.text(this, label, 11f, Ui.MUTED).apply { setPadding(0, 0, dp(12), 0) })
         }
-        row.addView(spinner)
+        entry(Ui.GREEN, "< ${cfg.orangeMin} min")
+        entry(Ui.ORANGE, "${cfg.orangeMin}–${cfg.redMin} min")
+        entry(Ui.RED, "> ${cfg.redMin} min")
         return row
     }
 
-    private fun cardBox() = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setBackgroundResource(R.drawable.card_outline)
-        setPadding(dp(14), dp(12), dp(14), dp(12))
+    private fun healthLabel(h: Health) = Ui.text(this, when (h) {
+        Health.GOOD -> "● Good"
+        Health.BAD -> "● Bad"
+        Health.UNKNOWN -> "● Unknown"
+    }, 12f, healthColor(h), bold = true)
+
+    private fun healthColor(h: Health) = when (h) {
+        Health.GOOD -> Ui.GREEN
+        Health.BAD -> Ui.RED
+        Health.UNKNOWN -> Ui.MUTED
     }
 
-    private fun infoCard(text: String, color: Int): View = cardBox().apply {
-        addView(line(text, 14f, color))
+    private fun levelColor(l: Level?) = when (l) {
+        Level.GREEN -> Ui.GREEN
+        Level.ORANGE -> Ui.ORANGE
+        Level.RED -> Ui.RED
+        else -> Ui.MUTED
     }
 
-    private fun sectionTitle(text: String) = TextView(this).apply {
-        this.text = text
-        textSize = 12f
-        setTextColor(M2_MUTED)
-        setTypeface(null, android.graphics.Typeface.BOLD)
-        letterSpacing = 0.06f
-        setPadding(dp(2), dp(4), 0, dp(6))
+    /** Kolor statusu z [WidgetRenderer] (paleta widgetu) → odpowiednik z palety aplikacji. */
+    private fun appColor(widgetColor: Int) = when (widgetColor) {
+        WidgetRenderer.GREEN -> Ui.GREEN
+        WidgetRenderer.ORANGE -> Ui.ORANGE
+        WidgetRenderer.RED -> Ui.RED
+        else -> Ui.MUTED
+    }
+
+    private fun infoItem(text: String, color: Int): View = Ui.item(this).apply {
+        addView(Ui.text(this@MainActivity, text, 13f, color))
     }
 
     /**
-     * Karta mapowania — KOMPAKTOWA (2–3 linijki), widoczna 24 h od ostatniego pinga:
-     * tytuł z kluczem i ikoną kopiowania, mapujący z kierunkiem i odległością
-     * (nick w kolorze strzałki tego mapera na widgecie), statystyki pingów.
+     * „Mapują teraz”: osobny wiersz na każdego mapującego przy Observerze (niebieski) i przy
+     * moich RPT (pomarańczowy), bez nazw repeaterów. Kolor nicku = kolor strzałki tego mapera
+     * na widgecie. Sekcji nie ma, gdy nikt nie mapuje. Dotknięcie → karta Log.
      */
-    private fun mappingCard(
-        m: MappingState?, nowMs: Long, tag: String, tagColor: Int, where: String,
-        fullKey: String?, keyLabel: String, snrLabel: String
+    private fun mappingNowSection(d: WidgetData, cfg: Config, nowMs: Long) {
+        val rows = mutableListOf<View>()
+        fun addSource(tag: String, rpt: Boolean, m: MappingState?) {
+            if (m?.active != true) return
+            val latest = latestPerMapper(m)
+            if (latest.isEmpty()) {
+                rows.add(mappingNowRow(tag, rpt, m.mapperNicks.joinToString(", ").ifBlank { "?" }, Ui.TEXT, null, m, nowMs))
+            } else latest.forEachIndexed { i, p ->
+                val nick = MapperMonitor.nick(p.userId) ?: m.mapperNicks.getOrNull(i) ?: "user ${p.userId}"
+                rows.add(mappingNowRow(tag, rpt, nick, WidgetRenderer.mapperArrowColor(i), p, m, nowMs))
+            }
+        }
+        addSource("OBSERVER", false, d.mapping)
+        for (r in d.rptMappings.sortedBy { it.slot }) {
+            if (cfg.rptId(r.slot).isBlank()) continue
+            addSource(r.label, true, r.state)
+        }
+        if (rows.isEmpty()) return
+        dash.addView(Ui.section(this, "Mapują teraz", "${rows.size} · dotknij → Log", color = Ui.BLUE))
+        rows.forEachIndexed { i, v ->
+            if (i > 0) dash.addView(Ui.divider(this))
+            dash.addView(v)
+        }
+    }
+
+    private fun mappingNowRow(
+        tag: String, rpt: Boolean, nick: String, nickColor: Int, p: MapperPing?, m: MappingState, nowMs: Long
     ): View {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.card_outline)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+        val box = Ui.item(this).apply {
+            isClickable = true
+            setOnClickListener { selectTab(TAB_LOG) }
         }
-        val active = m?.active == true
-        // Pulsująca kropka w tytule: sekunda jasna, sekunda przyciemniona (jak ikona na widgecie).
-        val pulseOn = WidgetRenderer.mappingIconOn(nowMs)
-        val titleColor = when {
-            active && pulseOn -> tagColor
-            active -> if (tagColor == WidgetRenderer.ORANGE) WidgetRenderer.rptIconColor(false) else 0xFF1F6E8F.toInt()
-            else -> WidgetRenderer.GRAY
+        val tagColor = if (rpt) Ui.ORANGE else Ui.BLUE
+        val title = SpannableStringBuilder().apply {
+            append("● ")
+            // Pulsująca kropka: jak ikona mapowania na widgecie.
+            setSpan(ForegroundColorSpan(if (WidgetRenderer.mappingIconOn(nowMs)) tagColor else dim(tagColor)), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            var s = length
+            append(tag)
+            setSpan(ForegroundColorSpan(tagColor), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(StyleSpan(Typeface.BOLD), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            append("  ")
+            s = length
+            append(nick)
+            setSpan(ForegroundColorSpan(nickColor), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(StyleSpan(Typeface.BOLD), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        // Linia 1: znacznik źródła (OBSERVER niebieski / RPTn pomarańczowy) + stan mapowania.
-        val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        titleRow.addView(tagView(tag, tagColor))
-        titleRow.addView(line(if (active) "● MAPOWANIE W TOKU" else "OSTATNIE MAPOWANIE", 17f, titleColor, bold = true).apply {
-            setPadding(dp(8), dp(2), 0, dp(2))
-        })
-        box.addView(titleRow)
-        // Linia 2: nazwa (Observer / repeater z bazy mapera) + klucz (4 znaki); kopiowanie tylko klucza Observera.
-        val whereRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        whereRow.addView(line(where, 15f, Color.WHITE).apply {
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        if (fullKey != null) whereRow.addView(copyButton(fullKey, keyLabel))
-        box.addView(whereRow)
-        if (m == null) {
-            box.addView(line("Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada).", 15f, WidgetRenderer.GRAY))
-            return box
+        val lastTs = (if (p != null) p.tsMs else m.pings.lastOrNull()?.tsMs)
+        box.addView(Ui.row(this, Ui.text(this, title, 14f, Ui.TEXT), lastTs?.let { Ui.text(this, ago(it, nowMs), 11f, Ui.MUTED) }))
+
+        val details = SpannableStringBuilder()
+        if (p != null && p.lat != null && p.lon != null && m.observerLat != null && m.observerLon != null) {
+            val bearing = GeoMath.bearingDeg(m.observerLat, m.observerLon, p.lat, p.lon)
+            val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, p.lat, p.lon)
+            details.append("➤")
+            details.setSpan(ForegroundColorSpan(nickColor), 0, details.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            details.append(" ${GeoMath.compassLabel(bearing)} · ${GeoMath.km(dist)} · ")
         }
-        // Linia 2: mapujący z kierunkiem i odległością od Observera (pozycja RPT z bazy mapera);
-        // nick w kolorze strzałki danego mapera na widgecie (czerwony/żółty/fioletowy/…).
-        val latest = m.pings
+        val mine = if (p != null) m.pings.filter { it.userId == p.userId } else m.pings
+        details.append(pingCount(mine.size))
+        mine.lastOrNull()?.observerSnrDb?.let { details.append(" · SNR ${fmtPl(it)} dB") }
+        box.addView(Ui.text(this, details, 12f, Ui.MUTED).apply { setPadding(0, dp(2), 0, 0) })
+        return box
+    }
+
+    /** Ostatni ping każdego mapującego z GPS, wg userId – kolejność = kolor strzałki na widgecie. */
+    private fun latestPerMapper(m: MappingState): List<MapperPing> =
+        m.pings
             .filter { it.lat != null && it.lon != null }
             .groupBy { it.userId }
             .map { (_, v) -> v.last() }
             .sortedBy { it.userId }
-        if (latest.isNotEmpty() || m.mapperNicks.isNotEmpty()) {
-            val sb = android.text.SpannableStringBuilder()
-            sb.append(if (active) "Mapuje: " else "Mapował: ")
-            if (latest.isEmpty()) {
-                sb.append(m.mapperNicks.joinToString(", "))
-            } else latest.forEachIndexed { i, p ->
-                val nick = MapperMonitor.nick(p.userId) ?: m.mapperNicks.getOrNull(i) ?: "user ${p.userId}"
-                val nStart = sb.length
-                sb.append(nick)
-                sb.setSpan(
-                    android.text.style.ForegroundColorSpan(WidgetRenderer.mapperArrowColor(i)),
-                    nStart, sb.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                if (m.observerLat != null && m.observerLon != null) {
-                    val bearing = GeoMath.bearingDeg(m.observerLat, m.observerLon, p.lat!!, p.lon!!)
-                    val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, p.lat, p.lon!!)
-                    sb.append(" ${GeoMath.km(dist)} ${GeoMath.compassLabel(bearing)}")
-                }
-                if (i < latest.size - 1) sb.append(" · ")
+
+    private fun monitoringControl(): View {
+        val enabled = Config(this).monitoringEnabled
+        return Ui.button(this, if (enabled) "Zatrzymaj monitoring" else "Uruchom monitoring", primary = !enabled) {
+            val wasEnabled = Config(this@MainActivity).monitoringEnabled
+            if (wasEnabled) {
+                ObserverRefresh.stop(this@MainActivity)
+                handler.removeCallbacks(ticker)
+            } else {
+                ObserverRefresh.start(this@MainActivity)
+                MonitorService.ensureChannel(this@MainActivity)
+                handler.removeCallbacks(ticker)
+                handler.post(ticker)
             }
-            box.addView(TextView(this).apply {
-                text = sb; textSize = 15f; setTextColor(Color.WHITE)
-                setPadding(0, dp(2), 0, dp(2))
-            })
-        }
-        // Linia 3: liczba pingów, ostatni ping, SNR u Observera (jeśli jest).
-        val pings = m.pings
-        if (pings.isNotEmpty()) {
-            val last = pings.last()
-            val parts = mutableListOf(
-                "Pingów: ${pings.size}",
-                "ostatni ping: ${timeOf(last.tsMs)} · ${TimeFormat.dayMonth(last.tsMs)}"
-            )
-            last.observerSnrDb?.let { parts.add("$snrLabel: ${fmt(it)} dB") }
-            box.addView(line(parts.joinToString(" · "), 15f, Color.WHITE))
-        }
-        return box
-    }
-
-    /** Kolorowy znacznik źródła: OBSERVER / RPT1… (czarny napis na kolorowym tle). */
-    private fun tagView(text: String, color: Int, alpha: Float = 1f) = TextView(this).apply {
-        this.text = text
-        textSize = 12f
-        setTextColor(Color.BLACK)
-        setTypeface(null, android.graphics.Typeface.BOLD)
-        setPadding(dp(8), dp(3), dp(8), dp(3))
-        background = android.graphics.drawable.GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = dp(6).toFloat()
-        }
-        this.alpha = alpha
-    }
-
-    private fun copyButton(fullKey: String, label: String) = android.widget.ImageView(this).apply {
-        setImageResource(R.drawable.ic_copy)
-        setPadding(dp(8), dp(4), dp(4), dp(4))
-        contentDescription = "Kopiuj pełny klucz $label"
-        setOnClickListener {
-            val key = CopyKeyReceiver.fullKey(fullKey) ?: fullKey.takeIf { it.isNotBlank() } ?: return@setOnClickListener
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("Klucz $label", key))
-            android.widget.Toast.makeText(this@MainActivity, "Skopiowano klucz $label", android.widget.Toast.LENGTH_SHORT).show()
+            rerender()
         }
     }
 
     /**
-     * Sekcja „MOJE REPEATERY” na karcie OBSERVER: do 5 kluczy repeaterów (RPT1–RPT5).
+     * Sekcja „MOJE REPEATERY”: do 5 kluczy repeaterów (RPT1–RPT5).
      * Klucz wpisuje się w okienku (panel przerysowuje się co sekundę, więc pole tekstowe
      * na stałe by znikało). Pod kluczem: czy repeater jest w bazie mappera i jego nazwa.
      */
-    private fun rptSection(): View {
+    private fun rptSection(d: WidgetData): View {
         val cfg = Config(this)
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.card_outline)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-        box.addView(line("Mapowanie przy RPT1–RPT5 (pomarańczowe) na widgecie i powiadomieniach.", 12f, M2_MUTED))
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val ids = cfg.rptIds
+        var first = true
         for ((slot, id) in ids) {
-            val row = LinearLayout(this).apply {
+            if (!first) box.addView(Ui.divider(this))
+            first = false
+            val item = Ui.item(this)
+            val info = MapperMonitor.rptInfo(MapperApi.shortId(id))
+            val mapped = d.rptMappings.firstOrNull { it.slot == slot }?.state?.active == true
+            item.addView(Ui.row(
+                this,
+                Ui.text(this, "RPT$slot" + (info?.name?.let { " · $it" } ?: ""), 14f, Ui.TEXT, bold = true).apply {
+                    isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+                },
+                if (mapped) Ui.text(this, "● mapuje", 11f, Ui.ORANGE, bold = true) else null
+            ))
+            val keyRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, dp(8), 0, 0)
+                gravity = Gravity.CENTER_VERTICAL
             }
-            row.addView(tagView("RPT$slot", WidgetRenderer.ORANGE))
-            row.addView(TextView(this).apply {
+            keyRow.addView(TextView(this).apply {
                 text = if (id.length > 14) "${id.take(8)}…${id.takeLast(4)}" else id
-                textSize = 14f
-                typeface = android.graphics.Typeface.MONOSPACE
-                setTextColor(0xFFDDDDDD.toInt())
-                setPadding(dp(10), dp(4), dp(4), dp(4))
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                textSize = 13f
+                typeface = Typeface.MONOSPACE
+                setTextColor(Ui.SUBTEXT)
+                setPadding(0, dp(4), dp(4), dp(4))
+                contentDescription = "Zmień klucz RPT$slot"
                 setOnClickListener { editRptDialog(slot) }
-            })
-            row.addView(copyButton(id, "RPT$slot"))
-            row.addView(TextView(this).apply {
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            keyRow.addView(copyButton(id, "RPT$slot"))
+            keyRow.addView(TextView(this).apply {
                 text = "✕"
-                textSize = 18f
-                setTextColor(Color.WHITE)
+                textSize = 17f
+                setTextColor(Ui.MUTED)
                 setPadding(dp(12), dp(2), dp(4), dp(2))
                 contentDescription = "Usuń RPT$slot"
                 setOnClickListener {
@@ -456,43 +529,47 @@ class MainActivity : Activity() {
                         .setMessage("Klucz ${id.take(8)}… zniknie z widgetu i powiadomień.")
                         .setPositiveButton("Usuń") { _, _ ->
                             Config(this@MainActivity).setRptId(slot, "")
-                            renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this@MainActivity))
+                            rerender()
                         }
                         .setNegativeButton("Anuluj", null)
                         .show()
                 }
             })
-            box.addView(row)
-            val info = MapperMonitor.rptInfo(MapperApi.shortId(id))
+            item.addView(keyRow)
             val (status, color) = when {
-                info == null -> "sprawdzam w bazie mappera…" to WidgetRenderer.GRAY
-                info.found -> "✓ w bazie mappera: „${info.name ?: "bez nazwy"}”" to WidgetRenderer.GREEN
-                info.name != null -> "„${info.name}” bez pozycji w bazie mappera – bez strzałki i odległości" to WidgetRenderer.ORANGE
-                else -> "✕ brak w bazie mappera – bez nazwy, strzałki i odległości" to WidgetRenderer.ORANGE
+                info == null -> "sprawdzam w bazie mappera…" to Ui.MUTED
+                info.found -> "✓ w bazie mappera: „${info.name ?: "bez nazwy"}”" to Ui.GREEN
+                info.name != null -> "„${info.name}” bez pozycji w bazie mappera – bez strzałki i odległości" to Ui.ORANGE
+                else -> "✕ brak w bazie mappera – bez nazwy, strzałki i odległości" to Ui.ORANGE
             }
-            box.addView(line(status, 12f, color).apply { setPadding(dp(4), dp(2), 0, 0) })
+            item.addView(Ui.text(this, status, 11f, color))
+            box.addView(item)
         }
         val free = (1..Config.RPT_SLOTS).firstOrNull { it !in ids }
         if (free != null) {
-            box.addView(TextView(this).apply {
-                text = "+ dodaj repeater (max ${Config.RPT_SLOTS})"
-                textSize = 14f
-                setTextColor(WidgetRenderer.ORANGE)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                setPadding(0, dp(12), 0, dp(4))
+            if (!first) box.addView(Ui.divider(this))
+            val item = Ui.item(this).apply {
+                isClickable = true
                 setOnClickListener { editRptDialog(free) }
-            })
+            }
+            item.addView(Ui.row(
+                this,
+                Ui.text(this, "RPT$free · wolny slot", 14f, Ui.MUTED),
+                Ui.text(this, "+ Dodaj", 14f, Ui.GREEN, bold = true)
+            ))
+            item.addView(Ui.text(this, "Mapowanie przy RPT1–RPT${Config.RPT_SLOTS} (pomarańczowe) na widgecie i w powiadomieniach.", 11f, Ui.MUTED))
+            box.addView(item)
         }
         return box
     }
 
-    /** Okienko wpisania/zmiany klucza RPTn (tylko repeater; Observer ma własne pole w Settings). */
+    /** Okienko wpisania/zmiany klucza RPTn (tylko repeater; Observer ma własne pole w Ustawieniach). */
     private fun editRptDialog(slot: Int) {
         val cfg = Config(this)
         val input = android.widget.EditText(this).apply {
             setText(cfg.rptId(slot))
             hint = "klucz repeatera (64 znaki hex)"
-            typeface = android.graphics.Typeface.MONOSPACE
+            typeface = Typeface.MONOSPACE
             textSize = 14f
             isSingleLine = true
         }
@@ -522,30 +599,226 @@ class MainActivity : Activity() {
                 }
                 cfg.setRptId(slot, id)
                 dialog.dismiss()
-                renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this))
+                rerender()
                 // Od razu sprawdzamy repeater w bazie mappera (nazwa + pozycja do strzałki).
                 thread {
                     MapperMonitor.lookupRpt(applicationContext, id, 6_000)
-                    runOnUiThread { if (!isFinishing) renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this)) }
+                    runOnUiThread { if (!isFinishing) rerender() }
                 }
             }
         }
         dialog.show()
     }
 
-    private fun WidgetData.mappingObserverName(): String =
-        observer?.name ?: "Observer"
+    // ───────────────────────────── LOG ─────────────────────────────
+
+    private fun renderLog(d: WidgetData) {
+        logDash.removeAllViews()
+        val cfg = Config(this)
+        val wallClockNow = System.currentTimeMillis()
+        logDash.addView(Ui.topBar(this, "LOG", "Kto i kiedy mapował · najnowsze na górze", keepSpinner(cfg)))
+        if (!d.configured) {
+            logDash.addView(infoItem("Wejdź w Ustawienia i wpisz pełny hash Observera (64 znaki).", Ui.ORANGE))
+            return
+        }
+        val cards = mappingCards(d, cfg, wallClockNow)
+        if (cards.isEmpty()) {
+            logDash.addView(infoItem("Brak mapowań w wybranym zakresie. Zakres przechowywania zmienisz listą u góry.", Ui.MUTED))
+            return
+        }
+        var lastDay: LocalDate? = null
+        var firstCard = true
+        for ((ts, card) in cards.sortedByDescending { it.first }) {
+            val day = if (ts > 0L) Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalDate() else null
+            if (firstCard || day != lastDay) {
+                logDash.addView(Ui.section(this, dayLabel(day)))
+                lastDay = day
+                firstCard = false
+            } else logDash.addView(Ui.divider(this))
+            logDash.addView(card)
+        }
+        logDash.addView(Ui.spacer(this, 16))
+    }
+
+    private fun dayLabel(day: LocalDate?): String {
+        if (day == null) return "Brak danych"
+        val today = LocalDate.now()
+        return when (day) {
+            today -> "Dziś"
+            today.minusDays(1) -> "Wczoraj"
+            else -> day.format(DateTimeFormatter.ofPattern("dd.MM"))
+        }
+    }
+
+    /** Karty mapowań Observera i RPT w zakresie przechowywania: (czas ostatniego pinga, karta). */
+    private fun mappingCards(d: WidgetData, cfg: Config, wallClockNow: Long): List<Pair<Long, View>> {
+        val keepMs = cfg.mapperKeepEffectiveMs
+        val logCards = mutableListOf<Pair<Long, View>>()
+        val mapping = d.mapping
+        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
+        if (showMapping || (mapping != null && (mapping.active || mappingRecent))) {
+            logCards.add((mapping?.pings?.lastOrNull()?.tsMs ?: 0L) to mappingCard(
+                mapping, wallClockNow, tag = "OBSERVER", rpt = false,
+                keyShort = d.observerId.take(4).uppercase(), fullKey = cfg.observerId,
+                keyLabel = "Observera", snrLabel = "SNR u Obs"
+            ))
+        }
+        for (r in d.rptMappings.sortedBy { it.slot }) {
+            val st = r.state
+            val recent = st.pings.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
+            if (!st.active && !recent) continue
+            if (cfg.rptId(r.slot).isBlank()) continue
+            logCards.add((st.pings.lastOrNull()?.tsMs ?: 0L) to mappingCard(
+                st, wallClockNow, tag = r.label, rpt = true,
+                keyShort = r.shortId.take(4).uppercase(), fullKey = null,
+                keyLabel = r.label, snrLabel = "SNR u RPT"
+            ))
+        }
+        return logCards
+    }
+
+    /** Lista zakresu przechowywania śladu mapowania (w pasku tytułu Log). */
+    private fun keepSpinner(cfg: Config): View = object : Spinner(this) {
+        override fun performClick(): Boolean {
+            logSpinnerOpen = true
+            return super.performClick()
+        }
+    }.apply {
+        adapter = object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_spinner_item, keepOptions.map { it.second }) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                (super.getView(position, convertView, parent) as TextView).apply {
+                    text = "${keepOptions[position].second} ▾"
+                    textSize = 13f
+                    setTextColor(Ui.SUBTEXT)
+                }
+        }.also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
+        setPadding(dp(12), dp(4), dp(12), dp(4))
+        val idx = keepOptions.indexOfFirst { it.first == cfg.mapperKeepMs }
+        if (idx >= 0) setSelection(idx)
+        onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: AdapterView<*>?) { logSpinnerOpen = false }
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                logSpinnerOpen = false
+                val value = keepOptions[position].first
+                if (value == cfg.mapperKeepMs) return
+                cfg.mapperKeepMs = value
+                MapperMonitor.refreshKeepMs(this@MainActivity)
+                refresh()
+            }
+        }
+    }
+
+    /**
+     * Karta mapowania w Log: źródło (OBSERVER / RPTn, bez nazwy repeatera), „● teraz” przy trwającej
+     * sesji, każdy mapujący w osobnej linii z kierunkiem i odległością (nick w kolorze strzałki tego
+     * mapera na widgecie), na dole liczba pingów, ostatni ping i SNR.
+     */
+    private fun mappingCard(
+        m: MappingState?, nowMs: Long, tag: String, rpt: Boolean,
+        keyShort: String, fullKey: String?, keyLabel: String, snrLabel: String
+    ): View {
+        val box = Ui.item(this)
+        val active = m?.active == true
+        val tagColor = if (rpt) Ui.ORANGE else Ui.BLUE
+        val right = when {
+            active -> Ui.text(this, "● teraz", 12f, tagColor, bold = true).apply {
+                alpha = if (WidgetRenderer.mappingIconOn(nowMs)) 1f else 0.45f
+            }
+            else -> m?.pings?.lastOrNull()?.let { Ui.text(this, TimeFormat.hm(it.tsMs), 12f, Ui.MUTED) }
+        }
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        head.addView(Ui.text(this, tag, 13f, tagColor, bold = true).apply { letterSpacing = 0.05f })
+        head.addView(Ui.text(this, "  $keyShort…", 11f, Ui.MUTED).apply { typeface = Typeface.MONOSPACE })
+        if (fullKey != null) head.addView(copyButton(fullKey, keyLabel))
+        box.addView(Ui.row(this, head, right))
+
+        if (m == null) {
+            box.addView(Ui.text(this, "Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada).", 13f, Ui.MUTED))
+            return box
+        }
+        val label = if (active) "Mapują: " else "Mapował: "
+        val latest = latestPerMapper(m)
+        if (latest.isEmpty() && m.mapperNicks.isNotEmpty()) {
+            box.addView(Ui.text(this, label + m.mapperNicks.joinToString(", "), 14f, Ui.TEXT).apply { setPadding(0, dp(4), 0, 0) })
+        }
+        latest.forEachIndexed { i, p ->
+            val sb = SpannableStringBuilder()
+            if (i == 0) {
+                sb.append(label)
+                sb.setSpan(ForegroundColorSpan(Ui.MUTED), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            val nick = MapperMonitor.nick(p.userId) ?: m.mapperNicks.getOrNull(i) ?: "user ${p.userId}"
+            val nStart = sb.length
+            sb.append(nick)
+            sb.setSpan(ForegroundColorSpan(WidgetRenderer.mapperArrowColor(i)), nStart, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            sb.setSpan(StyleSpan(Typeface.BOLD), nStart, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (m.observerLat != null && m.observerLon != null) {
+                val bearing = GeoMath.bearingDeg(m.observerLat, m.observerLon, p.lat!!, p.lon!!)
+                val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, p.lat, p.lon)
+                sb.append("  ${GeoMath.compassLabel(bearing)} · ${GeoMath.km(dist)}")
+            }
+            box.addView(Ui.text(this, sb, 14f, Ui.TEXT).apply { setPadding(0, dp(if (i == 0) 4 else 1), 0, 0) })
+        }
+        val pings = m.pings
+        if (pings.isNotEmpty()) {
+            val last = pings.last()
+            val parts = mutableListOf(
+                pingCount(pings.size),
+                "ostatni ${timeOf(last.tsMs)} · ${TimeFormat.dayMonth(last.tsMs)}"
+            )
+            last.observerSnrDb?.let { parts.add("$snrLabel ${fmtPl(it)} dB") }
+            box.addView(Ui.text(this, parts.joinToString(" · "), 12f, Ui.MUTED).apply { setPadding(0, dp(3), 0, 0) })
+        }
+        return box
+    }
+
+    private fun copyButton(fullKey: String, label: String) = android.widget.ImageView(this).apply {
+        setImageResource(R.drawable.ic_copy)
+        setColorFilter(Ui.MUTED)
+        setPadding(dp(8), dp(4), dp(4), dp(4))
+        contentDescription = "Kopiuj pełny klucz $label"
+        setOnClickListener {
+            val key = CopyKeyReceiver.fullKey(fullKey) ?: fullKey.takeIf { it.isNotBlank() } ?: return@setOnClickListener
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Klucz $label", key))
+            android.widget.Toast.makeText(this@MainActivity, "Skopiowano klucz $label", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ───────────────────────────── pomocnicze ─────────────────────────────
+
+    private fun pingCount(n: Int): String {
+        val word = when {
+            n == 1 -> "ping"
+            n % 10 in 2..4 && n % 100 !in 12..14 -> "pingi"
+            else -> "pingów"
+        }
+        return "$n $word"
+    }
+
+    private fun ago(tsMs: Long, nowMs: Long): String {
+        val min = (nowMs - tsMs).coerceAtLeast(0L) / 60_000L
+        return if (min < 1) "teraz" else "$min min"
+    }
+
+    private fun dim(color: Int): Int = (color and 0x00FFFFFF) or 0x73000000
 
     private fun timeOf(ms: Long): String =
         DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
 
-    private fun fmt(v: Double): String =
+    private fun fmtPl(v: Double): String =
         if (v % 1.0 == 0.0) v.toLong().toString() else String.format(java.util.Locale.US, "%.1f", v)
 
-    /** Opcje retencji śladu mapowania w LOG: (wartość ms, −1 = na stałe) → etykieta. */
     /** Lista rozwinięta → ticker nie przerysowuje panelu (inaczej lista znika przed kliknięciem). */
     private var logSpinnerOpen = false
 
+    /** Opcje retencji śladu mapowania w LOG: (wartość ms, −1 = na stałe) → etykieta. */
     private val keepOptions = listOf(
         24 * 3600_000L to "24 h",
         48 * 3600_000L to "48 h",
@@ -555,86 +828,18 @@ class MainActivity : Activity() {
         -1L to "na stałe"
     )
 
-
-    private fun monitoringControl(): View = Button(this).apply {
-        val config = Config(this@MainActivity)
-        text = if (config.monitoringEnabled) "Zatrzymaj monitoring" else "Uruchom monitoring"
-        setTextColor(Color.WHITE)
-        setAllCaps(false)
-        textSize = 14f
-        setPadding(dp(12), dp(10), dp(12), dp(10))
-        background = android.graphics.drawable.GradientDrawable().apply {
-            setColor(if (config.monitoringEnabled) 0xFF8E2525.toInt() else 0xFF246B2B.toInt())
-            cornerRadius = dp(10).toFloat()
-        }
-        setOnClickListener {
-            val wasEnabled = Config(this@MainActivity).monitoringEnabled
-            if (wasEnabled) {
-                ObserverRefresh.stop(this@MainActivity)
-                handler.removeCallbacks(ticker)
-            } else {
-                ObserverRefresh.start(this@MainActivity)
-                MonitorService.ensureChannel(this@MainActivity)
-                handler.removeCallbacks(ticker)
-                handler.post(ticker)
-            }
-            renderDashboard(dashboardData ?: ObserverRefresh.emptyData(this@MainActivity))
-        }
-    }
-
-    private fun brokerCard(title: String, host: String, r: FetchResult?, d: WidgetData, now: Long, health: Health): View {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.card_outline)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-        val titleColor = WidgetRenderer.brokerHealthColor(health, r)
-        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        head.addView(line(title, 17f, titleColor, bold = true))
-        head.addView(line("  ${Config.displayHost(host)}", 13f, WidgetRenderer.GRAY))
-        box.addView(head)
-        when (r) {
-            is FetchResult.Ok -> {
-                val s = r.snapshot
-                box.addView(line("${s.packetsPerHour} pkt/h   ·   razem ${Status.formatCount(s.totalPackets)}", 16f, WidgetRenderer.GREEN))
-                if (s.lastPacketMs == null) box.addView(line("Ostatni pakiet: brak danych", 16f, WidgetRenderer.GRAY))
-                else {
-                    val age = s.lastPacketAgeMs(now) ?: 0L
-                    val cfg = Config(this)
-                    val color = when (Status.level(age, cfg.orangeMin, cfg.redMin)) {
-                        Level.GREEN -> WidgetRenderer.GREEN; Level.ORANGE -> WidgetRenderer.ORANGE; else -> WidgetRenderer.RED
-                    }
-                    box.addView(line("Ostatni pakiet: ${TimeFormat.packetAge(age)} temu", 18f, color, bold = true))
-                }
-            }
-            is FetchResult.Fail -> box.addView(line("API niedostępne: ${r.reason}", 16f, WidgetRenderer.RED))
-            null -> box.addView(line("…", 16f, WidgetRenderer.GRAY))
-        }
-        return box
-    }
-
-    private fun line(t: String, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
-        text = t; textSize = size; setTextColor(color)
-        if (bold) setTypeface(null, android.graphics.Typeface.BOLD)
-        setPadding(0, dp(2), 0, dp(2))
-    }
-
-    private fun spacer() = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(12)) }
-    private fun smallSpacer() = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(6)) }
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun matchParent() = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+    private fun dp(v: Int) = Ui.dp(this, v)
 
     companion object {
         const val EXTRA_SHOW_MAPPING = "pl.meshcore.observerwidget.SHOW_MAPPING"
+        private const val STATE_TAB = "tab"
+        const val TAB_OBSERVER = 0
+        const val TAB_MAP = 1
+        const val TAB_LOG = 2
+        const val TAB_SETTINGS = 3
 
-        // Paleta UI (styl m2): ciemny, minimalistyczny — bez zmian w widgecie.
-        private val M2_BG = 0xFF111315.toInt()
-        private val M2_TEXT = 0xFFE2E5E3.toInt()
-        private val M2_SUBTEXT = 0xFFD6D9D7.toInt()
-        private val M2_MUTED = 0xFF9DA4A0.toInt()
-        private val M2_ACCENT = 0xFF67D78A.toInt()
-        private val M2_ORANGE = 0xFFF0A84B.toInt()
-
-        /** Ikona „M” na widgecie: otwiera aplikację z rozwiniętą kartą mapowania. */
+        /** Ikona mapowania na widgecie: otwiera aplikację na karcie Log z kartą mapowania. */
         fun mappingIntent(ctx: Context): PendingIntent =
             PendingIntent.getActivity(
                 ctx, 4,
