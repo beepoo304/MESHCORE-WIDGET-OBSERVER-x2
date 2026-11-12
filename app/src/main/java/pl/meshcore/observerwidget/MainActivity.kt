@@ -753,13 +753,20 @@ class MainActivity : Activity() {
     /** Osobny wpis dla każdego mapującego przy danym źródle (pingi, czas i SNR liczone dla tej osoby). */
     private fun mapperEntries(m: MappingState, src: MappingSource, nowMs: Long, keepMs: Long): List<Pair<Long, View>> {
         val withGps = latestPerMapper(m)
-        return m.session.ifEmpty { m.pings }.groupBy { it.userId }.mapNotNull { (userId, mine) ->
-            val sorted = mine.sortedBy { it.tsMs }
-            val last = sorted.last()
-            val active = m.active && nowMs - last.tsMs < MapperApi.SESSION_GAP_MS
-            if (!active && nowMs - last.tsMs >= keepMs) return@mapNotNull null
+        // Każda sesja (przerwa > SESSION_GAP_MS) to osobny wpis – np. droga tam i z powrotem.
+        return m.history.ifEmpty { m.session.ifEmpty { m.pings } }.groupBy { it.userId }.flatMap { (userId, mine) ->
+            val sessions = mutableListOf<MutableList<MapperPing>>()
+            for (p in mine.sortedBy { it.tsMs }) {
+                val cur = sessions.lastOrNull()
+                if (cur != null && p.tsMs - cur.last().tsMs <= MapperApi.SESSION_GAP_MS) cur.add(p) else sessions.add(mutableListOf(p))
+            }
             val colorIndex = withGps.indexOfFirst { it.userId == userId }
-            last.tsMs to mapperEntry(m, src, userId, sorted, colorIndex, active, nowMs)
+            sessions.mapIndexedNotNull { i, sorted ->
+                val last = sorted.last()
+                val active = i == sessions.lastIndex && m.active && nowMs - last.tsMs < MapperApi.SESSION_GAP_MS
+                if (!active && nowMs - last.tsMs >= keepMs) return@mapIndexedNotNull null
+                last.tsMs to mapperEntry(m, src, userId, sorted, colorIndex, active, nowMs)
+            }
         }
     }
 

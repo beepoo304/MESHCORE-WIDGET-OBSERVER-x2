@@ -37,6 +37,7 @@ class MapperMonitorTest {
         assertEquals(1, s.pings.size)
         // Licznik w aplikacji liczy całą sesję (jak mapa), nie tylko ostatni ping.
         assertEquals(2, s.session.size)
+        assertEquals(2, s.history.size)
         assertEquals(t0 + 20_000, s.pings[0].tsMs)
     }
 

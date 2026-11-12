@@ -117,5 +117,7 @@ data class MappingState(
     val observerLat: Double? = null,
     val observerLon: Double? = null,
     /** Cała ostatnia sesja, także po jej wygaśnięciu (do licznika pingów w aplikacji, jak na mapie). */
-    val session: List<MapperPing> = emptyList()
+    val session: List<MapperPing> = emptyList(),
+    /** Wszystkie pingi z okna LOG (do osobnych wpisów dla każdej sesji). */
+    val history: List<MapperPing> = emptyList()
 )
