@@ -133,8 +133,10 @@ object RepeaterStats {
             onlyHexes = myHex.count { hexRpts[it]?.size == 1 },
             lastMs = last,
             silentPings = silent,
-            topUsers = byUser.entries.sortedByDescending { it.value }.take(5)
+            topUsers = byUser.entries
                 .map { (u, c) -> (users[u]?.takeIf { it.isNotBlank() } ?: "#$u") to c }
+                .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first.lowercase() })
+                .take(5)
         )
     }
 

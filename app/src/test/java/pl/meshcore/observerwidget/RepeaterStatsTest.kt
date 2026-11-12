@@ -33,13 +33,14 @@ class RepeaterStatsTest {
         val r = compute(listOf(
             ping(1, t0, 50.01, a), ping(2, t0, 50.01, a),          // ten sam ping, dwa pomiary
             ping(3, t0 + 60_000, 50.02, a, user = 2),
-            ping(4, t0 + day, 50.03, a, user = 2)
+            ping(4, t0 + day, 50.03, a, user = 2),
+            ping(5, t0 + day + 60_000, 50.04, a, user = 2)
         ), mapOf(2L to "SP9XYZ"))!!
-        assertEquals(3, r.pings)
-        assertEquals(4, r.measurements)
+        assertEquals(4, r.pings)
+        assertEquals(5, r.measurements)
         assertEquals(2, r.users)
         assertEquals(2, r.days)
-        assertEquals("SP9XYZ" to 2, r.topUsers[0])
+        assertEquals("SP9XYZ" to 3, r.topUsers[0])
         assertEquals("#1" to 2, r.topUsers[1])
     }
 
