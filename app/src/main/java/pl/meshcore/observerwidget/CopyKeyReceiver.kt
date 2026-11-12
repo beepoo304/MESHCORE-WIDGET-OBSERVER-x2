@@ -14,10 +14,10 @@ class CopyKeyReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val key = fullKey(Config(context).observerId) ?: return
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("Klucz Observera", key))
+        cm.setPrimaryClip(ClipData.newPlainText(tr("Klucz Observera", "Observer key"), key))
         // Od Androida 13 system sam pokazuje potwierdzenie skopiowania.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            Toast.makeText(context, "Skopiowano klucz Observera", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, tr("Skopiowano klucz Observera", "Observer key copied"), Toast.LENGTH_SHORT).show()
         }
     }
 

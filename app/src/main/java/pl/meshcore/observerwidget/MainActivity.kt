@@ -100,7 +100,12 @@ class MainActivity : Activity() {
         setContentView(root)
         root.applySystemBarsPadding()
 
-        selectTab(if (showMapping) TAB_LOG else savedInstanceState?.getInt(STATE_TAB, TAB_OBSERVER) ?: TAB_OBSERVER)
+        val openSettings = intent?.getBooleanExtra(EXTRA_OPEN_SETTINGS, false) == true
+        selectTab(when {
+            openSettings -> TAB_SETTINGS
+            showMapping -> TAB_LOG
+            else -> savedInstanceState?.getInt(STATE_TAB, TAB_OBSERVER) ?: TAB_OBSERVER
+        })
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -110,6 +115,8 @@ class MainActivity : Activity() {
             showMapping = true
             selectTab(TAB_LOG)
             logScroll.scrollTo(0, 0)
+        } else if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) {
+            selectTab(TAB_SETTINGS)
         }
     }
 
@@ -235,15 +242,15 @@ class MainActivity : Activity() {
 
         dash.addView(Ui.topBar(
             this, "OBSERVER",
-            if (cfg.monitoringEnabled) "Monitoring aktywny · co ${cfg.intervalSec} s" else "Monitoring zatrzymany",
+            if (cfg.monitoringEnabled) tr("Monitoring aktywny · co ${cfg.intervalSec} s", "Monitoring active · every ${cfg.intervalSec} s") else tr("Monitoring zatrzymany", "Monitoring stopped"),
             live?.let { Ui.text(this, it.first, 13f, appColor(it.second), bold = true).apply { letterSpacing = 0.05f } }
         ))
         if (!cfg.monitoringEnabled) {
-            dash.addView(infoItem("Monitoring zatrzymany. Dane nie są odświeżane, alarmy są wyłączone.", Ui.ORANGE))
+            dash.addView(infoItem(tr("Monitoring zatrzymany. Dane nie są odświeżane, alarmy są wyłączone.", "Monitoring stopped. Data is not refreshed, alerts are off."), Ui.ORANGE))
         }
         if (!d.configured) {
-            dash.addView(infoItem("Wejdź w Ustawienia i wpisz pełny hash Observera (64 znaki).", Ui.ORANGE))
-            dash.addView(Ui.button(this, "Otwórz Ustawienia", primary = true) { selectTab(TAB_SETTINGS) })
+            dash.addView(infoItem(tr("Wejdź w Ustawienia i wpisz pełny hash Observera (64 znaki).", "Go to Settings and enter the full Observer hash (64 characters)."), Ui.ORANGE))
+            dash.addView(Ui.button(this, tr("Otwórz Ustawienia", "Open Settings"), primary = true) { selectTab(TAB_SETTINGS) })
             dash.addView(monitoringControl())
             return
         }
@@ -254,7 +261,7 @@ class MainActivity : Activity() {
         dash.addView(observerItem(d))
 
         val ok = listOf(d.mqtt1Health, d.mqtt2Health).count { it == Health.GOOD }
-        dash.addView(Ui.section(this, "Brokery MQTT", "$ok / 2 OK", rightColor = when (ok) {
+        dash.addView(Ui.section(this, tr("Brokery MQTT", "MQTT brokers"), "$ok / 2 OK", rightColor = when (ok) {
             2 -> Ui.GREEN
             1 -> Ui.ORANGE
             else -> Ui.RED
@@ -271,13 +278,14 @@ class MainActivity : Activity() {
 
         dash.addView(monitoringControl())
 
-        dash.addView(Ui.section(this, "Moje repeatery", "RPT1–RPT${Config.RPT_SLOTS}"))
+        dash.addView(Ui.section(this, tr("Moje repeatery", "My repeaters"), "RPT1–RPT${Config.RPT_SLOTS}"))
         dash.addView(rptSection(d))
 
         val fetchedAt = d.observer?.fetchedAtMs ?: now
         dash.addView(Ui.text(
             this,
-            "Pobrano ${timeOf(fetchedAt)} · następne za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), cfg.monitoringEnabled)}",
+            tr("Pobrano ${timeOf(fetchedAt)} · następne za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), cfg.monitoringEnabled)}",
+                "Fetched ${timeOf(fetchedAt)} · next in ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), cfg.monitoringEnabled)}"),
             11f, Ui.MUTED
         ).apply { setPadding(dp(16), dp(12), dp(16), dp(16)) })
     }
@@ -286,11 +294,11 @@ class MainActivity : Activity() {
         val box = Ui.item(this)
         val obs = d.observer
         box.addView(Ui.text(this, obs?.name ?: "—", 17f, Ui.TEXT, bold = true))
-        box.addView(keyRow(Config(this).observerId, "Observera", 13f))
+        box.addView(keyRow(Config(this).observerId, tr("Observera", "Observer"), 13f))
         listOfNotNull(obs?.model, obs?.firmware?.let { "fw $it" }).takeIf { it.isNotEmpty() }?.let {
             box.addView(Ui.text(this, it.joinToString(" · "), 12f, Ui.SUBTEXT).apply { setPadding(0, dp(1), 0, 0) })
         }
-        obs?.let { box.addView(Ui.text(this, "Dane z: ${Config.displayHost(it.host)}", 11f, Ui.MUTED)) }
+        obs?.let { box.addView(Ui.text(this, tr("Dane z: ${Config.displayHost(it.host)}", "Data from: ${Config.displayHost(it.host)}"), 11f, Ui.MUTED)) }
         return box
     }
 
@@ -302,7 +310,7 @@ class MainActivity : Activity() {
         }
         val key = fullKey?.trim()?.takeIf { it.isNotEmpty() }
         if (key == null) {
-            row.addView(Ui.text(this, "brak klucza", size - 1f, Ui.MUTED).apply { setPadding(0, dp(2), 0, dp(2)) })
+            row.addView(Ui.text(this, tr("brak klucza", "no key"), size - 1f, Ui.MUTED).apply { setPadding(0, dp(2), 0, dp(2)) })
             return row
         }
         row.addView(Ui.text(this, "${key.take(6).uppercase()}…", size, Ui.SUBTEXT).apply { typeface = Typeface.MONOSPACE })
@@ -316,19 +324,20 @@ class MainActivity : Activity() {
         val left = Ui.text(
             this,
             when {
-                !cfg.monitoringEnabled -> "Odświeżanie zatrzymane"
-                busyNow -> "Odświeżam…"
-                else -> "Następne odświeżenie za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, nowMs), true)}"
+                !cfg.monitoringEnabled -> tr("Odświeżanie zatrzymane", "Refreshing stopped")
+                busyNow -> tr("Odświeżam…", "Refreshing…")
+                else -> tr("Następne odświeżenie za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, nowMs), true)}",
+                    "Next refresh in ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, nowMs), true)}")
             },
             12f, Ui.SUBTEXT
         )
-        val btn = Ui.text(this, "⟳ Odśwież teraz", 13f, if (cfg.monitoringEnabled && !busyNow) Ui.GREEN else Ui.MUTED, bold = true).apply {
+        val btn = Ui.text(this, tr("⟳ Odśwież teraz", "⟳ Refresh now"), 13f, if (cfg.monitoringEnabled && !busyNow) Ui.GREEN else Ui.MUTED, bold = true).apply {
             setPadding(dp(12), dp(6), dp(12), dp(6))
             background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
-            contentDescription = "Odśwież teraz"
+            contentDescription = tr("Odśwież teraz", "Refresh now")
             setOnClickListener {
                 if (!Config(this@MainActivity).monitoringEnabled) {
-                    android.widget.Toast.makeText(this@MainActivity, "Monitoring zatrzymany – uruchom go, aby odświeżać", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(this@MainActivity, tr("Monitoring zatrzymany – uruchom go, aby odświeżać", "Monitoring stopped – start it to refresh"), android.widget.Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 ObserverRefresh.refreshAll(applicationContext)
@@ -371,12 +380,12 @@ class MainActivity : Activity() {
         val valueColor = if (r is FetchResult.Ok) Ui.TEXT else Ui.MUTED
         box.addView(Ui.kvRow(
             this,
-            Ui.kv(this, "Pakiety / h", t.hour, valueColor),
-            Ui.kv(this, "Razem", t.total, valueColor),
-            Ui.kv(this, "Ostatni", lastText, lastColor)
+            Ui.kv(this, tr("Pakiety / h", "Packets / h"), t.hour, valueColor),
+            Ui.kv(this, tr("Razem", "Total"), t.total, valueColor),
+            Ui.kv(this, tr("Ostatni", "Last"), lastText, lastColor)
         ))
         if (r is FetchResult.Fail) {
-            box.addView(Ui.text(this, "API niedostępne: ${r.reason}", 11f, Ui.RED).apply { setPadding(0, dp(6), 0, 0) })
+            box.addView(Ui.text(this, tr("API niedostępne: ${r.reason}", "API unavailable: ${r.reason}"), 11f, Ui.RED).apply { setPadding(0, dp(6), 0, 0) })
         }
         return box
     }
@@ -384,14 +393,14 @@ class MainActivity : Activity() {
     private fun fallbackItem(cfg: Config, health: Health): View {
         val box = Ui.item(this)
         val head = SpannableStringBuilder().apply {
-            append("Zapasowy")
+            append(tr("Zapasowy", "Fallback"))
             setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             append("  ${Config.displayHost(cfg.fallbackHost)}")
         }
         box.addView(Ui.row(this, Ui.text(this, head, 13f, Ui.MUTED).apply {
             isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }, healthLabel(health)))
-        box.addView(Ui.text(this, "Używany, gdy oba brokery milczą", 11f, Ui.MUTED))
+        box.addView(Ui.text(this, tr("Używany, gdy oba brokery milczą", "Used when both brokers are silent"), 11f, Ui.MUTED))
         return box
     }
 
@@ -466,7 +475,7 @@ class MainActivity : Activity() {
             addSource(r.label, true, r.state)
         }
         if (rows.isEmpty()) return
-        dash.addView(Ui.section(this, "Mapują teraz", "${rows.size} · dotknij → Log", color = Ui.BLUE))
+        dash.addView(Ui.section(this, tr("Mapują teraz", "Mapping now"), tr("${rows.size} · dotknij → Log", "${rows.size} · tap → Log"), color = Ui.BLUE))
         rows.forEachIndexed { i, v ->
             if (i > 0) dash.addView(Ui.divider(this))
             dash.addView(v)
@@ -524,7 +533,7 @@ class MainActivity : Activity() {
 
     private fun monitoringControl(): View {
         val enabled = Config(this).monitoringEnabled
-        return Ui.button(this, if (enabled) "Zatrzymaj monitoring" else "Uruchom monitoring", primary = !enabled) {
+        return Ui.button(this, if (enabled) tr("Zatrzymaj monitoring", "Stop monitoring") else tr("Uruchom monitoring", "Start monitoring"), primary = !enabled) {
             val wasEnabled = Config(this@MainActivity).monitoringEnabled
             if (wasEnabled) {
                 ObserverRefresh.stop(this@MainActivity)
@@ -560,7 +569,7 @@ class MainActivity : Activity() {
                 Ui.text(this, "RPT$slot" + (info?.name?.let { " · $it" } ?: ""), 14f, Ui.TEXT, bold = true).apply {
                     isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
                 },
-                if (mapped) Ui.text(this, "● mapuje", 11f, Ui.ORANGE, bold = true) else null
+                if (mapped) Ui.text(this, tr("● mapuje", "● mapping"), 11f, Ui.ORANGE, bold = true) else null
             ))
             val keyRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -572,7 +581,7 @@ class MainActivity : Activity() {
                 typeface = Typeface.MONOSPACE
                 setTextColor(Ui.SUBTEXT)
                 setPadding(0, dp(4), dp(4), dp(4))
-                contentDescription = "Zmień klucz RPT$slot"
+                contentDescription = tr("Zmień klucz RPT$slot", "Change RPT$slot key")
                 setOnClickListener { editRptDialog(slot) }
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             keyRow.addView(copyButton(id, "RPT$slot"))
@@ -581,25 +590,25 @@ class MainActivity : Activity() {
                 textSize = 17f
                 setTextColor(Ui.MUTED)
                 setPadding(dp(12), dp(2), dp(4), dp(2))
-                contentDescription = "Usuń RPT$slot"
+                contentDescription = tr("Usuń RPT$slot", "Remove RPT$slot")
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Usunąć RPT$slot?")
-                        .setMessage("Klucz ${id.take(8)}… zniknie z widgetu i powiadomień.")
-                        .setPositiveButton("Usuń") { _, _ ->
+                        .setTitle(tr("Usunąć RPT$slot?", "Remove RPT$slot?"))
+                        .setMessage(tr("Klucz ${id.take(8)}… zniknie z widgetu i powiadomień.", "Key ${id.take(8)}… will be removed from the widget and notifications."))
+                        .setPositiveButton(tr("Usuń", "Remove")) { _, _ ->
                             Config(this@MainActivity).setRptId(slot, "")
                             rerender()
                         }
-                        .setNegativeButton("Anuluj", null)
+                        .setNegativeButton(tr("Anuluj", "Cancel"), null)
                         .show()
                 }
             })
             item.addView(keyRow)
             val (status, color) = when {
-                info == null -> "sprawdzam w bazie mappera…" to Ui.MUTED
-                info.found -> "✓ w bazie mappera: „${info.name ?: "bez nazwy"}”" to Ui.GREEN
-                info.name != null -> "„${info.name}” bez pozycji w bazie mappera – bez strzałki i odległości" to Ui.ORANGE
-                else -> "✕ brak w bazie mappera – bez nazwy, strzałki i odległości" to Ui.ORANGE
+                info == null -> tr("sprawdzam w bazie mappera…", "checking the mapper database…") to Ui.MUTED
+                info.found -> tr("✓ w bazie mappera: „${info.name ?: "bez nazwy"}”", "✓ in mapper database: “${info.name ?: "unnamed"}”") to Ui.GREEN
+                info.name != null -> tr("„${info.name}” bez pozycji w bazie mappera – bez strzałki i odległości", "“${info.name}” has no position in mapper database – no arrow or distance") to Ui.ORANGE
+                else -> tr("✕ brak w bazie mappera – bez nazwy, strzałki i odległości", "✕ not in mapper database – no name, arrow or distance") to Ui.ORANGE
             }
             item.addView(Ui.text(this, status, 11f, color))
             box.addView(item)
@@ -613,10 +622,10 @@ class MainActivity : Activity() {
             }
             item.addView(Ui.row(
                 this,
-                Ui.text(this, "RPT$free · wolny slot", 14f, Ui.MUTED),
-                Ui.text(this, "+ Dodaj", 14f, Ui.GREEN, bold = true)
+                Ui.text(this, tr("RPT$free · wolny slot", "RPT$free · free slot"), 14f, Ui.MUTED),
+                Ui.text(this, tr("+ Dodaj", "+ Add"), 14f, Ui.GREEN, bold = true)
             ))
-            item.addView(Ui.text(this, "Mapowanie przy RPT1–RPT${Config.RPT_SLOTS} (pomarańczowe) na widgecie i w powiadomieniach.", 11f, Ui.MUTED))
+            item.addView(Ui.text(this, tr("Mapowanie przy RPT1–RPT${Config.RPT_SLOTS} (pomarańczowe) na widgecie i w powiadomieniach.", "Mapping at RPT1–RPT${Config.RPT_SLOTS} (orange) on the widget and in notifications."), 11f, Ui.MUTED))
             box.addView(item)
         }
         return box
@@ -627,7 +636,7 @@ class MainActivity : Activity() {
         val cfg = Config(this)
         val input = android.widget.EditText(this).apply {
             setText(cfg.rptId(slot))
-            hint = "klucz repeatera (64 znaki hex)"
+            hint = tr("klucz repeatera (64 znaki hex)", "repeater key (64 hex characters)")
             typeface = Typeface.MONOSPACE
             textSize = 14f
             isSingleLine = true
@@ -637,19 +646,19 @@ class MainActivity : Activity() {
             addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("RPT$slot: klucz repeatera")
+            .setTitle(tr("RPT$slot: klucz repeatera", "RPT$slot: repeater key"))
             .setView(wrap)
-            .setPositiveButton("Zapisz", null)
-            .setNegativeButton("Anuluj", null)
+            .setPositiveButton(tr("Zapisz", "Save"), null)
+            .setNegativeButton(tr("Anuluj", "Cancel"), null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val id = input.text.toString().filterNot { it.isWhitespace() }
                 val short = MapperApi.shortId(id)
                 val err = when {
-                    !Config.isValidRptId(id) -> "Klucz: znaki 0-9 i A-F, od 16 do 64 znaków."
-                    short == MapperApi.shortId(cfg.observerId) -> "To klucz Observera – wpisz klucz innego repeatera."
-                    cfg.rptIds.any { (s, other) -> s != slot && MapperApi.shortId(other) == short } -> "Ten repeater jest już na liście."
+                    !Config.isValidRptId(id) -> tr("Klucz: znaki 0-9 i A-F, od 16 do 64 znaków.", "Key: characters 0-9 and A-F, 16 to 64 characters.")
+                    short == MapperApi.shortId(cfg.observerId) -> tr("To klucz Observera – wpisz klucz innego repeatera.", "This is the Observer key – enter another repeater's key.")
+                    cfg.rptIds.any { (s, other) -> s != slot && MapperApi.shortId(other) == short } -> tr("Ten repeater jest już na liście.", "This repeater is already on the list.")
                     else -> null
                 }
                 if (err != null) {
@@ -675,14 +684,14 @@ class MainActivity : Activity() {
         logDash.removeAllViews()
         val cfg = Config(this)
         val wallClockNow = System.currentTimeMillis()
-        logDash.addView(Ui.topBar(this, "LOG", "Kto i kiedy mapował · najnowsze na górze", keepSpinner(cfg)))
+        logDash.addView(Ui.topBar(this, "LOG", tr("Kto i kiedy mapował · najnowsze na górze", "Who mapped and when · newest on top"), keepSpinner(cfg)))
         if (!d.configured) {
-            logDash.addView(infoItem("Wejdź w Ustawienia i wpisz pełny hash Observera (64 znaki).", Ui.ORANGE))
+            logDash.addView(infoItem(tr("Wejdź w Ustawienia i wpisz pełny hash Observera (64 znaki).", "Go to Settings and enter the full Observer hash (64 characters)."), Ui.ORANGE))
             return
         }
         val cards = mappingCards(d, cfg, wallClockNow)
         if (cards.isEmpty()) {
-            logDash.addView(infoItem("Brak mapowań w wybranym zakresie. Zakres przechowywania zmienisz listą u góry.", Ui.MUTED))
+            logDash.addView(infoItem(tr("Brak mapowań w wybranym zakresie. Zakres przechowywania zmienisz listą u góry.", "No mappings in the selected range. Change the retention range with the list at the top."), Ui.MUTED))
             return
         }
         var lastDay: LocalDate? = null
@@ -700,11 +709,11 @@ class MainActivity : Activity() {
     }
 
     private fun dayLabel(day: LocalDate?): String {
-        if (day == null) return "Brak danych"
+        if (day == null) return tr("Brak danych", "No data")
         val today = LocalDate.now()
         return when (day) {
-            today -> "Dziś"
-            today.minusDays(1) -> "Wczoraj"
+            today -> tr("Dziś", "Today")
+            today.minusDays(1) -> tr("Wczoraj", "Yesterday")
             else -> day.format(DateTimeFormatter.ofPattern("dd.MM"))
         }
     }
@@ -717,7 +726,7 @@ class MainActivity : Activity() {
         val keepMs = cfg.mapperKeepEffectiveMs
         val logCards = mutableListOf<Pair<Long, View>>()
         val obsSource = MappingSource("OBSERVER", rpt = false, srcKeyShort = d.observerId.take(4).uppercase(),
-            srcFullKey = cfg.observerId, srcLabel = "Observera", snrLabel = "SNR u Obs")
+            srcFullKey = cfg.observerId, srcLabel = tr("Observera", "Observer"), snrLabel = tr("SNR u Obs", "SNR at Obs"))
         val mapping = d.mapping
         val obsEntries = mapping?.let { mapperEntries(it, obsSource, wallClockNow, keepMs) }.orEmpty()
         if (obsEntries.isEmpty() && showMapping) {
@@ -727,7 +736,7 @@ class MainActivity : Activity() {
         for (r in d.rptMappings.sortedBy { it.slot }) {
             if (cfg.rptId(r.slot).isBlank()) continue
             val src = MappingSource(r.label, rpt = true, srcKeyShort = r.shortId.take(4).uppercase(),
-                srcFullKey = null, srcLabel = r.label, snrLabel = "SNR u RPT")
+                srcFullKey = null, srcLabel = r.label, snrLabel = tr("SNR u RPT", "SNR at RPT"))
             logCards.addAll(mapperEntries(r.state, src, wallClockNow, keepMs))
         }
         return logCards
@@ -768,7 +777,9 @@ class MainActivity : Activity() {
         addView(sourceHeader(src, null))
         addView(Ui.text(
             this@MainActivity,
-            if (noData) "Brak danych mapowania (API mapera ${MapperApi.host(Config(this@MainActivity).mapperApi)} nie odpowiada)." else "Brak mapowań w wybranym zakresie.",
+            if (noData) tr("Brak danych mapowania (API mapera ${MapperApi.host(Config(this@MainActivity).mapperApi)} nie odpowiada).",
+                "No mapping data (mapper API ${MapperApi.host(Config(this@MainActivity).mapperApi)} not responding).")
+            else tr("Brak mapowań w wybranym zakresie.", "No mappings in the selected range."),
             13f, Ui.MUTED
         ))
     }
@@ -785,7 +796,7 @@ class MainActivity : Activity() {
         val box = Ui.item(this)
         val tagColor = if (src.rpt) Ui.ORANGE else Ui.BLUE
         val last = pings.last()
-        val right = if (active) Ui.text(this, "● teraz", 12f, tagColor, bold = true).apply {
+        val right = if (active) Ui.text(this, tr("● teraz", "● now"), 12f, tagColor, bold = true).apply {
             alpha = if (WidgetRenderer.mappingIconOn(nowMs)) 1f else 0.45f
         } else Ui.text(this, TimeFormat.hm(last.tsMs), 12f, Ui.MUTED)
         box.addView(sourceHeader(src, right))
@@ -793,7 +804,7 @@ class MainActivity : Activity() {
         val nickColor = if (colorIndex >= 0) WidgetRenderer.mapperArrowColor(colorIndex) else Ui.TEXT
         val nick = MapperMonitor.nick(userId) ?: "user $userId"
         val nickLine = SpannableStringBuilder().apply {
-            append(if (active) "Mapuje: " else "Mapował: ")
+            append(if (active) tr("Mapuje: ", "Mapping: ") else tr("Mapował: ", "Mapped: "))
             setSpan(ForegroundColorSpan(Ui.MUTED), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             val s = length
             append(nick)
@@ -817,7 +828,7 @@ class MainActivity : Activity() {
         box.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(Ui.text(this@MainActivity, "klucz ", 12f, Ui.MUTED))
+            addView(Ui.text(this@MainActivity, tr("klucz ", "key "), 12f, Ui.MUTED))
             addView(keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick))
         })
 
@@ -869,12 +880,12 @@ class MainActivity : Activity() {
         setImageResource(R.drawable.ic_copy)
         setColorFilter(Ui.MUTED)
         setPadding(dp(8), dp(4), dp(4), dp(4))
-        contentDescription = "Kopiuj pełny klucz $label"
+        contentDescription = tr("Kopiuj pełny klucz $label", "Copy full $label key")
         setOnClickListener {
             val key = CopyKeyReceiver.fullKey(fullKey) ?: fullKey.takeIf { it.isNotBlank() } ?: return@setOnClickListener
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("Klucz $label", key))
-            android.widget.Toast.makeText(this@MainActivity, "Skopiowano klucz $label", android.widget.Toast.LENGTH_SHORT).show()
+            cm.setPrimaryClip(android.content.ClipData.newPlainText(tr("Klucz $label", "$label key"), key))
+            android.widget.Toast.makeText(this@MainActivity, tr("Skopiowano klucz $label", "Copied $label key"), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -889,29 +900,30 @@ class MainActivity : Activity() {
         val cfg = Config(this)
         val now = System.currentTimeMillis()
         val list = Outages.all(this, now)
-        val clear = Ui.text(this, "Wyczyść", 13f, if (list.isEmpty()) Ui.MUTED else Ui.RED, bold = true).apply {
+        val clear = Ui.text(this, tr("Wyczyść", "Clear"), 13f, if (list.isEmpty()) Ui.MUTED else Ui.RED, bold = true).apply {
             setPadding(dp(12), dp(4), dp(12), dp(4))
             background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
-            contentDescription = "Wyczyść przestoje"
+            contentDescription = tr("Wyczyść przestoje", "Clear outages")
             setOnClickListener {
                 if (list.isEmpty()) return@setOnClickListener
                 AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Wyczyścić przestoje?")
-                    .setMessage("Usunie ${list.size} ${entriesWord(list.size)}. Trwający przestój będzie liczony od nowa.")
-                    .setPositiveButton("Wyczyść") { _, _ ->
+                    .setTitle(tr("Wyczyścić przestoje?", "Clear outages?"))
+                    .setMessage(tr("Usunie ${list.size} ${entriesWord(list.size)}. Trwający przestój będzie liczony od nowa.",
+                        "This removes ${list.size} ${entriesWord(list.size)}. An ongoing outage will be counted from scratch."))
+                    .setPositiveButton(tr("Wyczyść", "Clear")) { _, _ ->
                         Outages.clear(this@MainActivity, System.currentTimeMillis())
                         rerender()
                     }
-                    .setNegativeButton("Anuluj", null)
+                    .setNegativeButton(tr("Anuluj", "Cancel"), null)
                     .show()
             }
         }
-        outDash.addView(Ui.topBar(this, "PRZESTOJE", "MQTT1, MQTT2 i Observer · przerwy ≥ 1 min · 30 dni", clear))
+        outDash.addView(Ui.topBar(this, tr("PRZESTOJE", "OUTAGES"), tr("MQTT1, MQTT2 i Observer · przerwy ≥ 1 min · 30 dni", "MQTT1, MQTT2 and Observer · gaps ≥ 1 min · 30 days"), clear))
         if (!cfg.monitoringEnabled) {
-            outDash.addView(infoItem("Monitoring zatrzymany – przestoje nie są teraz rejestrowane.", Ui.ORANGE))
+            outDash.addView(infoItem(tr("Monitoring zatrzymany – przestoje nie są teraz rejestrowane.", "Monitoring stopped – outages are not being recorded now."), Ui.ORANGE))
         }
 
-        outDash.addView(Ui.section(this, "Ostatnie 24 h"))
+        outDash.addView(Ui.section(this, tr("Ostatnie 24 h", "Last 24 h")))
         val day = 24 * 3600_000L
         val summary = OutageKind.values().map { k ->
             val total = OutageEngine.totalInWindow(list, k, now, day)
@@ -930,7 +942,8 @@ class MainActivity : Activity() {
         outDash.addView(Ui.kvRow(this, summary[0], summary[1], summary[2]).apply { setPadding(dp(16), dp(4), dp(16), dp(8)) })
 
         if (list.isEmpty()) {
-            outDash.addView(infoItem("Brak przestojów. Każda niedostępność MQTT1/MQTT2 i przerwa w pakietach Observera (dłuższa niż próg czerwony) trafi tutaj.", Ui.MUTED))
+            outDash.addView(infoItem(tr("Brak przestojów. Każda niedostępność MQTT1/MQTT2 i przerwa w pakietach Observera (dłuższa niż próg czerwony) trafi tutaj.",
+                "No outages. Every MQTT1/MQTT2 unavailability and gap in Observer packets (longer than the red threshold) will show up here."), Ui.MUTED))
             return
         }
         var lastDay: LocalDate? = null
@@ -958,19 +971,19 @@ class MainActivity : Activity() {
             val end = o.endMs
             append("   ${TimeFormat.hm(o.startMs)} → ")
             append(when {
-                end == null -> "teraz"
+                end == null -> tr("teraz", "now")
                 TimeFormat.dayMonth(end) != TimeFormat.dayMonth(o.startMs) -> "${TimeFormat.dayMonth(end)} ${TimeFormat.hm(end)}"
                 else -> TimeFormat.hm(end)
             })
             setSpan(ForegroundColorSpan(Ui.TEXT), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        val right = if (ongoing) Ui.text(this, "● trwa ${duration(o.durationMs(now))}", 12f, Ui.RED, bold = true)
+        val right = if (ongoing) Ui.text(this, tr("● trwa ${duration(o.durationMs(now))}", "● ongoing ${duration(o.durationMs(now))}"), 12f, Ui.RED, bold = true)
             else Ui.text(this, duration(o.durationMs(now)), 13f, Ui.SUBTEXT, bold = true)
         box.addView(Ui.row(this, Ui.text(this, title, 14f, Ui.TEXT), right))
         val detail = when (o.kind) {
-            OutageKind.OBSERVER -> "Brak pakietów od Observera"
-            OutageKind.MQTT1 -> "Broker ${Config.displayHost(Config(this).mqtt1Host)} niedostępny"
-            OutageKind.MQTT2 -> "Broker ${Config.displayHost(Config(this).mqtt2Host)} niedostępny"
+            OutageKind.OBSERVER -> tr("Brak pakietów od Observera", "No packets from Observer")
+            OutageKind.MQTT1 -> tr("Broker ${Config.displayHost(Config(this).mqtt1Host)} niedostępny", "Broker ${Config.displayHost(Config(this).mqtt1Host)} unavailable")
+            OutageKind.MQTT2 -> tr("Broker ${Config.displayHost(Config(this).mqtt2Host)} niedostępny", "Broker ${Config.displayHost(Config(this).mqtt2Host)} unavailable")
         } + (o.note?.let { " · $it" } ?: "")
         box.addView(Ui.text(this, detail, 11f, Ui.MUTED).apply { setPadding(0, dp(2), 0, 0) })
         return box
@@ -988,6 +1001,7 @@ class MainActivity : Activity() {
     }
 
     private fun entriesWord(n: Int) = when {
+        L10n.en -> if (n == 1) "entry" else "entries"
         n == 1 -> "wpis"
         n % 10 in 2..4 && n % 100 !in 12..14 -> "wpisy"
         else -> "wpisów"
@@ -997,6 +1011,7 @@ class MainActivity : Activity() {
 
     private fun pingCount(n: Int): String {
         val word = when {
+            L10n.en -> if (n == 1) "ping" else "pings"
             n == 1 -> "ping"
             n % 10 in 2..4 && n % 100 !in 12..14 -> "pingi"
             else -> "pingów"
@@ -1006,7 +1021,7 @@ class MainActivity : Activity() {
 
     private fun ago(tsMs: Long, nowMs: Long): String {
         val min = (nowMs - tsMs).coerceAtLeast(0L) / 60_000L
-        return if (min < 1) "teraz" else "$min min"
+        return if (min < 1) tr("teraz", "now") else "$min min"
     }
 
     private fun dim(color: Int): Int = (color and 0x00FFFFFF) or 0x73000000
@@ -1021,13 +1036,13 @@ class MainActivity : Activity() {
     private var logSpinnerOpen = false
 
     /** Opcje retencji śladu mapowania w LOG: (wartość ms, −1 = na stałe) → etykieta. */
-    private val keepOptions = listOf(
+    private val keepOptions get() = listOf(
         24 * 3600_000L to "24 h",
         48 * 3600_000L to "48 h",
-        3 * 24 * 3600_000L to "3 dni",
-        10 * 24 * 3600_000L to "10 dni",
-        30 * 24 * 3600_000L to "30 dni",
-        -1L to "na stałe"
+        3 * 24 * 3600_000L to tr("3 dni", "3 days"),
+        10 * 24 * 3600_000L to tr("10 dni", "10 days"),
+        30 * 24 * 3600_000L to tr("30 dni", "30 days"),
+        -1L to tr("na stałe", "forever")
     )
 
     private fun matchParent() = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -1035,6 +1050,8 @@ class MainActivity : Activity() {
 
     companion object {
         const val EXTRA_SHOW_MAPPING = "pl.meshcore.observerwidget.SHOW_MAPPING"
+        /** Otwarcie aplikacji od razu na karcie Ustawienia (dwuklik widgetu przez [SettingsActivity]). */
+        const val EXTRA_OPEN_SETTINGS = "pl.meshcore.observerwidget.OPEN_SETTINGS"
         private const val STATE_TAB = "tab"
         const val TAB_OBSERVER = 0
         const val TAB_MAP = 1

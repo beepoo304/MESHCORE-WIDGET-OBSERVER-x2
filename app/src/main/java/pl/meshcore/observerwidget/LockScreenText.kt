@@ -38,7 +38,7 @@ object LockScreenText {
     internal fun brokerShort(r: FetchResult?, nowMs: Long, frozenAgeMs: Long?): String = when (r) {
         is FetchResult.Ok -> {
             val age = r.snapshot.lastPacketAgeMs(nowMs)
-            "${r.snapshot.packetsPerHour}/h " + (age?.let { shortAge(it) } ?: "brak")
+            "${r.snapshot.packetsPerHour}/h " + (age?.let { shortAge(it) } ?: tr("brak", "none"))
         }
         is FetchResult.Fail -> if (frozenAgeMs != null) "— ${shortAge(frozenAgeMs)}" else "API ✕"
         null -> "…"
@@ -86,7 +86,7 @@ object LockScreenText {
         val arrow = WidgetRenderer.mappingArrow(m, nowMs)
         val oLat = m.observerLat
         val oLon = m.observerLon
-        if (arrow == null || oLat == null || oLon == null) return "MAPPER aktywny"
+        if (arrow == null || oLat == null || oLon == null) return tr("MAPPER aktywny", "MAPPER active")
         val (ping, idx) = arrow
         val dist = GeoMath.distanceKm(oLat, oLon, ping.lat!!, ping.lon!!)
         val dir = GeoMath.compassLabel(GeoMath.bearingDeg(oLat, oLon, ping.lat, ping.lon))

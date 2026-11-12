@@ -49,28 +49,31 @@ class SettingsScreen(private val activity: Activity) {
         val version = runCatching {
             activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
         }.getOrNull()
-        root.addView(Ui.topBar(activity, "USTAWIENIA", version?.let { "Wersja $it" }))
+        root.addView(Ui.topBar(activity, tr("USTAWIENIA", "SETTINGS"), version?.let { tr("Wersja $it", "Version $it") }))
+
+        root.addView(Ui.section(activity, "Język · Language"))
+        root.addView(languageRow())
 
         root.addView(Ui.section(activity, "Observer"))
-        idField = field(root, "Pełny hash Observera (64 znaki hex)", cfg.observerId,
+        idField = field(root, tr("Pełny hash Observera (64 znaki hex)", "Full Observer hash (64 hex chars)"), cfg.observerId,
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS, mono = true)
 
-        root.addView(Ui.section(activity, "Brokery"))
-        m1Field = field(root, "MQTT1 / API główne", cfg.mqtt1Host)
-        m2Field = field(root, "MQTT2 / drugie API", cfg.mqtt2Host)
-        fbField = field(root, "API zapasowe (nagłówek, gdy oba powyższe nie działają)", cfg.fallbackHost)
-        timeoutField = field(root, "Timeout zapytań (s, 2–30)", cfg.timeoutSec.toString(), InputType.TYPE_CLASS_NUMBER)
-        mapperField = field(root, "API mapera (action=points / repeaters)", cfg.mapperApi,
+        root.addView(Ui.section(activity, tr("Brokery", "Brokers")))
+        m1Field = field(root, tr("MQTT1 / API główne", "MQTT1 / main API"), cfg.mqtt1Host)
+        m2Field = field(root, tr("MQTT2 / drugie API", "MQTT2 / second API"), cfg.mqtt2Host)
+        fbField = field(root, tr("API zapasowe (nagłówek, gdy oba powyższe nie działają)", "Fallback API (header, when both above fail)"), cfg.fallbackHost)
+        timeoutField = field(root, tr("Timeout zapytań (s, 2–30)", "Request timeout (s, 2–30)"), cfg.timeoutSec.toString(), InputType.TYPE_CLASS_NUMBER)
+        mapperField = field(root, tr("API mapera (action=points / repeaters)", "Mapper API (action=points / repeaters)"), cfg.mapperApi,
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        root.addView(note("Zmiana API mapera czyści dotychczasowy stan mapowania."))
-        root.addView(Ui.outlineButton(activity, "Test API · sprawdź i pobierz nazwę Observera") { testApi() })
+        root.addView(note(tr("Zmiana API mapera czyści dotychczasowy stan mapowania.", "Changing the Mapper API clears the current mapping state.")))
+        root.addView(Ui.outlineButton(activity, tr("Test API · sprawdź i pobierz nazwę Observera", "Test API · check and fetch Observer name")) { testApi() })
         testResult = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), 0, dp(16), 0)
         }
         root.addView(testResult)
 
-        root.addView(Ui.section(activity, "Odświeżanie i progi"))
+        root.addView(Ui.section(activity, tr("Odświeżanie i progi", "Refresh and thresholds")))
         intervalLabel = Ui.text(activity, "", 14f, Ui.TEXT).apply { setPadding(dp(16), dp(4), dp(16), 0) }
         root.addView(intervalLabel)
         intervalBar = SeekBar(activity).apply {
@@ -88,51 +91,52 @@ class SettingsScreen(private val activity: Activity) {
         }
         root.addView(intervalBar)
         updateIntervalLabel()
-        root.addView(note("Dane pobierane są co interwał, także przy wyłączonym ekranie."))
+        root.addView(note(tr("Dane pobierane są co interwał, także przy wyłączonym ekranie.", "Data is fetched every interval, also with the screen off.")))
         val thresholds = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
+            isBaselineAligned = false
             setPadding(dp(16), 0, dp(16), 0)
         }
-        orangeField = field(thresholds, "Pomarańczowy po (min)", cfg.orangeMin.toString(), InputType.TYPE_CLASS_NUMBER, inRow = true)
-        redField = field(thresholds, "Czerwony po (min)", cfg.redMin.toString(), InputType.TYPE_CLASS_NUMBER, inRow = true)
+        orangeField = field(thresholds, tr("Pomarańczowy (min)", "Orange (min)"), cfg.orangeMin.toString(), InputType.TYPE_CLASS_NUMBER, inRow = true)
+        redField = field(thresholds, tr("Czerwony (min)", "Red (min)"), cfg.redMin.toString(), InputType.TYPE_CLASS_NUMBER, inRow = true)
         root.addView(thresholds)
-        root.addView(note("Kolor wieku ostatniego pakietu: zielony → pomarańczowy → czerwony."))
+        root.addView(note(tr("Kolor wieku ostatniego pakietu: zielony → pomarańczowy → czerwony.", "Last packet age color: green → orange → red.")))
 
-        root.addView(Ui.section(activity, "Powiadomienia"))
-        alertObs = toggle(root, "Observer: brak pakietów (niezależnie od MQTT)", cfg.alertObserver)
-        alertM1 = toggle(root, "MQTT1: brak połączenia / brak odbioru", cfg.alertMqtt1)
-        alertM2 = toggle(root, "MQTT2: brak połączenia / brak odbioru", cfg.alertMqtt2)
-        alertMap = toggle(root, "Mapowanie: ktoś mapuje w zasięgu Observera", cfg.alertMapping)
-        root.addView(note("Alarm przychodzi od razu (PUSH), mapowanie – raz na sesję z nickiem."))
-        lockScreen = toggle(root, "Dane Observera w powiadomieniu (ekran blokady)", cfg.lockScreenStatus)
-        root.addView(note("Brak na ekranie blokady? Włącz w telefonie pokazywanie cichych powiadomień."))
+        root.addView(Ui.section(activity, tr("Powiadomienia", "Notifications")))
+        alertObs = toggle(root, tr("Observer: brak pakietów (niezależnie od MQTT)", "Observer: no packets (independent of MQTT)"), cfg.alertObserver)
+        alertM1 = toggle(root, tr("MQTT1: brak połączenia / brak odbioru", "MQTT1: no connection / no reception"), cfg.alertMqtt1)
+        alertM2 = toggle(root, tr("MQTT2: brak połączenia / brak odbioru", "MQTT2: no connection / no reception"), cfg.alertMqtt2)
+        alertMap = toggle(root, tr("Mapowanie: ktoś mapuje w zasięgu Observera", "Mapping: someone is mapping within Observer range"), cfg.alertMapping)
+        root.addView(note(tr("Alarm przychodzi od razu (PUSH), mapowanie – raz na sesję z nickiem.", "Alerts arrive immediately (PUSH), mapping – once per session with the nick.")))
+        lockScreen = toggle(root, tr("Dane Observera w powiadomieniu (ekran blokady)", "Observer data in notification (lock screen)"), cfg.lockScreenStatus)
+        root.addView(note(tr("Brak na ekranie blokady? Włącz w telefonie pokazywanie cichych powiadomień.", "Not on the lock screen? Enable showing silent notifications in phone settings.")))
 
         info = Ui.text(activity, "", 14f, Ui.GREEN).apply { setPadding(dp(16), dp(12), dp(16), 0) }
         root.addView(info)
-        root.addView(Ui.button(activity, "Zapisz i odśwież widget", primary = true) { save() })
+        root.addView(Ui.button(activity, tr("Zapisz i odśwież widget", "Save and refresh widget"), primary = true) { save() })
         return root
     }
 
     private fun updateIntervalLabel() {
-        intervalLabel.text = "Interwał odświeżania: ${intervalBar.progress + Config.MIN_INTERVAL} s"
+        intervalLabel.text = tr("Interwał odświeżania: ${intervalBar.progress + Config.MIN_INTERVAL} s", "Refresh interval: ${intervalBar.progress + Config.MIN_INTERVAL} s")
     }
 
     private fun save() {
         val id = idField.text.toString().trim()
         if (!Config.isValidId(id)) {
-            idField.error = "Hash musi mieć dokładnie 64 znaki 0-9 a-f"
+            idField.error = tr("Hash musi mieć dokładnie 64 znaki 0-9 a-f", "Hash must be exactly 64 chars 0-9 a-f")
             return
         }
         val orange = orangeField.text.toString().toIntOrNull()
         val red = redField.text.toString().toIntOrNull()
         if (orange == null || red == null || orange < 1 || red <= orange) {
             info.setTextColor(Ui.RED)
-            info.text = "Progi: liczby całkowite; czerwony musi być większy niż pomarańczowy"
+            info.text = tr("Progi: liczby całkowite; czerwony musi być większy niż pomarańczowy", "Thresholds: integers; red must be greater than orange")
             return
         }
         val timeout = timeoutField.text.toString().toIntOrNull()
         if (timeout == null || timeout !in 2..30) {
-            timeoutField.error = "Timeout musi wynosić 2–30 s"
+            timeoutField.error = tr("Timeout musi wynosić 2–30 s", "Timeout must be 2–30 s")
             return
         }
         val hosts = listOf(m1Field.text.toString().trim(), m2Field.text.toString().trim())
@@ -143,12 +147,12 @@ class SettingsScreen(private val activity: Activity) {
         }
         if (hosts.any { !validHost(it) } || (fallback.isNotBlank() && !validHost(fallback))) {
             info.setTextColor(Ui.RED)
-            info.text = "Podaj poprawne adresy hostów API (bez spacji)"
+            info.text = tr("Podaj poprawne adresy hostów API (bez spacji)", "Enter valid API host addresses (no spaces)")
             return
         }
         val mapperRaw = mapperField.text.toString().trim()
         if (mapperRaw.isNotEmpty() && !validHost(mapperRaw)) {
-            mapperField.error = "Podaj poprawny adres API mapera (bez spacji)"
+            mapperField.error = tr("Podaj poprawny adres API mapera (bez spacji)", "Enter a valid Mapper API address (no spaces)")
             return
         }
         val mapperApi = MapperApi.normalizeBase(mapperRaw)
@@ -180,7 +184,7 @@ class SettingsScreen(private val activity: Activity) {
         Alerts.ensureChannels(activity)
         RefreshWorker.sync(activity)
         info.setTextColor(Ui.GREEN)
-        info.text = "Zapisano"
+        info.text = tr("Zapisano", "Saved")
         ObserverRefresh.ensureTicking(activity)
         ObserverRefresh.refreshAll(activity)
     }
@@ -188,7 +192,7 @@ class SettingsScreen(private val activity: Activity) {
     private fun testApi() {
         val id = idField.text.toString().trim()
         if (!Config.isValidId(id)) {
-            idField.error = "Najpierw wpisz poprawny hash (64 znaki)"
+            idField.error = tr("Najpierw wpisz poprawny hash (64 znaki)", "First enter a valid hash (64 chars)")
             return
         }
         val hosts = listOf(m1Field.text.toString(), m2Field.text.toString(), fbField.text.toString())
@@ -196,7 +200,7 @@ class SettingsScreen(private val activity: Activity) {
         val timeout = (timeoutField.text.toString().toIntOrNull() ?: 6).coerceIn(2, 30) * 1000
         val mapperApi = MapperApi.normalizeBase(mapperField.text.toString())
         testResult.removeAllViews()
-        testResult.addView(Ui.text(activity, "Sprawdzam ${hosts.size} ${if (hosts.size == 1) "host" else "hosty"} i API mapera…", 14f, Ui.SUBTEXT)
+        testResult.addView(Ui.text(activity, tr("Sprawdzam ${hosts.size} ${if (hosts.size == 1) "host" else "hosty"} i API mapera…", "Checking ${hosts.size} ${if (hosts.size == 1) "host" else "hosts"} and Mapper API…"), 14f, Ui.SUBTEXT)
             .apply { setPadding(0, dp(8), 0, dp(4)) })
         thread {
             val results = hosts.map { h -> Triple(h, ObserverApi.fetch(h, id, timeout), MqttStatusApi.fetch(h, timeout)) }
@@ -211,15 +215,15 @@ class SettingsScreen(private val activity: Activity) {
                     }
                     box.addView(Ui.text(activity, Config.displayHost(h), 14f, Ui.TEXT, bold = true))
                     val (obsText, obsColor) = when (obs) {
-                        is FetchResult.Ok -> ("✓ Observer: ${obs.snapshot.name ?: "(brak nazwy)"}" +
+                        is FetchResult.Ok -> ("✓ Observer: ${obs.snapshot.name ?: tr("(brak nazwy)", "(no name)")}" +
                             (obs.snapshot.model?.let { " / $it" } ?: "") + (obs.snapshot.firmware?.let { " / fw $it" } ?: "")) to Ui.GREEN
                         is FetchResult.Fail -> "✕ Observer: ${obs.reason}" to Ui.RED
                     }
                     box.addView(Ui.text(activity, obsText, 13f, obsColor))
                     val (mqttText, mqttColor) = when (mqtt) {
-                        Health.GOOD -> "✓ Broker: ŻYJE" to Ui.GREEN
-                        Health.BAD -> "✕ Broker: MARTWY (strona nie odpowiada, status zamrożony lub brak połączenia MQTT)" to Ui.RED
-                        Health.UNKNOWN -> "? Broker: NIEZNANY (niezrozumiała odpowiedź /api/mqtt/status)" to Ui.ORANGE
+                        Health.GOOD -> tr("✓ Broker: ŻYJE", "✓ Broker: ALIVE") to Ui.GREEN
+                        Health.BAD -> tr("✕ Broker: MARTWY (strona nie odpowiada, status zamrożony lub brak połączenia MQTT)", "✕ Broker: DEAD (site not responding, status frozen or no MQTT connection)") to Ui.RED
+                        Health.UNKNOWN -> tr("? Broker: NIEZNANY (niezrozumiała odpowiedź /api/mqtt/status)", "? Broker: UNKNOWN (unrecognized /api/mqtt/status response)") to Ui.ORANGE
                     }
                     box.addView(Ui.text(activity, mqttText, 13f, mqttColor))
                     testResult.addView(box, LinearLayout.LayoutParams(
@@ -232,13 +236,42 @@ class SettingsScreen(private val activity: Activity) {
                     setPadding(dp(12), dp(8), dp(12), dp(8))
                 }
                 box.addView(Ui.text(activity, "Mapper · ${MapperApi.host(mapperApi)}", 14f, Ui.TEXT, bold = true))
-                box.addView(Ui.text(activity, if (mapperOk) "✓ API mapera: odpowiada" else "✕ API mapera: brak odpowiedzi lub błąd",
+                box.addView(Ui.text(activity, if (mapperOk) tr("✓ API mapera: odpowiada", "✓ Mapper API: responding") else tr("✕ API mapera: brak odpowiedzi lub błąd", "✕ Mapper API: no response or error"),
                     13f, if (mapperOk) Ui.GREEN else Ui.RED))
                 testResult.addView(box, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = dp(8) })
             }
         }
+    }
+
+    /** Dwa przyciski PL / EN; zmiana zapisuje się od razu i przebudowuje ekran w nowym języku. */
+    private fun languageRow(): View {
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(16), dp(6), dp(16), dp(6))
+        }
+        for ((code, label) in listOf(L10n.PL to "Polski", L10n.EN to "English")) {
+            val on = cfg.appLanguage == code
+            val chip = Ui.text(activity, label, 14f, if (on) Ui.BG else Ui.TEXT, bold = true).apply {
+                gravity = android.view.Gravity.CENTER
+                background = if (on) Ui.rounded(activity, Ui.GREEN, 8) else Ui.rounded(activity, 0x00000000, 8, Ui.OUTLINE)
+                setPadding(0, dp(10), 0, dp(10))
+                isClickable = true
+                setOnClickListener {
+                    if (cfg.appLanguage == code) return@setOnClickListener
+                    cfg.appLanguage = code
+                    L10n.set(code)
+                    Alerts.ensureChannels(activity)
+                    ObserverRefresh.refreshAll(activity)
+                    activity.recreate()
+                }
+            }
+            row.addView(chip, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                if (row.childCount > 0) marginStart = dp(8)
+            })
+        }
+        return row
     }
 
     private fun dp(v: Int) = Ui.dp(activity, v)
@@ -261,7 +294,12 @@ class SettingsScreen(private val activity: Activity) {
             orientation = LinearLayout.VERTICAL
             setPadding(if (inRow) 0 else dp(16), dp(6), if (inRow) 0 else dp(16), dp(4))
         }
-        val lbl = Ui.text(activity, label, 11f, Ui.MUTED).apply { setPadding(dp(2), 0, 0, dp(4)) }
+        // Etykieta zawsze w jednej linii: pola w jednym rzędzie stoją na tej samej wysokości.
+        val lbl = Ui.text(activity, label, 11f, Ui.MUTED).apply {
+            setPadding(dp(2), 0, 0, dp(4))
+            isSingleLine = true
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
         box.addView(lbl)
         val edit = EditText(activity).apply {
             setText(value)

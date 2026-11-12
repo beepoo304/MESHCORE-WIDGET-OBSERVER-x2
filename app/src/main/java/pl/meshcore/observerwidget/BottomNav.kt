@@ -26,10 +26,10 @@ class BottomNav(ctx: Context, private val onSelect: (Int) -> Unit) : LinearLayou
         setBackgroundColor(Ui.SURFACE)
         setPadding(0, Ui.dp(ctx, 8), 0, Ui.dp(ctx, 10))
         add(R.drawable.ic_nav_observer, "Observer")
-        add(R.drawable.ic_nav_map, "Mapa")
+        add(R.drawable.ic_nav_map, tr("Mapa", "Map"))
         add(R.drawable.ic_nav_log, "Log")
-        add(R.drawable.ic_nav_outage, "Przestoje")
-        add(R.drawable.ic_nav_settings, "Ustawienia")
+        add(R.drawable.ic_nav_outage, tr("Przestoje", "Outages"))
+        add(R.drawable.ic_nav_settings, tr("Ustawienia", "Settings"))
     }
 
     private fun add(icon: Int, title: String) {
@@ -78,21 +78,34 @@ class BottomNav(ctx: Context, private val onSelect: (Int) -> Unit) : LinearLayou
     }
 
     /**
-     * Jedna wspólna wielkość podpisów: największa (≤ 11 sp), przy której najdłuższy podpis
-     * (pogrubiony, jak na aktywnej karcie) mieści się w kolumnie z marginesem – równy pasek.
+     * Jedna wspólna wielkość podpisów (≤ 11 sp), a szerokość kolumny = podpis + równy odstęp:
+     * przerwy między sąsiednimi podpisami są jednakowe (np. „Przestoje” dokładnie pośrodku
+     * między „Log” a „Ustawienia”), mimo różnej długości słów.
      */
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w <= 0 || tabs.isEmpty()) return
-        val avail = w / tabs.size - Ui.dp(context, 6)
+        val minGap = Ui.dp(context, 8).toFloat()
         val paint = android.text.TextPaint().apply { typeface = android.graphics.Typeface.DEFAULT_BOLD }
         var size = 11f
-        while (size > 8f) {
+        var widths: List<Float>
+        while (true) {
             paint.textSize = android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, size, resources.displayMetrics)
-            if (tabs.all { paint.measureText(it.label.text.toString()) <= avail }) break
+            widths = tabs.map { paint.measureText(it.label.text.toString()) }
+            if (widths.sum() + minGap * tabs.size <= w || size <= 8f) break
             size -= 0.5f
         }
-        post { tabs.forEach { it.label.textSize = size } }
+        // Pigułka ikony (56 dp) też musi się zmieścić w kolumnie.
+        val pill = Ui.dp(context, 56).toFloat()
+        val gap = ((w - widths.sum()) / tabs.size).coerceAtLeast(0f)
+        val weights = widths.map { maxOf(it + gap, pill) }
+        post {
+            tabs.forEachIndexed { i, t ->
+                t.label.textSize = size
+                val cell = getChildAt(i)
+                cell.layoutParams = (cell.layoutParams as LayoutParams).apply { width = 0; weight = weights[i] }
+            }
+        }
     }
 
     fun select(i: Int) {

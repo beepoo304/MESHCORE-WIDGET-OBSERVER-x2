@@ -142,7 +142,7 @@ class MonitorService : Service() {
             // Usuwamy stary kanał MIN, żeby nie zostawał w ustawieniach jako martwy.
             nm.deleteNotificationChannel("monitor_service")
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Monitoring w tle", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL, tr("Monitoring w tle", "Background monitoring"), NotificationManager.IMPORTANCE_LOW)
             )
         }
 
@@ -175,8 +175,8 @@ class MonitorService : Service() {
                     .setStyle(NotificationCompat.BigTextStyle().bigText(t.expanded))
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             } else {
-                builder.setContentTitle("Monitoring Observera aktywny")
-                    .setContentText("Widget odświeżany co ${config.intervalSec} s")
+                builder.setContentTitle(tr("Monitoring Observera aktywny", "Observer monitoring active"))
+                    .setContentText(tr("Widget odświeżany co ${config.intervalSec} s", "Widget refreshes every ${config.intervalSec} s"))
             }
             return builder.build()
         }

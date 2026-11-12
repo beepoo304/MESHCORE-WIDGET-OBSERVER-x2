@@ -21,7 +21,7 @@ object ObserverApi {
 
     /** Próbuje ID wielkimi literami, a przy 404 także małymi (serwery rozróżniają wielkość liter). */
     fun fetch(host: String, id: String, timeoutMs: Int): FetchResult {
-        var last: FetchResult = FetchResult.Fail(host, "Brak identyfikatora")
+        var last: FetchResult = FetchResult.Fail(host, tr("Brak identyfikatora", "No identifier"))
         for (variant in Config.idVariants(id)) {
             last = fetchOne(host, variant, timeoutMs)
             if (last is FetchResult.Ok || !(last is FetchResult.Fail && last.reason.contains("404"))) return last
@@ -33,7 +33,7 @@ object ObserverApi {
         val url = try {
             URL("${Config.baseUrl(host)}/api/observers/${URLEncoder.encode(id, "UTF-8")}")
         } catch (e: Exception) {
-            return FetchResult.Fail(host, "Zły adres API")
+            return FetchResult.Fail(host, tr("Zły adres API", "Invalid API address"))
         }
         return try {
             val c = url.openConnection() as HttpURLConnection
@@ -47,7 +47,7 @@ object ObserverApi {
                 c.setRequestProperty("Pragma", "no-cache")
                 val code = c.responseCode
                 when {
-                    code == 404 -> FetchResult.Fail(host, "Observer nieznany na serwerze (404)")
+                    code == 404 -> FetchResult.Fail(host, tr("Observer nieznany na serwerze (404)", "Observer unknown to server (404)"))
                     code !in 200..299 -> FetchResult.Fail(host, "HTTP $code")
                     else -> {
                         val body = c.inputStream.bufferedReader().use { it.readText() }
@@ -66,9 +66,9 @@ object ObserverApi {
         } catch (e: SocketTimeoutException) {
             FetchResult.Fail(host, "Timeout")
         } catch (e: IOException) {
-            FetchResult.Fail(host, "Brak połączenia")
+            FetchResult.Fail(host, tr("Brak połączenia", "No connection"))
         } catch (e: Exception) {
-            FetchResult.Fail(host, "Błąd: ${e.javaClass.simpleName}")
+            FetchResult.Fail(host, tr("Błąd: ${e.javaClass.simpleName}", "Error: ${e.javaClass.simpleName}"))
         }
     }
 
@@ -76,7 +76,7 @@ object ObserverApi {
         val o = try {
             JSONObject(body)
         } catch (e: JSONException) {
-            return FetchResult.Fail(host, "Niepoprawny JSON")
+            return FetchResult.Fail(host, tr("Niepoprawny JSON", "Invalid JSON"))
         }
         fun str(vararg keys: String): String? =
             keys.firstNotNullOfOrNull { key ->
@@ -85,7 +85,7 @@ object ObserverApi {
             }
 
         val id = str("id", "observer_id", "observerId", "public_key", "publicKey", "hash").orEmpty()
-        if (id.isBlank()) return FetchResult.Fail(host, "Brak identyfikatora Observera w JSON")
+        if (id.isBlank()) return FetchResult.Fail(host, tr("Brak identyfikatora Observera w JSON", "No Observer identifier in JSON"))
 
         val lastRaw = str(
             "last_packet_at", "lastPacketAt", "last_packet", "lastPacket",

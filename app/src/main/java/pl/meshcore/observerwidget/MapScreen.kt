@@ -121,6 +121,10 @@ class MapScreen(
 
     /** Most JS→Kotlin: wywoływany z WebView na osobnym wątku, zwraca gotowy JSON. */
     private inner class Bridge {
+        /** Język interfejsu strony: "en" albo "pl". */
+        @JavascriptInterface
+        fun getLang(): String = if (L10n.en) "en" else "pl"
+
         @JavascriptInterface
         fun close() {
             main.post { onClose() }

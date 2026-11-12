@@ -13,11 +13,13 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
 object Alerts {
-    private enum class Kind(val key: String, val channel: String, val title: String, val id: Int) {
-        OBSERVER("obs", "alerts_observer", "Observer nie wysyła pakietów", 1001),
-        MQTT1("m1", "alerts_mqtt1", "MQTT1 nie działa", 1002),
-        MQTT2("m2", "alerts_mqtt2", "MQTT2 nie działa", 1003),
-        MAPPING("map", "alerts_mapping", "Ktoś mapuje w zasięgu Observera", 1004)
+    private enum class Kind(val key: String, val channel: String, private val titlePl: String, private val titleEn: String, val id: Int) {
+        OBSERVER("obs", "alerts_observer", "Observer nie wysyła pakietów", "Observer is not sending packets", 1001),
+        MQTT1("m1", "alerts_mqtt1", "MQTT1 nie działa", "MQTT1 is down", 1002),
+        MQTT2("m2", "alerts_mqtt2", "MQTT2 nie działa", "MQTT2 is down", 1003),
+        MAPPING("map", "alerts_mapping", "Ktoś mapuje w zasięgu Observera", "Someone is mapping in Observer range", 1004);
+
+        val title: String get() = tr(titlePl, titleEn)
     }
 
     private val lock = Any()
@@ -25,10 +27,10 @@ object Alerts {
     fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("alerts_observer", "Brak pakietów Observera", NotificationManager.IMPORTANCE_HIGH))
-        nm.createNotificationChannel(NotificationChannel("alerts_mqtt1", "Awaria MQTT1", NotificationManager.IMPORTANCE_HIGH))
-        nm.createNotificationChannel(NotificationChannel("alerts_mqtt2", "Awaria MQTT2", NotificationManager.IMPORTANCE_HIGH))
-        nm.createNotificationChannel(NotificationChannel("alerts_mapping", "Mapowanie w zasięgu Observera", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel("alerts_observer", tr("Brak pakietów Observera", "Observer: no packets"), NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel("alerts_mqtt1", tr("Awaria MQTT1", "MQTT1 failure"), NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel("alerts_mqtt2", tr("Awaria MQTT2", "MQTT2 failure"), NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel("alerts_mapping", tr("Mapowanie w zasięgu Observera", "Mapping in Observer range"), NotificationManager.IMPORTANCE_HIGH))
     }
 
     fun evaluate(ctx: Context, data: WidgetData, nowMs: Long = System.currentTimeMillis()) {
@@ -51,10 +53,14 @@ object Alerts {
         val observerHealth = if (bothApisDown) Health.BAD else assessment.observer
         val observerText: ((Long) -> String)? = when {
             bothApisDown -> ({ minutes ->
-                "Brak odpowiedzi API: ${Config.displayHost(cfg.mqtt1Host)}, ${Config.displayHost(cfg.mqtt2Host)} (od ok. $minutes min)."
+                tr(
+                    "Brak odpowiedzi API: ${Config.displayHost(cfg.mqtt1Host)}, ${Config.displayHost(cfg.mqtt2Host)} (od ok. $minutes min).",
+                    "No API response: ${Config.displayHost(cfg.mqtt1Host)}, ${Config.displayHost(cfg.mqtt2Host)} (for ~$minutes min)."
+                )
             })
             data.observer != null -> ({ minutes ->
-                "${Config.displayHost(data.observer!!.host)}: brak pakietów od ok. $minutes min."
+                val host = Config.displayHost(data.observer!!.host)
+                tr("$host: brak pakietów od ok. $minutes min.", "$host: no packets for ~$minutes min.")
             })
             else -> null
         }
@@ -83,24 +89,24 @@ object Alerts {
             prefs.edit().putLong("map_last", nowMs).apply()
             if (newcomers.isEmpty()) return
             val userId = newcomers.last()
-            val nick = MapperMonitor.nick(userId) ?: "nieznany mapujący"
+            val nick = MapperMonitor.nick(userId) ?: tr("nieznany mapujący", "unknown mapper")
             val sessionCount = state?.pings?.size ?: 1
             val content = buildString {
                 append(nick)
-                append(" mapuje w zasięgu Observera")
+                append(tr(" mapuje w zasięgu Observera", " is mapping in Observer range"))
                 state?.pings?.firstOrNull()?.let { first ->
                     val minutes = ((nowMs - first.tsMs) / 60_000L).coerceAtLeast(0L)
-                    if (minutes > 0L) append(" (sesja od ok. $minutes min, $sessionCount pingów)")
+                    if (minutes > 0L) append(tr(" (sesja od ok. $minutes min, $sessionCount pingów)", " (session for ~$minutes min, $sessionCount pings)"))
                 }
                 state?.mapperNicks?.takeIf { it.size > 1 }?.let {
-                    append(". Mapują teraz: ${it.joinToString(", ")}")
+                    append(tr(". Mapują teraz: ", ". Mapping now: ") + it.joinToString(", "))
                 }
                 fresh.lastOrNull { it.userId == userId }?.let { ping ->
-                    ping.observerSnrDb?.let { append(". SNR u Observera: ${fmt(it)} dB") }
+                    ping.observerSnrDb?.let { append(tr(". SNR u Observera: ${fmt(it)} dB", ". SNR at Observer: ${fmt(it)} dB")) }
                     ping.rssiDbm?.let { append(", RSSI: ${fmt(it)} dBm") }
                 }
             }
-            if (notifyMapping(ctx, Kind.MAPPING.id, "Mapowanie: $nick", content)) {
+            if (notifyMapping(ctx, Kind.MAPPING.id, tr("Mapowanie: $nick", "Mapping: $nick"), content)) {
                 // Zapamiętujemy wszystkich nowych naraz, żeby nie spamić przy kolejnych pingach.
                 prefs.edit().putString("map_notified", (notified + newcomers).joinToString(",")).apply()
             }
@@ -130,25 +136,25 @@ object Alerts {
             prefs.edit().putLong("${key}_map_last", nowMs).putString("${key}_map_id", rpt.shortId).apply()
             if (newcomers.isEmpty()) return
             val userId = newcomers.last()
-            val nick = MapperMonitor.nick(userId) ?: "nieznany mapujący"
+            val nick = MapperMonitor.nick(userId) ?: tr("nieznany mapujący", "unknown mapper")
             val where = rpt.name?.let { "„$it”" } ?: "${rpt.label} (${rpt.shortId.take(4).uppercase()}…)"
             val content = buildString {
                 append(nick)
-                append(" mapuje")
+                append(tr(" mapuje", " is mapping"))
                 val ping = fresh.lastOrNull { it.userId == userId && it.lat != null && it.lon != null }
                 val lat = rpt.state.observerLat
                 val lon = rpt.state.observerLon
                 if (ping != null && lat != null && lon != null) {
                     val bearing = GeoMath.bearingDeg(lat, lon, ping.lat!!, ping.lon!!)
                     val dist = GeoMath.distanceKm(lat, lon, ping.lat, ping.lon!!)
-                    append(" ${GeoMath.km(dist)} ${GeoMath.compassLabel(bearing)} od $where")
+                    append(tr(" ${GeoMath.km(dist)} ${GeoMath.compassLabel(bearing)} od $where", " ${GeoMath.km(dist)} ${GeoMath.compassLabel(bearing)} from $where"))
                 } else {
-                    append(" przy $where")
+                    append(tr(" przy $where", " near $where"))
                 }
-                fresh.lastOrNull { it.userId == userId }?.observerSnrDb?.let { append(". SNR u RPT: ${fmt(it)} dB") }
+                fresh.lastOrNull { it.userId == userId }?.observerSnrDb?.let { append(tr(". SNR u RPT: ${fmt(it)} dB", ". SNR at RPT: ${fmt(it)} dB")) }
                 append('.')
             }
-            if (notifyMapping(ctx, rptNotificationId(rpt.slot), "Mapowanie przy ${rpt.label}", content)) {
+            if (notifyMapping(ctx, rptNotificationId(rpt.slot), tr("Mapowanie przy ${rpt.label}", "Mapping near ${rpt.label}"), content)) {
                 prefs.edit().putString("${key}_map_notified", (notified + newcomers).joinToString(",")).apply()
             }
         }
@@ -190,7 +196,10 @@ object Alerts {
 
     /** Treść dla alarmów MQTT: nazwa hosta i od jak dawna brak połączenia. */
     private fun mqttText(host: String): (Long) -> String = { minutes ->
-        "${Config.displayHost(host)}: brak połączenia MQTT od ok. $minutes min."
+        tr(
+            "${Config.displayHost(host)}: brak połączenia MQTT od ok. $minutes min.",
+            "${Config.displayHost(host)}: no MQTT connection for ~$minutes min."
+        )
     }
 
     fun clearAll(ctx: Context) {
@@ -249,7 +258,7 @@ object Alerts {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val elapsedMinutes = ((nowMs - sinceMs) / 60_000L).coerceAtLeast(0)
-        val content = text?.invoke(elapsedMinutes) ?: "Brak pakietów od ok. $elapsedMinutes min."
+        val content = text?.invoke(elapsedMinutes) ?: tr("Brak pakietów od ok. $elapsedMinutes min.", "No packets for ~$elapsedMinutes min.")
         val notification = NotificationCompat.Builder(ctx, kind.channel)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle(kind.title)

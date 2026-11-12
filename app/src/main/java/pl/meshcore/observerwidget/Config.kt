@@ -80,6 +80,11 @@ class Config(context: Context) {
      * Wartość w ms; −1 = na stałe (bez czyszczenia). Domyślnie 24 h (jak dotychczas).
      * Wybór w zakładce LOG: 24 h / 48 h / 3 dni / 10 dni / 30 dni / na stałe.
      */
+    /** Język aplikacji: [L10n.PL] (domyślnie) albo [L10n.EN]. Widget zawsze po polsku. */
+    var appLanguage: String
+        get() = if (prefs.getString("app_lang", L10n.PL) == L10n.EN) L10n.EN else L10n.PL
+        set(v) = prefs.edit().putString("app_lang", if (v == L10n.EN) L10n.EN else L10n.PL).apply()
+
     /** Adres API mapera (action=points / action=repeaters). Zmiana = reset stanu mapowania. */
     var mapperApi: String
         get() = prefs.getString("mapper_api", null)?.takeIf { it.isNotBlank() } ?: MapperApi.DEFAULT_BASE
