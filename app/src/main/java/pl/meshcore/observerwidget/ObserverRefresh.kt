@@ -161,6 +161,7 @@ object ObserverRefresh {
         MonitorService.stop(app)
         RefreshWorker.sync(app)
         Alerts.clearAll(app)
+        Outages.closeAll(app, System.currentTimeMillis(), "monitoring zatrzymany")
         lastData = lastData?.copy(busy = false)
         val ids = widgetIds(app)
         if (ids.isNotEmpty()) pushAll(app, ids, lastData ?: emptyData(app))

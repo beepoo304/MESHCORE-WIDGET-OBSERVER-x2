@@ -30,6 +30,8 @@ class SettingsScreen(private val activity: Activity) {
     private lateinit var intervalBar: SeekBar
     private lateinit var intervalLabel: TextView
     private lateinit var info: TextView
+    /** Wynik Test API – tuż pod przyciskiem, żeby był widoczny bez przewijania. */
+    private lateinit var testResult: LinearLayout
     private lateinit var alertObs: Switch
     private lateinit var alertM1: Switch
     private lateinit var alertM2: Switch
@@ -60,6 +62,11 @@ class SettingsScreen(private val activity: Activity) {
         fbField = field(root, "API zapasowe (nagłówek, gdy oba powyższe nie działają)", cfg.fallbackHost)
         timeoutField = field(root, "Timeout zapytań (s, 2–30)", cfg.timeoutSec.toString(), InputType.TYPE_CLASS_NUMBER)
         root.addView(Ui.outlineButton(activity, "Test API · sprawdź i pobierz nazwę Observera") { testApi() })
+        testResult = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), 0, dp(16), 0)
+        }
+        root.addView(testResult)
 
         root.addView(Ui.section(activity, "Odświeżanie i progi"))
         intervalLabel = Ui.text(activity, "", 14f, Ui.TEXT).apply { setPadding(dp(16), dp(4), dp(16), 0) }
@@ -196,26 +203,36 @@ class SettingsScreen(private val activity: Activity) {
         val hosts = listOf(m1Field.text.toString(), m2Field.text.toString(), fbField.text.toString())
             .filter { it.isNotBlank() }
         val timeout = (timeoutField.text.toString().toIntOrNull() ?: 6).coerceIn(2, 30) * 1000
-        info.setTextColor(Ui.TEXT)
-        info.text = "Sprawdzam…"
+        testResult.removeAllViews()
+        testResult.addView(Ui.text(activity, "Sprawdzam ${hosts.size} ${if (hosts.size == 1) "host" else "hosty"}…", 14f, Ui.SUBTEXT)
+            .apply { setPadding(0, dp(8), 0, dp(4)) })
         thread {
-            val lines = hosts.map { h ->
-                val observerResult = ObserverApi.fetch(h, id, timeout)
-                val observerLine = when (observerResult) {
-                    is FetchResult.Ok -> "Observer ✓: ${observerResult.snapshot.name ?: "(brak nazwy)"}" +
-                        (observerResult.snapshot.model?.let { " / $it" } ?: "") + (observerResult.snapshot.firmware?.let { " / fw $it" } ?: "")
-                    is FetchResult.Fail -> "Observer ✕: ${observerResult.reason}"
-                }
-                val mqttLine = when (MqttStatusApi.fetch(h, timeout)) {
-                    Health.GOOD -> "Broker: ŻYJE"
-                    Health.BAD -> "Broker: MARTWY (strona nie odpowiada, status zamrożony lub brak połączenia MQTT)"
-                    Health.UNKNOWN -> "Broker: NIEZNANY (niezrozumiała odpowiedź /api/mqtt/status)"
-                }
-                "${Config.displayHost(h)}\n$observerLine\n$mqttLine"
-            }
+            val results = hosts.map { h -> Triple(h, ObserverApi.fetch(h, id, timeout), MqttStatusApi.fetch(h, timeout)) }
             activity.runOnUiThread {
-                info.setTextColor(Ui.TEXT)
-                info.text = lines.joinToString("\n")
+                testResult.removeAllViews()
+                for ((h, obs, mqtt) in results) {
+                    val box = LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        background = Ui.rounded(activity, Ui.PANEL, 8)
+                        setPadding(dp(12), dp(8), dp(12), dp(8))
+                    }
+                    box.addView(Ui.text(activity, Config.displayHost(h), 14f, Ui.TEXT, bold = true))
+                    val (obsText, obsColor) = when (obs) {
+                        is FetchResult.Ok -> ("✓ Observer: ${obs.snapshot.name ?: "(brak nazwy)"}" +
+                            (obs.snapshot.model?.let { " / $it" } ?: "") + (obs.snapshot.firmware?.let { " / fw $it" } ?: "")) to Ui.GREEN
+                        is FetchResult.Fail -> "✕ Observer: ${obs.reason}" to Ui.RED
+                    }
+                    box.addView(Ui.text(activity, obsText, 13f, obsColor))
+                    val (mqttText, mqttColor) = when (mqtt) {
+                        Health.GOOD -> "✓ Broker: ŻYJE" to Ui.GREEN
+                        Health.BAD -> "✕ Broker: MARTWY (strona nie odpowiada, status zamrożony lub brak połączenia MQTT)" to Ui.RED
+                        Health.UNKNOWN -> "? Broker: NIEZNANY (niezrozumiała odpowiedź /api/mqtt/status)" to Ui.ORANGE
+                    }
+                    box.addView(Ui.text(activity, mqttText, 13f, mqttColor))
+                    testResult.addView(box, LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                    ).apply { topMargin = dp(8) })
+                }
             }
         }
     }

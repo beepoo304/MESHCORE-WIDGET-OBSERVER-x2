@@ -37,9 +37,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
- * Aplikacja z dolnym paskiem (styl M2): Observer · Mapa · Log · Ustawienia.
- * Observer = stan Observera, brokery MQTT, „Mapują teraz”, moje repeatery; Log = karty mapowań;
- * Mapa = [MapScreen]; Ustawienia = [SettingsScreen]. Dane i logika bez zmian – tylko prezentacja.
+ * Aplikacja z dolnym paskiem (styl M2): Observer · Mapa · Log · Przestoje · Ustawienia.
+ * Observer = stan Observera, brokery MQTT, „Mapują teraz”, moje repeatery; Log = wpisy mapowań
+ * (osobno dla każdego mapującego); Przestoje = rejestr [Outages]; Mapa = [MapScreen];
+ * Ustawienia = [SettingsScreen].
  */
 class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
@@ -50,6 +51,8 @@ class MainActivity : Activity() {
     private lateinit var dash: LinearLayout
     private lateinit var logScroll: ScrollView
     private lateinit var logDash: LinearLayout
+    private lateinit var outScroll: ScrollView
+    private lateinit var outDash: LinearLayout
     private var settingsScroll: ScrollView? = null
     private var mapScreen: MapScreen? = null
     private var tab = -1
@@ -88,6 +91,9 @@ class MainActivity : Activity() {
         logScroll = ScrollView(this).apply { addView(logDash) }
         content.addView(obsScroll, matchParent())
         content.addView(logScroll, matchParent())
+        outDash = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        outScroll = ScrollView(this).apply { addView(outDash) }
+        content.addView(outScroll, matchParent())
         root.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         nav = BottomNav(this) { selectTab(it) }
         root.addView(nav)
@@ -120,6 +126,14 @@ class MainActivity : Activity() {
             ObserverRefresh.ensureTicking(this)
             handler.post(ticker)
         }
+        refreshCompanionKeys()
+    }
+
+    /** Lista kluczy companionów (klucz mapującego po nicku) – w tle, co 6 h. */
+    private fun refreshCompanionKeys() {
+        thread {
+            if (CompanionKeys.refreshIfStale(applicationContext)) runOnUiThread { if (!isFinishing) rerender() }
+        }
     }
 
     override fun onPause() {
@@ -149,6 +163,7 @@ class MainActivity : Activity() {
             when (t) {
                 TAB_OBSERVER -> obsScroll.smoothScrollTo(0, 0)
                 TAB_LOG -> logScroll.smoothScrollTo(0, 0)
+                TAB_OUTAGES -> outScroll.smoothScrollTo(0, 0)
                 TAB_SETTINGS -> settingsScroll?.smoothScrollTo(0, 0)
             }
             return
@@ -158,6 +173,7 @@ class MainActivity : Activity() {
         hideKeyboard()
         obsScroll.visibility = if (t == TAB_OBSERVER) View.VISIBLE else View.GONE
         logScroll.visibility = if (t == TAB_LOG) View.VISIBLE else View.GONE
+        outScroll.visibility = if (t == TAB_OUTAGES) View.VISIBLE else View.GONE
         if (t == TAB_MAP) {
             val map = mapScreen ?: MapScreen(this, embedded = true) { selectTab(TAB_OBSERVER) }.also {
                 mapScreen = it
@@ -196,9 +212,11 @@ class MainActivity : Activity() {
     private fun render(d: WidgetData) {
         dashboardData = d
         nav.setBadge(TAB_OBSERVER, d.configured && (d.mqtt1Health == Health.BAD || d.mqtt2Health == Health.BAD))
+        nav.setBadge(TAB_OUTAGES, Outages.anyOngoing(this, System.currentTimeMillis()))
         when (tab) {
             TAB_OBSERVER -> renderDashboard(d)
             TAB_LOG -> renderLog(d)
+            TAB_OUTAGES -> renderOutages()
         }
     }
 
@@ -241,6 +259,7 @@ class MainActivity : Activity() {
             1 -> Ui.ORANGE
             else -> Ui.RED
         }))
+        dash.addView(refreshRow(cfg, wallClockNow))
         dash.addView(brokerItem("MQTT1", d.mqtt1Host, d.broker1, now, d.mqtt1Health, d.broker1FrozenAgeMs, cfg))
         dash.addView(Ui.divider(this))
         dash.addView(brokerItem("MQTT2", d.mqtt2Host, d.broker2, now, d.mqtt2Health, d.broker2FrozenAgeMs, cfg))
@@ -267,13 +286,56 @@ class MainActivity : Activity() {
         val box = Ui.item(this)
         val obs = d.observer
         box.addView(Ui.text(this, obs?.name ?: "—", 17f, Ui.TEXT, bold = true))
-        box.addView(Ui.text(
-            this,
-            listOfNotNull(obs?.model, obs?.firmware?.let { "fw $it" }, d.observerId.take(4).uppercase()).joinToString(" · "),
-            12f, Ui.SUBTEXT
-        ).apply { setPadding(0, dp(3), 0, 0) })
+        box.addView(keyRow(Config(this).observerId, "Observera", 13f))
+        listOfNotNull(obs?.model, obs?.firmware?.let { "fw $it" }).takeIf { it.isNotEmpty() }?.let {
+            box.addView(Ui.text(this, it.joinToString(" · "), 12f, Ui.SUBTEXT).apply { setPadding(0, dp(1), 0, 0) })
+        }
         obs?.let { box.addView(Ui.text(this, "Dane z: ${Config.displayHost(it.host)}", 11f, Ui.MUTED)) }
         return box
+    }
+
+    /** Skrót klucza (6 znaków) + ikona kopiowania pełnego klucza; null → szare „brak klucza”. */
+    private fun keyRow(fullKey: String?, label: String, size: Float = 12f): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val key = fullKey?.trim()?.takeIf { it.isNotEmpty() }
+        if (key == null) {
+            row.addView(Ui.text(this, "brak klucza", size - 1f, Ui.MUTED).apply { setPadding(0, dp(2), 0, dp(2)) })
+            return row
+        }
+        row.addView(Ui.text(this, "${key.take(6).uppercase()}…", size, Ui.SUBTEXT).apply { typeface = Typeface.MONOSPACE })
+        row.addView(copyButton(key, label))
+        return row
+    }
+
+    /** Odliczanie do następnego pobrania (jak na widgecie) + odświeżenie na żądanie. */
+    private fun refreshRow(cfg: Config, nowMs: Long): View {
+        val busyNow = ObserverRefresh.refreshInProgress
+        val left = Ui.text(
+            this,
+            when {
+                !cfg.monitoringEnabled -> "Odświeżanie zatrzymane"
+                busyNow -> "Odświeżam…"
+                else -> "Następne odświeżenie za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, nowMs), true)}"
+            },
+            12f, Ui.SUBTEXT
+        )
+        val btn = Ui.text(this, "⟳ Odśwież teraz", 13f, if (cfg.monitoringEnabled && !busyNow) Ui.GREEN else Ui.MUTED, bold = true).apply {
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
+            contentDescription = "Odśwież teraz"
+            setOnClickListener {
+                if (!Config(this@MainActivity).monitoringEnabled) {
+                    android.widget.Toast.makeText(this@MainActivity, "Monitoring zatrzymany – uruchom go, aby odświeżać", android.widget.Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                ObserverRefresh.refreshAll(applicationContext)
+                rerender()
+            }
+        }
+        return Ui.row(this, left, btn).apply { setPadding(dp(16), dp(4), dp(16), dp(4)) }
     }
 
     /**
@@ -452,6 +514,7 @@ class MainActivity : Activity() {
         details.append(pingCount(mine.size))
         mine.lastOrNull()?.observerSnrDb?.let { details.append(" · SNR ${fmtPl(it)} dB") }
         box.addView(Ui.text(this, details, 12f, Ui.MUTED).apply { setPadding(0, dp(2), 0, 0) })
+        if (p != null) box.addView(keyRow(CompanionKeys.keyFor(this, nick), nick))
         return box
     }
 
@@ -650,31 +713,126 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Karty mapowań Observera i RPT w zakresie przechowywania: (czas ostatniego pinga, karta). */
+    /**
+     * Wpisy mapowań Observera i RPT w zakresie przechowywania: (czas ostatniego pinga, wpis).
+     * Każdy mapujący ma osobny wpis – dwóch mapujących przy jednym źródle = dwa wpisy.
+     */
     private fun mappingCards(d: WidgetData, cfg: Config, wallClockNow: Long): List<Pair<Long, View>> {
         val keepMs = cfg.mapperKeepEffectiveMs
         val logCards = mutableListOf<Pair<Long, View>>()
+        val obsSource = MappingSource("OBSERVER", rpt = false, srcKeyShort = d.observerId.take(4).uppercase(),
+            srcFullKey = cfg.observerId, srcLabel = "Observera", snrLabel = "SNR u Obs")
         val mapping = d.mapping
-        val mappingRecent = mapping?.pings?.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
-        if (showMapping || (mapping != null && (mapping.active || mappingRecent))) {
-            logCards.add((mapping?.pings?.lastOrNull()?.tsMs ?: 0L) to mappingCard(
-                mapping, wallClockNow, tag = "OBSERVER", rpt = false,
-                keyShort = d.observerId.take(4).uppercase(), fullKey = cfg.observerId,
-                keyLabel = "Observera", snrLabel = "SNR u Obs"
-            ))
+        val obsEntries = mapping?.let { mapperEntries(it, obsSource, wallClockNow, keepMs) }.orEmpty()
+        if (obsEntries.isEmpty() && showMapping) {
+            logCards.add(0L to emptyMappingCard(obsSource, mapping == null))
         }
+        logCards.addAll(obsEntries)
         for (r in d.rptMappings.sortedBy { it.slot }) {
-            val st = r.state
-            val recent = st.pings.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
-            if (!st.active && !recent) continue
             if (cfg.rptId(r.slot).isBlank()) continue
-            logCards.add((st.pings.lastOrNull()?.tsMs ?: 0L) to mappingCard(
-                st, wallClockNow, tag = r.label, rpt = true,
-                keyShort = r.shortId.take(4).uppercase(), fullKey = null,
-                keyLabel = r.label, snrLabel = "SNR u RPT"
-            ))
+            val src = MappingSource(r.label, rpt = true, srcKeyShort = r.shortId.take(4).uppercase(),
+                srcFullKey = null, srcLabel = r.label, snrLabel = "SNR u RPT")
+            logCards.addAll(mapperEntries(r.state, src, wallClockNow, keepMs))
         }
         return logCards
+    }
+
+    private class MappingSource(
+        val tag: String, val rpt: Boolean, val srcKeyShort: String, val srcFullKey: String?,
+        val srcLabel: String, val snrLabel: String
+    )
+
+    /** Osobny wpis dla każdego mapującego przy danym źródle (pingi, czas i SNR liczone dla tej osoby). */
+    private fun mapperEntries(m: MappingState, src: MappingSource, nowMs: Long, keepMs: Long): List<Pair<Long, View>> {
+        val withGps = latestPerMapper(m)
+        return m.pings.groupBy { it.userId }.mapNotNull { (userId, mine) ->
+            val sorted = mine.sortedBy { it.tsMs }
+            val last = sorted.last()
+            val active = m.active && nowMs - last.tsMs < MapperApi.SESSION_GAP_MS
+            if (!active && nowMs - last.tsMs >= keepMs) return@mapNotNull null
+            val colorIndex = withGps.indexOfFirst { it.userId == userId }
+            last.tsMs to mapperEntry(m, src, userId, sorted, colorIndex, active, nowMs)
+        }
+    }
+
+    /** Nagłówek wpisu: źródło (OBSERVER / RPTn) + skrót jego klucza, po prawej „● teraz” albo godzina. */
+    private fun sourceHeader(src: MappingSource, right: View?): View {
+        val tagColor = if (src.rpt) Ui.ORANGE else Ui.BLUE
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        head.addView(Ui.text(this, src.tag, 13f, tagColor, bold = true).apply { letterSpacing = 0.05f })
+        head.addView(Ui.text(this, "  ${src.srcKeyShort}…", 11f, Ui.MUTED).apply { typeface = Typeface.MONOSPACE })
+        if (src.srcFullKey != null) head.addView(copyButton(src.srcFullKey, src.srcLabel))
+        return Ui.row(this, head, right)
+    }
+
+    private fun emptyMappingCard(src: MappingSource, noData: Boolean): View = Ui.item(this).apply {
+        addView(sourceHeader(src, null))
+        addView(Ui.text(
+            this@MainActivity,
+            if (noData) "Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada)." else "Brak mapowań w wybranym zakresie.",
+            13f, Ui.MUTED
+        ))
+    }
+
+    /**
+     * Wpis jednego mapującego: nagłówek źródła, nick (kolor strzałki tego mapera na widgecie),
+     * niżej kierunek i odległość, klucz mapującego (z list companionów, ściśle po nicku)
+     * i statystyki z datą: liczba pingów, od–do, SNR ostatniego pinga.
+     */
+    private fun mapperEntry(
+        m: MappingState, src: MappingSource, userId: Long, pings: List<MapperPing>,
+        colorIndex: Int, active: Boolean, nowMs: Long
+    ): View {
+        val box = Ui.item(this)
+        val tagColor = if (src.rpt) Ui.ORANGE else Ui.BLUE
+        val last = pings.last()
+        val right = if (active) Ui.text(this, "● teraz", 12f, tagColor, bold = true).apply {
+            alpha = if (WidgetRenderer.mappingIconOn(nowMs)) 1f else 0.45f
+        } else Ui.text(this, TimeFormat.hm(last.tsMs), 12f, Ui.MUTED)
+        box.addView(sourceHeader(src, right))
+
+        val nickColor = if (colorIndex >= 0) WidgetRenderer.mapperArrowColor(colorIndex) else Ui.TEXT
+        val nick = MapperMonitor.nick(userId) ?: "user $userId"
+        val nickLine = SpannableStringBuilder().apply {
+            append(if (active) "Mapuje: " else "Mapował: ")
+            setSpan(ForegroundColorSpan(Ui.MUTED), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val s = length
+            append(nick)
+            setSpan(ForegroundColorSpan(nickColor), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(StyleSpan(Typeface.BOLD), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        box.addView(Ui.text(this, nickLine, 15f, Ui.TEXT).apply { setPadding(0, dp(4), 0, 0) })
+
+        val pos = pings.lastOrNull { it.lat != null && it.lon != null }
+        if (pos != null && m.observerLat != null && m.observerLon != null) {
+            val bearing = GeoMath.bearingDeg(m.observerLat, m.observerLon, pos.lat!!, pos.lon!!)
+            val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, pos.lat, pos.lon)
+            val dir = SpannableStringBuilder().apply {
+                append("➤")
+                setSpan(ForegroundColorSpan(nickColor), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                append(" ${GeoMath.compassLabel(bearing)} · ${GeoMath.km(dist)}")
+            }
+            box.addView(Ui.text(this, dir, 13f, Ui.SUBTEXT).apply { setPadding(0, dp(1), 0, 0) })
+        }
+
+        box.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(Ui.text(this@MainActivity, "klucz ", 12f, Ui.MUTED))
+            addView(keyRow(CompanionKeys.keyFor(this@MainActivity, nick), nick))
+        })
+
+        val first = pings.first()
+        val range = if (TimeFormat.dayMonth(first.tsMs) == TimeFormat.dayMonth(last.tsMs))
+            "${TimeFormat.dayMonth(last.tsMs)} ${TimeFormat.hm(first.tsMs)}–${TimeFormat.hm(last.tsMs)}"
+        else "${TimeFormat.dayMonth(first.tsMs)} ${TimeFormat.hm(first.tsMs)} – ${TimeFormat.dayMonth(last.tsMs)} ${TimeFormat.hm(last.tsMs)}"
+        val parts = mutableListOf(pingCount(pings.size), range)
+        last.observerSnrDb?.let { parts.add("${src.snrLabel} ${fmtPl(it)} dB") }
+        box.addView(Ui.text(this, parts.joinToString(" · "), 12f, Ui.MUTED).apply { setPadding(0, dp(2), 0, 0) })
+        return box
     }
 
     /** Lista zakresu przechowywania śladu mapowania (w pasku tytułu Log). */
@@ -711,73 +869,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /**
-     * Karta mapowania w Log: źródło (OBSERVER / RPTn, bez nazwy repeatera), „● teraz” przy trwającej
-     * sesji, każdy mapujący w osobnej linii z kierunkiem i odległością (nick w kolorze strzałki tego
-     * mapera na widgecie), na dole liczba pingów, ostatni ping i SNR.
-     */
-    private fun mappingCard(
-        m: MappingState?, nowMs: Long, tag: String, rpt: Boolean,
-        keyShort: String, fullKey: String?, keyLabel: String, snrLabel: String
-    ): View {
-        val box = Ui.item(this)
-        val active = m?.active == true
-        val tagColor = if (rpt) Ui.ORANGE else Ui.BLUE
-        val right = when {
-            active -> Ui.text(this, "● teraz", 12f, tagColor, bold = true).apply {
-                alpha = if (WidgetRenderer.mappingIconOn(nowMs)) 1f else 0.45f
-            }
-            else -> m?.pings?.lastOrNull()?.let { Ui.text(this, TimeFormat.hm(it.tsMs), 12f, Ui.MUTED) }
-        }
-        val head = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        head.addView(Ui.text(this, tag, 13f, tagColor, bold = true).apply { letterSpacing = 0.05f })
-        head.addView(Ui.text(this, "  $keyShort…", 11f, Ui.MUTED).apply { typeface = Typeface.MONOSPACE })
-        if (fullKey != null) head.addView(copyButton(fullKey, keyLabel))
-        box.addView(Ui.row(this, head, right))
-
-        if (m == null) {
-            box.addView(Ui.text(this, "Brak danych mapowania (mapper meshcoresouth.pl nie odpowiada).", 13f, Ui.MUTED))
-            return box
-        }
-        val label = if (active) "Mapują: " else "Mapował: "
-        val latest = latestPerMapper(m)
-        if (latest.isEmpty() && m.mapperNicks.isNotEmpty()) {
-            box.addView(Ui.text(this, label + m.mapperNicks.joinToString(", "), 14f, Ui.TEXT).apply { setPadding(0, dp(4), 0, 0) })
-        }
-        latest.forEachIndexed { i, p ->
-            val sb = SpannableStringBuilder()
-            if (i == 0) {
-                sb.append(label)
-                sb.setSpan(ForegroundColorSpan(Ui.MUTED), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            val nick = MapperMonitor.nick(p.userId) ?: m.mapperNicks.getOrNull(i) ?: "user ${p.userId}"
-            val nStart = sb.length
-            sb.append(nick)
-            sb.setSpan(ForegroundColorSpan(WidgetRenderer.mapperArrowColor(i)), nStart, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            sb.setSpan(StyleSpan(Typeface.BOLD), nStart, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            if (m.observerLat != null && m.observerLon != null) {
-                val bearing = GeoMath.bearingDeg(m.observerLat, m.observerLon, p.lat!!, p.lon!!)
-                val dist = GeoMath.distanceKm(m.observerLat, m.observerLon, p.lat, p.lon)
-                sb.append("  ${GeoMath.compassLabel(bearing)} · ${GeoMath.km(dist)}")
-            }
-            box.addView(Ui.text(this, sb, 14f, Ui.TEXT).apply { setPadding(0, dp(if (i == 0) 4 else 1), 0, 0) })
-        }
-        val pings = m.pings
-        if (pings.isNotEmpty()) {
-            val last = pings.last()
-            val parts = mutableListOf(
-                pingCount(pings.size),
-                "ostatni ${timeOf(last.tsMs)} · ${TimeFormat.dayMonth(last.tsMs)}"
-            )
-            last.observerSnrDb?.let { parts.add("$snrLabel ${fmtPl(it)} dB") }
-            box.addView(Ui.text(this, parts.joinToString(" · "), 12f, Ui.MUTED).apply { setPadding(0, dp(3), 0, 0) })
-        }
-        return box
-    }
-
     private fun copyButton(fullKey: String, label: String) = android.widget.ImageView(this).apply {
         setImageResource(R.drawable.ic_copy)
         setColorFilter(Ui.MUTED)
@@ -789,6 +880,121 @@ class MainActivity : Activity() {
             cm.setPrimaryClip(android.content.ClipData.newPlainText("Klucz $label", key))
             android.widget.Toast.makeText(this@MainActivity, "Skopiowano klucz $label", android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // ───────────────────────────── PRZESTOJE ─────────────────────────────
+
+    /**
+     * Rejestr przestojów: niedostępność MQTT1/MQTT2 i przerwy w wysyłaniu pakietów przez Observera
+     * (≥ 1 min, 30 dni). U góry podsumowanie 24 h, niżej lista wg dni; „Wyczyść” = reset.
+     */
+    private fun renderOutages() {
+        outDash.removeAllViews()
+        val cfg = Config(this)
+        val now = System.currentTimeMillis()
+        val list = Outages.all(this, now)
+        val clear = Ui.text(this, "Wyczyść", 13f, if (list.isEmpty()) Ui.MUTED else Ui.RED, bold = true).apply {
+            setPadding(dp(12), dp(4), dp(12), dp(4))
+            background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
+            contentDescription = "Wyczyść przestoje"
+            setOnClickListener {
+                if (list.isEmpty()) return@setOnClickListener
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Wyczyścić przestoje?")
+                    .setMessage("Usunie ${list.size} ${entriesWord(list.size)}. Trwający przestój będzie liczony od nowa.")
+                    .setPositiveButton("Wyczyść") { _, _ ->
+                        Outages.clear(this@MainActivity, System.currentTimeMillis())
+                        rerender()
+                    }
+                    .setNegativeButton("Anuluj", null)
+                    .show()
+            }
+        }
+        outDash.addView(Ui.topBar(this, "PRZESTOJE", "MQTT1, MQTT2 i Observer · przerwy ≥ 1 min · 30 dni", clear))
+        if (!cfg.monitoringEnabled) {
+            outDash.addView(infoItem("Monitoring zatrzymany – przestoje nie są teraz rejestrowane.", Ui.ORANGE))
+        }
+
+        outDash.addView(Ui.section(this, "Ostatnie 24 h"))
+        val day = 24 * 3600_000L
+        val summary = OutageKind.values().map { k ->
+            val total = OutageEngine.totalInWindow(list, k, now, day)
+            val count = list.count { it.kind == k && (it.endMs ?: now) > now - day }
+            val ongoing = list.any { it.kind == k && it.endMs == null }
+            Ui.kv(
+                this, k.label,
+                if (count == 0) "0" else "$count × ${duration(total)}",
+                when {
+                    ongoing -> Ui.RED
+                    count > 0 -> Ui.ORANGE
+                    else -> Ui.GREEN
+                }
+            )
+        }
+        outDash.addView(Ui.kvRow(this, summary[0], summary[1], summary[2]).apply { setPadding(dp(16), dp(4), dp(16), dp(8)) })
+
+        if (list.isEmpty()) {
+            outDash.addView(infoItem("Brak przestojów. Każda niedostępność MQTT1/MQTT2 i przerwa w pakietach Observera (dłuższa niż próg czerwony) trafi tutaj.", Ui.MUTED))
+            return
+        }
+        var lastDay: LocalDate? = null
+        var first = true
+        for (o in list) {
+            val d = Instant.ofEpochMilli(o.startMs).atZone(ZoneId.systemDefault()).toLocalDate()
+            if (first || d != lastDay) {
+                outDash.addView(Ui.section(this, dayLabel(d)))
+                lastDay = d
+                first = false
+            } else outDash.addView(Ui.divider(this))
+            outDash.addView(outageItem(o, now))
+        }
+        outDash.addView(Ui.spacer(this, 16))
+    }
+
+    private fun outageItem(o: Outage, now: Long): View {
+        val box = Ui.item(this)
+        val ongoing = o.endMs == null
+        val title = SpannableStringBuilder().apply {
+            append(o.kind.label)
+            setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(ForegroundColorSpan(if (ongoing) Ui.RED else Ui.ORANGE), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val s = length
+            val end = o.endMs
+            append("   ${TimeFormat.hm(o.startMs)} → ")
+            append(when {
+                end == null -> "teraz"
+                TimeFormat.dayMonth(end) != TimeFormat.dayMonth(o.startMs) -> "${TimeFormat.dayMonth(end)} ${TimeFormat.hm(end)}"
+                else -> TimeFormat.hm(end)
+            })
+            setSpan(ForegroundColorSpan(Ui.TEXT), s, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        val right = if (ongoing) Ui.text(this, "● trwa ${duration(o.durationMs(now))}", 12f, Ui.RED, bold = true)
+            else Ui.text(this, duration(o.durationMs(now)), 13f, Ui.SUBTEXT, bold = true)
+        box.addView(Ui.row(this, Ui.text(this, title, 14f, Ui.TEXT), right))
+        val detail = when (o.kind) {
+            OutageKind.OBSERVER -> "Brak pakietów od Observera"
+            OutageKind.MQTT1 -> "Broker ${Config.displayHost(Config(this).mqtt1Host)} niedostępny"
+            OutageKind.MQTT2 -> "Broker ${Config.displayHost(Config(this).mqtt2Host)} niedostępny"
+        } + (o.note?.let { " · $it" } ?: "")
+        box.addView(Ui.text(this, detail, 11f, Ui.MUTED).apply { setPadding(0, dp(2), 0, 0) })
+        return box
+    }
+
+    /** „45 s”, „26 min”, „3 h 05 min”, „2 d 4 h”. */
+    private fun duration(ms: Long): String {
+        val min = ms / 60_000L
+        return when {
+            ms < 60_000L -> "${ms / 1000L} s"
+            min < 60 -> "$min min"
+            min < 24 * 60 -> "${min / 60} h ${(min % 60).toString().padStart(2, '0')} min"
+            else -> "${min / (24 * 60)} d ${(min % (24 * 60)) / 60} h"
+        }
+    }
+
+    private fun entriesWord(n: Int) = when {
+        n == 1 -> "wpis"
+        n % 10 in 2..4 && n % 100 !in 12..14 -> "wpisy"
+        else -> "wpisów"
     }
 
     // ───────────────────────────── pomocnicze ─────────────────────────────
@@ -837,7 +1043,8 @@ class MainActivity : Activity() {
         const val TAB_OBSERVER = 0
         const val TAB_MAP = 1
         const val TAB_LOG = 2
-        const val TAB_SETTINGS = 3
+        const val TAB_OUTAGES = 3
+        const val TAB_SETTINGS = 4
 
         /** Ikona mapowania na widgecie: otwiera aplikację na karcie Log z kartą mapowania. */
         fun mappingIntent(ctx: Context): PendingIntent =

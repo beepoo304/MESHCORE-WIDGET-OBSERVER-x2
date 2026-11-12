@@ -28,6 +28,7 @@ class BottomNav(ctx: Context, private val onSelect: (Int) -> Unit) : LinearLayou
         add(R.drawable.ic_nav_observer, "Observer")
         add(R.drawable.ic_nav_map, "Mapa")
         add(R.drawable.ic_nav_log, "Log")
+        add(R.drawable.ic_nav_outage, "Przestoje")
         add(R.drawable.ic_nav_settings, "Ustawienia")
     }
 
@@ -52,11 +53,12 @@ class BottomNav(ctx: Context, private val onSelect: (Int) -> Unit) : LinearLayou
             topMargin = Ui.dp(ctx, 2)
             marginEnd = Ui.dp(ctx, 12)
         })
-        cell.addView(pill, LayoutParams(Ui.dp(ctx, 60), Ui.dp(ctx, 30)))
+        cell.addView(pill, LayoutParams(Ui.dp(ctx, 56), Ui.dp(ctx, 30)))
         val label = TextView(ctx).apply {
             text = title
             textSize = 11f
             gravity = Gravity.CENTER
+            isSingleLine = true
             setPadding(0, Ui.dp(ctx, 3), 0, 0)
         }
         cell.addView(label)
