@@ -63,35 +63,45 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(M2_BG)
         }
         val toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(8), dp(14), dp(8))
+            setBackgroundColor(M2_BG)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
         }
         toolbar.addView(TextView(this).apply {
             text = "Observer"
-            textSize = 20f
-            setTextColor(WidgetRenderer.GREEN)
+            textSize = 18f
+            setTextColor(M2_ACCENT)
             setTypeface(null, android.graphics.Typeface.BOLD)
+            letterSpacing = 0.04f
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
-        toolbar.addView(Button(this).apply {
-            text = "MAP"
-            setTextColor(Color.WHITE)
-            setOnClickListener { startActivity(Intent(this@MainActivity, MapTrackActivity::class.java)) }
-        })
-        toolbar.addView(Button(this).apply {
-            text = "Settings"
-            setTextColor(Color.WHITE)
-            setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
-        })
+        fun navBtn(label: String, onClick: () -> Unit) = Button(this).apply {
+            text = label
+            setTextColor(M2_TEXT)
+            setAllCaps(false)
+            textSize = 13f
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF1E2225.toInt())
+                setStroke(dp(1), 0xFF2A3033.toInt())
+                cornerRadius = dp(10).toFloat()
+            }
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginStart = dp(8)
+            }
+            setOnClickListener { onClick() }
+        }
+        toolbar.addView(navBtn("Mapa") { startActivity(Intent(this@MainActivity, MapTrackActivity::class.java)) })
+        toolbar.addView(navBtn("Ustawienia") { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) })
         root.addView(toolbar)
 
         dash = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(8), dp(14), dp(14))
+            setPadding(dp(12), dp(10), dp(12), dp(16))
         }
         // Panel przewijany w pionie: karta mapowania może być wysoka i nie może zasłaniać kart brokerów.
         root.addView(ScrollView(this).apply { addView(dash) }, LinearLayout.LayoutParams(
@@ -130,31 +140,74 @@ class MainActivity : Activity() {
     private fun renderDashboard(d: WidgetData) {
         dash.removeAllViews()
         dashboardData = d
+        val cfg = Config(this)
         val wallClockNow = System.currentTimeMillis()
-        val now = if (Config(this).monitoringEnabled) wallClockNow
-            else Config(this).monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
+        val now = if (cfg.monitoringEnabled) wallClockNow
+            else cfg.monitoringStoppedAtMs.takeIf { it > 0L } ?: 0L
+
+        dash.addView(sectionTitle("Obserwator"))
         dash.addView(monitoringControl())
-        if (!Config(this).monitoringEnabled) {
-            dash.addView(line("Monitoring zatrzymany. Dane nie są odświeżane, alarmy są wyłączone.", 14f, WidgetRenderer.ORANGE))
+        dash.addView(smallSpacer())
+        if (!cfg.monitoringEnabled) {
+            dash.addView(infoCard("Monitoring zatrzymany. Dane nie są odświeżane, alarmy są wyłączone.", M2_ORANGE))
             dash.addView(spacer())
         }
         if (!d.configured) {
-            dash.addView(line("Wejdź w Settings i wpisz pełny hash Observera (64 znaki).", 18f, WidgetRenderer.ORANGE))
+            dash.addView(infoCard("Wejdź w Settings i wpisz pełny hash Observera (64 znaki).", M2_ORANGE))
             return
         }
-        val obs = d.observer
-        dash.addView(line(obs?.name ?: "—", 26f, Color.WHITE, bold = true))
-        dash.addView(line(
-            listOfNotNull(obs?.model, obs?.firmware?.let { "fw $it" }, d.observerId.take(4).uppercase()).joinToString("  ·  "),
-            16f, Color.WHITE
-        ))
-        obs?.let { dash.addView(line("Dane z: ${Config.displayHost(it.host)}", 12f, WidgetRenderer.GRAY)) }
+        dash.addView(observerCard(d))
         dash.addView(spacer())
+
+        dash.addView(sectionTitle("Brokery MQTT"))
+        dash.addView(brokerCard("MQTT1", d.mqtt1Host, d.broker1, d, now, d.mqtt1Health))
+        dash.addView(smallSpacer())
+        dash.addView(brokerCard("MQTT2", d.mqtt2Host, d.broker2, d, now, d.mqtt2Health))
+        dash.addView(spacer())
+
+        mappingHistorySection(d, cfg, wallClockNow)?.let { sec ->
+            dash.addView(sectionTitle("Historia mapowań"))
+            dash.addView(sec)
+            dash.addView(spacer())
+        }
+
+        dash.addView(sectionTitle("Moje repeatery"))
         dash.addView(rptSection())
         dash.addView(spacer())
-        // Zakładka LOG: karty mapowań — najnowsze na górze, widoczne przez czas wybrany
-        // w liście rozwijanej (24 h / 48 h / 3 dni / 10 dni / 30 dni / na stałe).
-        val cfg = Config(this)
+
+        val fetchedAt = d.observer?.fetchedAtMs ?: now
+        dash.addView(line(
+            "Pobrano ${DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(fetchedAt).atZone(ZoneId.systemDefault()))} · następne za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), cfg.monitoringEnabled)}",
+            12f, M2_MUTED
+        ))
+    }
+
+    private fun observerCard(d: WidgetData): View {
+        val box = cardBox()
+        val obs = d.observer
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        header.addView(TextView(this).apply {
+            text = obs?.name ?: "—"
+            textSize = 20f
+            setTextColor(M2_TEXT)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        val live = WidgetRenderer.liveState(d, System.currentTimeMillis())
+        header.addView(line(live.first, 12f, live.second, bold = true))
+        box.addView(header)
+        box.addView(line(
+            listOfNotNull(obs?.model, obs?.firmware?.let { "fw $it" }, d.observerId.take(4).uppercase()).joinToString("  ·  "),
+            13f, M2_SUBTEXT
+        ))
+        obs?.let { box.addView(line("Dane z: ${Config.displayHost(it.host)}", 12f, M2_MUTED)) }
+        return box
+    }
+
+    private fun mappingHistorySection(d: WidgetData, cfg: Config, wallClockNow: Long): View? {
         val keepMs = cfg.mapperKeepEffectiveMs
         val logCards = mutableListOf<Pair<Long, View>>()
         val mapping = d.mapping
@@ -167,7 +220,6 @@ class MainActivity : Activity() {
                 fullKey = cfg.observerId, keyLabel = "Observera", snrLabel = "SNR u Obs"
             ))
         }
-        // Karty mapowania przy moich repeaterach RPT1–RPT5 (ten sam wybrany czas trzymania).
         for (r in d.rptMappings.sortedBy { it.slot }) {
             val st = r.state
             val recent = st.pings.lastOrNull()?.let { wallClockNow - it.tsMs < keepMs } == true
@@ -180,20 +232,73 @@ class MainActivity : Activity() {
                 fullKey = null, keyLabel = r.label, snrLabel = "SNR u RPT"
             ))
         }
-        if (logCards.isNotEmpty()) {
-            dash.addView(logHeader(cfg))
-            dash.addView(spacer())
-            for ((_, card) in logCards.sortedByDescending { it.first }) {
-                dash.addView(card)
-                dash.addView(spacer())
+        if (logCards.isEmpty()) return null
+        val wrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        wrap.addView(mappingHeader(cfg))
+        wrap.addView(smallSpacer())
+        for ((_, card) in logCards.sortedByDescending { it.first }) {
+            wrap.addView(card)
+            wrap.addView(smallSpacer())
+        }
+        return wrap
+    }
+
+    private fun mappingHeader(cfg: Config): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(2), 0, dp(2), 0)
+        }
+        row.addView(TextView(this).apply {
+            text = "Zakres"
+            textSize = 13f
+            setTextColor(M2_MUTED)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        val spinner = object : Spinner(this) {
+            override fun performClick(): Boolean {
+                logSpinnerOpen = true
+                return super.performClick()
+            }
+        }.apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, keepOptions.map { it.second }).also {
+                it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            val idx = keepOptions.indexOfFirst { it.first == cfg.mapperKeepMs }
+            if (idx >= 0) setSelection(idx)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: AdapterView<*>?) { logSpinnerOpen = false }
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    logSpinnerOpen = false
+                    val value = keepOptions[position].first
+                    if (value == cfg.mapperKeepMs) return
+                    cfg.mapperKeepMs = value
+                    MapperMonitor.refreshKeepMs(this@MainActivity)
+                    refresh()
+                }
             }
         }
-        dash.addView(brokerCard("MQTT1", d.mqtt1Host, d.broker1, d, now, d.mqtt1Health))
-        dash.addView(spacer())
-        dash.addView(brokerCard("MQTT2", d.mqtt2Host, d.broker2, d, now, d.mqtt2Health))
-        dash.addView(spacer())
-        val fetchedAt = obs?.fetchedAtMs ?: now
-        dash.addView(line("Pobrano ${DateTimeFormatter.ofPattern("HH:mm:ss").format(Instant.ofEpochMilli(fetchedAt).atZone(ZoneId.systemDefault()))}, następne za ${TimeFormat.countdown(ObserverRefresh.remainingSeconds(this, wallClockNow), Config(this).monitoringEnabled)}", 12f, WidgetRenderer.GRAY))
+        row.addView(spinner)
+        return row
+    }
+
+    private fun cardBox() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundResource(R.drawable.card_outline)
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+    }
+
+    private fun infoCard(text: String, color: Int): View = cardBox().apply {
+        addView(line(text, 14f, color))
+    }
+
+    private fun sectionTitle(text: String) = TextView(this).apply {
+        this.text = text
+        textSize = 12f
+        setTextColor(M2_MUTED)
+        setTypeface(null, android.graphics.Typeface.BOLD)
+        letterSpacing = 0.06f
+        setPadding(dp(2), dp(4), 0, dp(6))
     }
 
     /**
@@ -320,8 +425,7 @@ class MainActivity : Activity() {
             setBackgroundResource(R.drawable.card_outline)
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
-        box.addView(line("MOJE REPEATERY", 15f, Color.WHITE, bold = true))
-        box.addView(line("Mapowanie przy nich: RPT1–RPT5 (pomarańczowe) na widgecie i push.", 12f, WidgetRenderer.GRAY))
+        box.addView(line("Mapowanie przy RPT1–RPT5 (pomarańczowe) na widgecie i powiadomieniach.", 12f, M2_MUTED))
         val ids = cfg.rptIds
         for ((slot, id) in ids) {
             val row = LinearLayout(this).apply {
@@ -451,53 +555,18 @@ class MainActivity : Activity() {
         -1L to "na stałe"
     )
 
-    /** Nagłówek sekcji LOG: tytuł + lista rozwijana „trzymaj ślad …”. */
-    private fun logHeader(cfg: Config): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-        }
-        row.addView(TextView(this).apply {
-            text = "LOG"
-            textSize = 18f
-            setTextColor(Color.WHITE)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        val spinner = object : Spinner(this) {
-            override fun performClick(): Boolean {
-                logSpinnerOpen = true
-                return super.performClick()
-            }
-        }.apply {
-            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, keepOptions.map { it.second }).also {
-                it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-            val idx = keepOptions.indexOfFirst { it.first == cfg.mapperKeepMs }
-            if (idx >= 0) setSelection(idx)
-            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onNothingSelected(parent: AdapterView<*>?) {
-                    logSpinnerOpen = false
-                }
-                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                    logSpinnerOpen = false
-                    val value = keepOptions[position].first
-                    if (value == cfg.mapperKeepMs) return
-                    cfg.mapperKeepMs = value
-                    MapperMonitor.refreshKeepMs(this@MainActivity)
-                    refresh()
-                }
-            }
-        }
-        row.addView(spinner)
-        return row
-    }
 
     private fun monitoringControl(): View = Button(this).apply {
         val config = Config(this@MainActivity)
-        text = if (config.monitoringEnabled) "ZATRZYMAJ MONITORING" else "URUCHOM MONITORING"
+        text = if (config.monitoringEnabled) "Zatrzymaj monitoring" else "Uruchom monitoring"
         setTextColor(Color.WHITE)
-        setBackgroundColor(if (config.monitoringEnabled) 0xFF8E2525.toInt() else 0xFF246B2B.toInt())
+        setAllCaps(false)
+        textSize = 14f
+        setPadding(dp(12), dp(10), dp(12), dp(10))
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(if (config.monitoringEnabled) 0xFF8E2525.toInt() else 0xFF246B2B.toInt())
+            cornerRadius = dp(10).toFloat()
+        }
         setOnClickListener {
             val wasEnabled = Config(this@MainActivity).monitoringEnabled
             if (wasEnabled) {
@@ -520,7 +589,10 @@ class MainActivity : Activity() {
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
         val titleColor = WidgetRenderer.brokerHealthColor(health, r)
-        box.addView(line("$title  ${Config.displayHost(host)}", 18f, titleColor, bold = true))
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        head.addView(line(title, 17f, titleColor, bold = true))
+        head.addView(line("  ${Config.displayHost(host)}", 13f, WidgetRenderer.GRAY))
+        box.addView(head)
         when (r) {
             is FetchResult.Ok -> {
                 val s = r.snapshot
@@ -547,11 +619,20 @@ class MainActivity : Activity() {
         setPadding(0, dp(2), 0, dp(2))
     }
 
-    private fun spacer() = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(10)) }
+    private fun spacer() = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(12)) }
+    private fun smallSpacer() = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(6)) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     companion object {
         const val EXTRA_SHOW_MAPPING = "pl.meshcore.observerwidget.SHOW_MAPPING"
+
+        // Paleta UI (styl m2): ciemny, minimalistyczny — bez zmian w widgecie.
+        private val M2_BG = 0xFF111315.toInt()
+        private val M2_TEXT = 0xFFE2E5E3.toInt()
+        private val M2_SUBTEXT = 0xFFD6D9D7.toInt()
+        private val M2_MUTED = 0xFF9DA4A0.toInt()
+        private val M2_ACCENT = 0xFF67D78A.toInt()
+        private val M2_ORANGE = 0xFFF0A84B.toInt()
 
         /** Ikona „M” na widgecie: otwiera aplikację z rozwiniętą kartą mapowania. */
         fun mappingIntent(ctx: Context): PendingIntent =
