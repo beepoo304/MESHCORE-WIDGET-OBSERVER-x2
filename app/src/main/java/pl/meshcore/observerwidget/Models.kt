@@ -115,5 +115,7 @@ data class MappingState(
     val mapperNicks: List<String> = emptyList(),
     /** Pozycja Observera z bazy repeaterów mapera (do strzałki kierunku i odległości). */
     val observerLat: Double? = null,
-    val observerLon: Double? = null
+    val observerLon: Double? = null,
+    /** Cała ostatnia sesja, także po jej wygaśnięciu (do licznika pingów w aplikacji, jak na mapie). */
+    val session: List<MapperPing> = emptyList()
 )

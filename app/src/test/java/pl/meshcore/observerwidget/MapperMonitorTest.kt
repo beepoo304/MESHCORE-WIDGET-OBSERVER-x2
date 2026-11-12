@@ -35,6 +35,8 @@ class MapperMonitorTest {
         val s = MapperMonitor.stateOf(listOf(ping(1, t0), ping(2, t0 + 20_000)), now)
         assertFalse(s.active)
         assertEquals(1, s.pings.size)
+        // Licznik w aplikacji liczy całą sesję (jak mapa), nie tylko ostatni ping.
+        assertEquals(2, s.session.size)
         assertEquals(t0 + 20_000, s.pings[0].tsMs)
     }
 

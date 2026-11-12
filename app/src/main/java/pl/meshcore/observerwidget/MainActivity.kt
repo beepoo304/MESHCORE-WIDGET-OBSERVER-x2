@@ -517,7 +517,8 @@ class MainActivity : Activity() {
             details.setSpan(ForegroundColorSpan(nickColor), 0, details.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             details.append(" ${GeoMath.compassLabel(bearing)} · ${GeoMath.km(dist)} · ")
         }
-        val mine = if (p != null) m.pings.filter { it.userId == p.userId } else m.pings
+        val sessionPings = m.session.ifEmpty { m.pings }
+        val mine = if (p != null) sessionPings.filter { it.userId == p.userId } else sessionPings
         details.append(pingCount(mine.size))
         mine.lastOrNull()?.observerSnrDb?.let { details.append(" · SNR ${fmtPl(it)} dB") }
         box.addView(Ui.text(this, details, 12f, Ui.MUTED).apply { setPadding(0, dp(2), 0, 0) })

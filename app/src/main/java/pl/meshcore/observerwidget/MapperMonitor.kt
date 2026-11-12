@@ -388,7 +388,7 @@ object MapperMonitor {
         val mapperNicks = shown.map { it.userId }.distinct().mapNotNull(nickOf)
         return MappingState(
             active = active, pings = shown, mapperNicks = mapperNicks,
-            observerLat = observerLat, observerLon = observerLon
+            observerLat = observerLat, observerLon = observerLon, session = session
         )
     }
 }
