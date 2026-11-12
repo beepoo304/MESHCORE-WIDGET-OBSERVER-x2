@@ -92,6 +92,7 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 ## Historia wersji
 
 - **2.9.1** — stopka Ustawień jak w M2: wersja aplikacji, link do kodu na GitHub (repo przemianowane na MESHCORE-WIDGET-OBSERVER-x2) i do Ko-fi.
+- **2.10.2** — krótsze ostrzeżenie o milczeniu (bez dopisku o MQTT/repeat).
 - **2.10.1** — Statystyki → Repeatery: jaśniejsze ostrzeżenie o milczeniu — data i godzina ostatniej odpowiedzi na ping mapera, liczba pingów bez odpowiedzi i dopisek, że węzeł może nadal działać przez MQTT (sprawdź repeat, antenę, noise floor).
 - **2.10.0** — karta „Przestoje” → „Statystyki”: przełącznik Repeatery | Przestoje i okres 24 h / 7 dni / 30 dni / całość. Repeatery = statystyki Observera i RPT1–5 jak na /mapper (pingi z odpowiedzią, mapujący, maks. i praktyczny zasięg, SNR w obie strony, RSSI, pokrycie, bilans łącza, top mapujący); baza mappera pobierana raz, potem tylko nowe punkty (najwyżej co 10 min przy otwartej karcie albo ⟳). Przestoje: suma czasu i dostępność w % za wybrany okres, historia 30 dni opisana osobno.
 - **2.9.0** — język aplikacji PL / EN (Ustawienia → „Język · Language”; `L10n` + `tr(pl, en)`, `Config.appLanguage`, `ObserverApp` wczytuje język przy starcie procesu) — po angielsku także powiadomienia PUSH, stałe powiadomienie i mapa; widget zostaje po polsku. Dwuklik widgetu otwiera aplikację na karcie Ustawienia (z dolnym paskiem i powrotem). Progi „Pomarańczowy/Czerwony (min)” wyrównane. Dolny pasek: równe odstępy między podpisami.

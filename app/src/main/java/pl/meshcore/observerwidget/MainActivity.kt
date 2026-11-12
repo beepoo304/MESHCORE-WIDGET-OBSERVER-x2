@@ -1087,10 +1087,8 @@ class MainActivity : Activity() {
         if (silentDays >= 2 && r.silentPings >= 5) {
             // Mapper widzi tylko przekazanie pingu radiem – węzeł może dalej odbierać i wysyłać do brokerów MQTT.
             val lastAt = DateTimeFormatter.ofPattern("dd.MM HH:mm").format(Instant.ofEpochMilli(r.lastMs).atZone(ZoneId.systemDefault()))
-            outDash.addView(infoItem(tr("⚠ Nie odpowiada na pingi mapera od $lastAt ($silentDays dni), choć w jego zasięgu było od tego czasu ${pingCount(r.silentPings)}. " +
-                    "Może nadal odbierać i wysyłać dane przez MQTT – sprawdź przekazywanie (repeat), antenę i szum (noise floor).",
-                "⚠ No response to mapper pings since $lastAt ($silentDays days), although there were ${pingCount(r.silentPings)} in its range since then. " +
-                    "It may still receive and upload over MQTT – check forwarding (repeat), antenna and noise floor."), Ui.ORANGE))
+            outDash.addView(infoItem(tr("⚠ Nie odpowiada na pingi mapera od $lastAt ($silentDays dni), choć w jego zasięgu było od tego czasu ${pingCount(r.silentPings)}.",
+                "⚠ No response to mapper pings since $lastAt ($silentDays days), although there were ${pingCount(r.silentPings)} in its range since then."), Ui.ORANGE))
         }
         val noPos = tr("brak pozycji RPT", "no RPT position")
         val tiles = listOf(
