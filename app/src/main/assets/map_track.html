@@ -9,18 +9,17 @@
 <style>
 :root{color-scheme:dark;--bg:#111315;--panel:#171A1C;--panel2:#1E2225;--line:#2A3033;--ink:#E2E5E3;--muted:#9DA4A0;--green:#67D78A;--blue:#69b8d2;--shadow:0 8px 24px #0008}
 *{box-sizing:border-box}html,body,#m{height:100%;margin:0}body{font-family:Roboto,"Arial",sans-serif;background:var(--bg);color:var(--ink);letter-spacing:.01em}#m{position:absolute;inset:0 0 0}
-.leaflet-container{background:#dfe7ec}.leaflet-control-attribution{background:#171A1CCC!important;color:#9DA4A0!important;font-size:9px!important;border-radius:6px 0 0 0}.leaflet-control-attribution a{color:var(--green)!important}
+.leaflet-container{background:#dfe7ec}.leaflet-tile-pane{filter:grayscale(1) contrast(.75) brightness(1.13)}body.tab .topline{display:none}.leaflet-control-attribution{background:#171A1CCC!important;color:#9DA4A0!important;font-size:9px!important;border-radius:6px 0 0 0}.leaflet-control-attribution a{color:var(--green)!important}
 #top{position:absolute;z-index:1000;top:calc(env(safe-area-inset-top) + 10px);left:12px;right:12px;display:grid;gap:8px;pointer-events:none}
 .topline,.selector{pointer-events:auto;background:#171A1CF2;border:1px solid #2A3033;box-shadow:var(--shadow);backdrop-filter:blur(10px);border-radius:14px}
 .topline{min-height:54px;padding:8px 12px;display:flex;align-items:center;gap:10px}
 .brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}.brandmark{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:#67d78a18;color:var(--green);font-size:17px;font-weight:700}.brandcopy{min-width:0}.brandtitle{font-size:14px;font-weight:800;letter-spacing:.11em}.brandsub{font-size:11px;color:var(--muted);margin-top:2px}
 #close{border:1px solid #2A3033;background:var(--panel2);color:var(--ink);border-radius:10px;min-height:36px;padding:0 12px;font-size:11px;font-weight:700;letter-spacing:.04em}
 .selector{display:flex;align-items:center;gap:9px;padding:0 12px;min-height:48px}.selector .glyph{color:var(--green);font-size:15px;width:18px;text-align:center}.selector select{appearance:none;-webkit-appearance:none;flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);padding:13px 24px 13px 0;font-size:13px;font-weight:600}.selector select option{background:#1b2225;color:#f0f4f2}.chevron{pointer-events:none;color:var(--muted);margin-left:-24px;font-size:12px}
-#legend{position:absolute;z-index:999;bottom:calc(14px + env(safe-area-inset-bottom));left:12px;right:12px;max-width:340px;margin-left:auto;background:#171A1CF2;border:1px solid #2A3033;border-radius:14px;padding:10px 12px;color:var(--ink);font-size:11px;box-shadow:var(--shadow);backdrop-filter:blur(10px);pointer-events:none}
-.legend-head{display:flex;align-items:center;justify-content:space-between;font-weight:700}.legend-caption{color:var(--muted);font-size:10px;font-weight:500}.legend-scale{height:7px;border-radius:9px;margin:8px 0 4px}.legend-range{display:flex;justify-content:space-between;color:var(--muted);font-size:9px}
+#legend{position:absolute;z-index:999;right:8px;bottom:calc(22px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:4px;background:#171A1CCC;border-radius:8px;padding:3px 6px;color:var(--muted);font-size:9px;pointer-events:none}#legbar{width:56px;height:4px;border-radius:3px}
 .rpt{position:relative;white-space:nowrap}.rpt i{position:absolute;left:-8px;top:-8px;width:16px;height:16px;box-sizing:border-box;border-radius:50%;background:#17323a;border:2.5px solid #fff;box-shadow:0 0 0 1px #0f2a3a88}.rpt span{position:absolute;left:12px;top:-10px;font-size:11.5px;font-weight:700;color:#0f2a3a;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 4px #fff}
 .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#172023;color:#eef4f1}.leaflet-popup-content{font-size:12px;line-height:1.55}.leaflet-popup-close-button{color:#dbe4e0!important}
-@media(max-width:360px){#legend{left:9px;right:9px}.topline{padding:7px 9px}.brandsub{font-size:10px}#close{padding:0 9px}}
+@media(max-width:360px){.topline{padding:7px 9px}.brandsub{font-size:10px}#close{padding:0 9px}}
 </style>
 </head>
 <body>
@@ -30,7 +29,7 @@
  <div class="selector"><span class="glyph">◉</span><select id="src" aria-label="Wybierz stację"></select><span class="chevron">⌄</span></div>
  <div class="selector"><span class="glyph">⌖</span><select id="sel" aria-label="Wybierz mapującego"></select><span class="chevron">⌄</span></div>
 </div>
-<div id="legend"><div class="legend-head"><span>Jakość łącza · SNR</span><span class="legend-caption">kolor heksów</span></div><div class="legend-scale" id="legbar"></div><div class="legend-range"><span>−8 dB · słaby</span><span>dobry · 12 dB</span></div></div>
+<div id="legend" title="Jakość łącza · SNR (kolor heksów)"><span>−8</span><span id="legbar"></span><span>12 dB</span></div>
 <script>
 const STOPS=['#b2182b','#ef8a3c','#f2d15c','#5fb49c','#1b6ca8'];
 const h2rgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
