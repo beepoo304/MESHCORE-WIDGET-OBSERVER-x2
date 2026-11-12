@@ -753,7 +753,7 @@ class MainActivity : Activity() {
     /** Osobny wpis dla każdego mapującego przy danym źródle (pingi, czas i SNR liczone dla tej osoby). */
     private fun mapperEntries(m: MappingState, src: MappingSource, nowMs: Long, keepMs: Long): List<Pair<Long, View>> {
         val withGps = latestPerMapper(m)
-        return m.pings.groupBy { it.userId }.mapNotNull { (userId, mine) ->
+        return m.session.ifEmpty { m.pings }.groupBy { it.userId }.mapNotNull { (userId, mine) ->
             val sorted = mine.sortedBy { it.tsMs }
             val last = sorted.last()
             val active = m.active && nowMs - last.tsMs < MapperApi.SESSION_GAP_MS
