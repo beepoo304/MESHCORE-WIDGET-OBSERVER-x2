@@ -84,7 +84,9 @@ data class WidgetData(
     /** Mapowanie przy „moich repeaterach” RPT1–RPT5 (tylko sloty z wpisanym kluczem). */
     val rptMappings: List<RptMapping> = emptyList(),
     /** Nowe pingi przy RPT w tym cyklu, wg numeru slotu (do powiadomień). */
-    val rptNew: Map<Int, List<MapperPing>> = emptyMap()
+    val rptNew: Map<Int, List<MapperPing>> = emptyMap(),
+    /** Czy telefon nie ma połączenia z internetem (błąd sieci na wszystkich serwerach). */
+    val phoneOffline: Boolean = false
 )
 
 /**

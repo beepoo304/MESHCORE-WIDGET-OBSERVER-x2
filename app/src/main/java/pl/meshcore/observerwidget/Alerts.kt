@@ -36,6 +36,21 @@ object Alerts {
     fun evaluate(ctx: Context, data: WidgetData, nowMs: Long = System.currentTimeMillis()) {
         if (!Config(ctx).monitoringEnabled || !data.configured) return
         val cfg = Config(ctx)
+
+        // ── Fix: telefon offline → żadnych alarmów (to nie awaria sieci mesh) ──
+        // Gdy telefon nie ma internetu, wszystkie API padają, ale to nie znaczy,
+        // że Observer/brokery przestały działać. Alarmy wstrzymujemy (UNKNOWN),
+        // przestoje też – automat nie zmienia stanu.
+        val phoneOffline = data.phoneOffline || (data.mqtt1Health == Health.UNKNOWN && data.mqtt2Health == Health.UNKNOWN &&
+            data.observer == null && data.broker1 is FetchResult.Fail && data.broker2 is FetchResult.Fail)
+        if (phoneOffline) {
+            // Rejestr przestojów: UNKNOWN = bez zmian (nie otwiera ani nie zamyka przestoju).
+            Outages.record(ctx, OutageKind.OBSERVER, Health.UNKNOWN, nowMs)
+            Outages.record(ctx, OutageKind.MQTT1, Health.UNKNOWN, nowMs)
+            Outages.record(ctx, OutageKind.MQTT2, Health.UNKNOWN, nowMs)
+            return
+        }
+
         val assessment = AlertEngine.assess(data.observer?.let { o -> o.lastPacketMs?.minus(o.serverOffsetMs) }, nowMs, cfg.redMin, data.mqtt1Health, data.mqtt2Health)
         // Rejestr przestojów (Statystyki → Przestoje) – niezależny od włączenia powiadomień.
         val observerLast = data.observer?.let { o -> o.lastPacketMs?.minus(o.serverOffsetMs) }
@@ -47,7 +62,7 @@ object Alerts {
         val cooldownMs = 0L
 
         // Alarm Observera: natychmiast po przekroczeniu progu czerwonego (bez opóźnienia).
-        // Gdy żaden API nie odpowiada, też alarmujemy – wtedy w treści podajemy oba.
+        // Gdy żaden API nie odpowiada (ale telefon MA internet – sprawdzone wyżej), alarmujemy.
         val bothApisDown = data.observer == null &&
             data.broker1 is FetchResult.Fail && data.broker2 is FetchResult.Fail
         val observerHealth = if (bothApisDown) Health.BAD else assessment.observer
@@ -77,6 +92,11 @@ object Alerts {
     fun evaluateMapping(ctx: Context, state: MappingState?, fresh: List<MapperPing>, nowMs: Long = System.currentTimeMillis()) {
         val cfg = Config(ctx)
         if (!cfg.monitoringEnabled || !cfg.alertMapping || fresh.isEmpty()) return
+        // Ochrona przed spóźnionymi powiadomieniami (np. telefon obudził się po 40 min uśpienia / odzyskał internet):
+        // Powiadamiamy PUSH tylko, gdy najnowszy ping w tej paczce jest naprawdę świeży (≤ ACTIVE_MS, czyli 3 minuty).
+        val newestPing = fresh.maxByOrNull { it.tsMs } ?: return
+        if (nowMs - newestPing.tsMs > MapperApi.ACTIVE_MS) return
+
         synchronized(lock) {
             val prefs = ctx.applicationContext.getSharedPreferences("alert_state", Context.MODE_PRIVATE)
             val lastAt = prefs.getLong("map_last", 0L)
@@ -124,6 +144,9 @@ object Alerts {
     fun evaluateRptMapping(ctx: Context, rpt: RptMapping, fresh: List<MapperPing>, nowMs: Long = System.currentTimeMillis()) {
         val cfg = Config(ctx)
         if (!cfg.monitoringEnabled || !cfg.alertMapping || fresh.isEmpty()) return
+        val newestPing = fresh.maxByOrNull { it.tsMs } ?: return
+        if (nowMs - newestPing.tsMs > MapperApi.ACTIVE_MS) return
+
         synchronized(lock) {
             val prefs = ctx.applicationContext.getSharedPreferences("alert_state", Context.MODE_PRIVATE)
             val key = "rpt${rpt.slot}"

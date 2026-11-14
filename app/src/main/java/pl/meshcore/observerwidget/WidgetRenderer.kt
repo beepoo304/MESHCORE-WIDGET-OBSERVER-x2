@@ -144,8 +144,19 @@ object WidgetRenderer {
         return all[((nowMs / 3_000L) % all.size).toInt()]
     }
 
+    private var lastArrowKey: String? = null
+    private var lastArrowBmp: Bitmap? = null
+
     /** Strzałka kierunku mapera (kolor wg mapującego, obrót o azymut) + odległość, np. „1,2km”. */
     fun mappingArrowBitmap(ctx: Context, bearingDeg: Double, distKm: Double, arrowColor: Int = RED): Bitmap {
+        val text = GeoMath.kmShort(distKm)
+        val key = "${bearingDeg.roundToInt()}_${text}_$arrowColor"
+        synchronized(this) {
+            val cached = lastArrowBmp
+            if (lastArrowKey == key && cached != null && !cached.isRecycled) {
+                return cached
+            }
+        }
         val density = ctx.resources.displayMetrics.density
         val h = (16 * density).roundToInt().coerceAtLeast(16)
         val arrow = (13 * density).roundToInt().coerceAtLeast(13)
@@ -155,7 +166,6 @@ object WidgetRenderer {
             textSize = 10 * density * 1.1f
             isFakeBoldText = true
         }
-        val text = GeoMath.kmShort(distKm)
         val tw = textPaint.measureText(text).roundToInt()
         val bmp = Bitmap.createBitmap(arrow + gap + tw, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
@@ -179,6 +189,11 @@ object WidgetRenderer {
         // Odległość obok strzałki, wyśrodkowana w pionie.
         val ty = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
         c.drawText(text, (arrow + gap).toFloat(), ty, textPaint)
+
+        synchronized(this) {
+            lastArrowKey = key
+            lastArrowBmp = bmp
+        }
         return bmp
     }
 

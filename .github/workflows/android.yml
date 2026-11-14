@@ -1,7 +1,7 @@
 name: Android Build
 on:
   push:
-    branches: [main]
+    branches: [main, 'audit/**']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -32,13 +32,17 @@ jobs:
           if-no-files-found: error
       # Stały, bezpośredni link do najnowszego APK: Releases -> "latest" -> ObserverWidget.apk
       - name: Publish APK to GitHub Release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/audit/'))
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG=build-${{ github.run_number }}
-          NOTES="Commit ${GITHUB_SHA::7}: $(git log -1 --pretty=%s)"
-          gh release create "$TAG" dist/*.apk --title "ObserverWidget build ${{ github.run_number }}" --notes "$NOTES" --target "$GITHUB_SHA" --latest
+          NOTES="Branch ${{ github.ref_name }} - Commit ${GITHUB_SHA::7}: $(git log -1 --pretty=%s)"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            gh release create "$TAG" dist/*.apk --title "ObserverWidget build ${{ github.run_number }}" --notes "$NOTES" --target "$GITHUB_SHA" --latest
+          else
+            gh release create "$TAG" dist/*.apk --title "ObserverWidget build ${{ github.run_number }} (${{ github.ref_name }})" --notes "$NOTES" --target "$GITHUB_SHA" --prerelease
+          fi
       - uses: actions/upload-artifact@v5
         if: always()
         with:

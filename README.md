@@ -91,6 +91,14 @@ Wymagane: JDK 17, Android SDK (compileSdk 35, minSdk 26, targetSdk 35). Testy je
 
 ## Historia wersji
 
+- **2.10.6** — optymalizacja baterii i poprawa powiadomień:
+  - Usunięty ciągły `PARTIAL_WAKE_LOCK` 24/7 – blokada wybudzania pobierana jest wyłącznie na czas pobierania danych (max 30 s), umożliwiając procesorowi wejście w głębokie uśpienie (Deep Sleep).
+  - Pętla `MonitorService` usypia na pełny interwał przy wyłączonym ekranie (koniec z tykaniem co 1 s i budzeniem CPU w kieszeni).
+  - Pula połączeń HTTP Keep-Alive (usunięcie `c.disconnect()`) – oszczędność baterii i CPU na negocjacjach TLS.
+  - Naprawione opóźnione powiadomienia o mapowaniu (ochrona przed wysyłaniem starych powiadomień po wybudzeniu ze snu/odzyskaniu sieci).
+  - Poprawiona zależność braku internetu w telefonie od alarmów (brak fałszywych alarmów o awarii Observera, gdy telefon traci zasięg).
+  - Pamięć podręczna generowania bitmapy strzałki mapera na widgecie (eliminacja alokacji w pamięci).
+
 - **2.9.1** — stopka Ustawień jak w M2: wersja aplikacji, link do kodu na GitHub (repo przemianowane na MESHCORE-WIDGET-OBSERVER-x2) i do Ko-fi.
 - **2.10.2** — krótsze ostrzeżenie o milczeniu (bez dopisku o MQTT/repeat).
 - **2.10.1** — Statystyki → Repeatery: jaśniejsze ostrzeżenie o milczeniu — data i godzina ostatniej odpowiedzi na ping mapera, liczba pingów bez odpowiedzi i dopisek, że węzeł może nadal działać przez MQTT (sprawdź repeat, antenę, noise floor).

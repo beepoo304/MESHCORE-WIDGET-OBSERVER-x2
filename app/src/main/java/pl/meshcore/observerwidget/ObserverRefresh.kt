@@ -410,7 +410,8 @@ object ObserverRefresh {
                 mapping = mappingResult.state,
                 mappingNew = mappingResult.fresh,
                 rptMappings = mappingResult.rpt,
-                rptNew = mappingResult.rptFresh
+                rptNew = mappingResult.rptFresh,
+                phoneOffline = phoneOffline
             )
         }
     }

@@ -5,8 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -25,25 +27,47 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Serce widgetu: tyka dokładnie co sekundę (na granicy pełnej sekundy zegara),
- * przerysowuje liczniki i uruchamia pobieranie, gdy licznik odświeżania dojdzie do 00s.
+ * Serce widgetu: tyka co sekundę przy włączonym ekranie (odliczanie i puls MAPPER),
+ * a przy wyłączonym ekranie usypia na pełny interwał odświeżania.
  *
- * Usługa pierwszoplanowa (specialUse) to jedyny sposób na niezawodną aktualizację co sekundę:
- * AlarmManager ma minimalny odstęp ~5 s, a WorkManager 15 min.
- * Pobieranie danych biegnie zawsze, gdy monitoring jest włączony – także przy wyłączonym ekranie
- * (częściowy wakelock chroni pętlę przed zamrożeniem przez Doze w nocy). Rysowanie co 1 s
- * działa tylko przy włączonym ekranie; po włączeniu ekranu widget dorysowuje się w ciągu sekundy.
+ * v3 – optymalizacja baterii:
+ *  • Wakelock pobierany TYLKO na czas pobierania danych (max 30 s), nie permanentny.
+ *  • Przy wyłączonym ekranie pętla nie tyka co 1 s – usypia na cały interwał.
+ *  • Ekran włączony/wyłączony wykrywany przez BroadcastReceiver.
  */
 class MonitorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var loop: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
+    /** Czy ekran jest włączony – aktualizowane przez receiver. */
+    @Volatile
+    private var screenOn = true
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_ON -> {
+                    screenOn = true
+                    // Natychmiastowe przerysowanie widgetu po włączeniu ekranu.
+                    ObserverRefresh.renderAll(context)
+                }
+                Intent.ACTION_SCREEN_OFF -> screenOn = false
+            }
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        screenOn = (getSystemService(PowerManager::class.java))?.isInteractive != false
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        registerReceiver(screenReceiver, filter)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -73,51 +97,69 @@ class MonitorService : Service() {
     }
 
     private suspend fun runLoop() {
-        val power = getSystemService(PowerManager::class.java)
         while (scope.isActive) {
             val config = Config(this)
             if (!config.monitoringEnabled || !ObserverRefresh.hasWidgets(this)) {
                 stopSelf()
                 return
             }
-            renewWakeLock()
-            // Pobieranie danych biegnie cały czas (także przy wyłączonym ekranie);
-            // rysowanie co 1 s ma sens tylko przy włączonym ekranie.
-            if (ObserverRefresh.isRefreshDue()) ObserverRefresh.refreshAll(this)
-            else if (power?.isInteractive != false) ObserverRefresh.renderAll(this)
-            // Następne tyknięcie tuż po granicy pełnej sekundy: cyfry zmieniają się równo co 1 s.
-            val now = System.currentTimeMillis()
-            delay(1_000L - (now % 1_000L) + 15L)
+
+            if (ObserverRefresh.isRefreshDue()) {
+                // Pobieranie danych: krótkotrwały wakelock tylko na czas operacji sieciowej.
+                acquireRefreshWakeLock()
+                try {
+                    ObserverRefresh.refreshAll(this)
+                } finally {
+                    releaseWakeLock()
+                }
+            } else if (screenOn) {
+                // Ekran włączony: przerysowanie widgetu (liczniki sekund, puls MAPPER).
+                ObserverRefresh.renderAll(this)
+            }
+            // Następne tyknięcie:
+            //  - ekran włączony: co 1 s (sekundnik, puls MAPPER)
+            //  - ekran wyłączony: śpimy do następnego odświeżenia (oszczędzanie baterii)
+            if (screenOn) {
+                val now = System.currentTimeMillis()
+                delay(1_000L - (now % 1_000L) + 15L)
+            } else {
+                val sleepMs = (ObserverRefresh.nextRefreshAtMs() - System.currentTimeMillis())
+                    .coerceIn(1_000L, config.intervalSec * 1_000L)
+                delay(sleepMs)
+            }
         }
     }
 
     /**
-     * Częściowy wakelock, żeby Doze nie zamrażał pętli w nocy. Odnawiany z limitem czasu
-     * (zamiast trzymania w nieskończoność): pętla podtrzymuje go przy każdym obrocie,
-     * a [onDestroy] zawsze zwalnia.
+     * Krótkotrwały wakelock na czas pobierania danych (max 30 s).
+     * Tylko żeby sieć nie zamarzła w trakcie HTTP – po zakończeniu od razu zwalniany.
      */
-    private fun renewWakeLock() {
-        val lock = wakeLock
-        if (lock != null && lock.isHeld) return
-        val power = getSystemService(PowerManager::class.java) ?: return
+    private fun acquireRefreshWakeLock() {
         try {
-            if (lock == null) {
-                wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ObserverWidget:monitor").also {
-                    it.setReferenceCounted(false)
-                    it.acquire(WAKELOCK_RENEW_MS)
-                }
-            } else {
-                lock.acquire(WAKELOCK_RENEW_MS)
+            val power = getSystemService(PowerManager::class.java) ?: return
+            val lock = wakeLock ?: power.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK, "ObserverWidget:refresh"
+            ).also {
+                it.setReferenceCounted(false)
+                wakeLock = it
             }
+            lock.acquire(REFRESH_WAKELOCK_MS)
         } catch (e: Exception) {
             Log.w(TAG, "Cannot acquire wakelock", e)
         }
     }
 
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {}
+    }
+
     override fun onDestroy() {
         isRunning = false
-        wakeLock?.let { if (it.isHeld) it.release() }
+        releaseWakeLock()
         wakeLock = null
+        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
         scope.cancel()
         super.onDestroy()
     }
@@ -130,7 +172,8 @@ class MonitorService : Service() {
         // (MIN = brak ikony w pasku statusu), więc kanał LOW tworzymy od nowa.
         private const val CHANNEL = "monitor_service_low"
         private const val NOTIFICATION_ID = 2001
-        private const val WAKELOCK_RENEW_MS = 10 * 60_000L
+        /** Max czas wakelockna na jedno pobranie danych (30 s). */
+        private const val REFRESH_WAKELOCK_MS = 30_000L
 
         @Volatile
         var isRunning: Boolean = false

@@ -61,7 +61,9 @@ object ObserverApi {
                     }
                 }
             } finally {
-                c.disconnect()
+                // Nie wywołujemy c.disconnect() – pozwalamy na Keep-Alive i reuse
+                // socketów TCP/TLS (oszczędność CPU na handshake kryptograficznym).
+                try { c.inputStream?.close() } catch (_: Exception) {}
             }
         } catch (e: SocketTimeoutException) {
             FetchResult.Fail(host, "Timeout")
