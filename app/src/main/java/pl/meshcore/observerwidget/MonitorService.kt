@@ -5,10 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -27,47 +25,25 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Serce widgetu: tyka co sekundę przy włączonym ekranie (odliczanie i puls MAPPER),
- * a przy wyłączonym ekranie usypia na pełny interwał odświeżania.
+ * Serce widgetu: tyka co sekundę na granicy pełnej sekundy zegara.
  *
- * v3 – optymalizacja baterii:
- *  • Wakelock pobierany TYLKO na czas pobierania danych (max 30 s), nie permanentny.
- *  • Przy wyłączonym ekranie pętla nie tyka co 1 s – usypia na cały interwał.
- *  • Ekran włączony/wyłączony wykrywany przez BroadcastReceiver.
+ * Optymalizacja baterii:
+ *  • Usunięto stały 24/7 wakelock – krótkotrwały wakelock pobierany jest tylko
+ *    wewnątrz [ObserverRefresh.cycle] na czas transferu sieciowego (max 15 s).
+ *  • Gdy ekran jest wyłączony, rysowanie [ObserverRefresh.renderAll] jest pomijane
+ *    (oszczędność IPC, GPU i baterii), ale pobieranie danych działa normalnie.
+ *  • Pętla tyka co 1 s, dzięki czemu po wybudzeniu ekranu widget natychmiast ożywa
+ *    i nigdy nie wisi zamrożony.
  */
 class MonitorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var loop: Job? = null
-    private var wakeLock: PowerManager.WakeLock? = null
-
-    /** Czy ekran jest włączony – aktualizowane przez receiver. */
-    @Volatile
-    private var screenOn = true
-
-    private val screenReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                Intent.ACTION_SCREEN_ON -> {
-                    screenOn = true
-                    // Natychmiastowe przerysowanie widgetu po włączeniu ekranu.
-                    ObserverRefresh.renderAll(context)
-                }
-                Intent.ACTION_SCREEN_OFF -> screenOn = false
-            }
-        }
-    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         isRunning = true
-        screenOn = (getSystemService(PowerManager::class.java))?.isInteractive != false
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_ON)
-            addAction(Intent.ACTION_SCREEN_OFF)
-        }
-        registerReceiver(screenReceiver, filter)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -97,6 +73,7 @@ class MonitorService : Service() {
     }
 
     private suspend fun runLoop() {
+        val power = getSystemService(PowerManager::class.java)
         while (scope.isActive) {
             val config = Config(this)
             if (!config.monitoringEnabled || !ObserverRefresh.hasWidgets(this)) {
@@ -104,62 +81,22 @@ class MonitorService : Service() {
                 return
             }
 
+            // Pobieranie danych biegnie zawsze (także przy wyłączonym ekranie).
+            // Rysowanie co 1 s działa tylko przy włączonym ekranie (oszczędza IPC i GPU).
             if (ObserverRefresh.isRefreshDue()) {
-                // Pobieranie danych: krótkotrwały wakelock tylko na czas operacji sieciowej.
-                acquireRefreshWakeLock()
-                try {
-                    ObserverRefresh.refreshAll(this)
-                } finally {
-                    releaseWakeLock()
-                }
-            } else if (screenOn) {
-                // Ekran włączony: przerysowanie widgetu (liczniki sekund, puls MAPPER).
+                ObserverRefresh.refreshAll(this)
+            } else if (power?.isInteractive != false) {
                 ObserverRefresh.renderAll(this)
             }
-            // Następne tyknięcie:
-            //  - ekran włączony: co 1 s (sekundnik, puls MAPPER)
-            //  - ekran wyłączony: śpimy do następnego odświeżenia (oszczędzanie baterii)
-            if (screenOn) {
-                val now = System.currentTimeMillis()
-                delay(1_000L - (now % 1_000L) + 15L)
-            } else {
-                val sleepMs = (ObserverRefresh.nextRefreshAtMs() - System.currentTimeMillis())
-                    .coerceIn(1_000L, config.intervalSec * 1_000L)
-                delay(sleepMs)
-            }
-        }
-    }
 
-    /**
-     * Krótkotrwały wakelock na czas pobierania danych (max 30 s).
-     * Tylko żeby sieć nie zamarzła w trakcie HTTP – po zakończeniu od razu zwalniany.
-     */
-    private fun acquireRefreshWakeLock() {
-        try {
-            val power = getSystemService(PowerManager::class.java) ?: return
-            val lock = wakeLock ?: power.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK, "ObserverWidget:refresh"
-            ).also {
-                it.setReferenceCounted(false)
-                wakeLock = it
-            }
-            lock.acquire(REFRESH_WAKELOCK_MS)
-        } catch (e: Exception) {
-            Log.w(TAG, "Cannot acquire wakelock", e)
+            // Następne tyknięcie tuż po granicy pełnej sekundy: cyfry zmieniają się równo co 1 s.
+            val now = System.currentTimeMillis()
+            delay(1_000L - (now % 1_000L) + 15L)
         }
-    }
-
-    private fun releaseWakeLock() {
-        try {
-            wakeLock?.let { if (it.isHeld) it.release() }
-        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
         isRunning = false
-        releaseWakeLock()
-        wakeLock = null
-        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
         scope.cancel()
         super.onDestroy()
     }
@@ -168,12 +105,8 @@ class MonitorService : Service() {
 
     companion object {
         private const val TAG = "ObserverWidget"
-        // Nowy ID kanału: Android nie pozwala podnieść ważności istniejącego kanału
-        // (MIN = brak ikony w pasku statusu), więc kanał LOW tworzymy od nowa.
         private const val CHANNEL = "monitor_service_low"
         private const val NOTIFICATION_ID = 2001
-        /** Max czas wakelockna na jedno pobranie danych (30 s). */
-        private const val REFRESH_WAKELOCK_MS = 30_000L
 
         @Volatile
         var isRunning: Boolean = false
@@ -182,18 +115,12 @@ class MonitorService : Service() {
         fun ensureChannel(ctx: Context) {
             if (Build.VERSION.SDK_INT < 26) return
             val nm = ctx.getSystemService(NotificationManager::class.java)
-            // Usuwamy stary kanał MIN, żeby nie zostawał w ustawieniach jako martwy.
             nm.deleteNotificationChannel("monitor_service")
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL, tr("Monitoring w tle", "Background monitoring"), NotificationManager.IMPORTANCE_LOW)
             )
         }
 
-        /**
-         * Stałe powiadomienie usługi. Przy włączonej opcji [Config.lockScreenStatus] pokazuje dane
-         * Observera (widoczne na ekranie blokady, także z PIN-em): zwinięte = tytuł + skrót brokerów,
-         * rozwinięte = pełne linie MQTT1/MQTT2 + MAPPER. Bez danych / przy wyłączonej opcji – stary tekst.
-         */
         fun buildNotification(ctx: Context, data: WidgetData?): Notification {
             ensureChannel(ctx)
             val open = PendingIntent.getActivity(
@@ -224,7 +151,6 @@ class MonitorService : Service() {
             return builder.build()
         }
 
-        /** Odświeża treść stałego powiadomienia po pobraniu danych (nie co sekundę – oszczędza baterię). */
         fun updateNotification(ctx: Context, data: WidgetData?) {
             if (!isRunning) return
             try {
@@ -235,7 +161,6 @@ class MonitorService : Service() {
             }
         }
 
-        /** true = usługa działa lub została uruchomiona; false = Android odmówił (np. start z tła). */
         fun start(ctx: Context): Boolean {
             if (isRunning) return true
             return try {

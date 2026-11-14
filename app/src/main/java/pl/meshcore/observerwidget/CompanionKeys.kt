@@ -116,7 +116,7 @@ object CompanionKeys {
             c.setRequestProperty("Accept", "application/json")
             if (c.responseCode !in 200..299) null else c.inputStream.bufferedReader().use { it.readText() }
         } finally {
-            try { c.inputStream?.close() } catch (_: Exception) {}
+            c.disconnect()
         }
     } catch (_: IOException) {
         null

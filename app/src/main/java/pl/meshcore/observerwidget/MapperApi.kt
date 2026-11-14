@@ -92,8 +92,7 @@ object MapperApi {
                 val code = c.responseCode
                 if (code !in 200..299) null else parse(c.inputStream.bufferedReader().use { it.readText() })
             } finally {
-                // Nie wywołujemy c.disconnect() – pozwalamy na ponowne użycie socketu TCP/TLS (Keep-Alive)
-                try { c.inputStream?.close() } catch (_: Exception) {}
+                c.disconnect()
             }
         } catch (_: IOException) {
             null
@@ -182,7 +181,7 @@ object MapperApi {
             c.setRequestProperty("Accept", "application/json")
             if (c.responseCode !in 200..299) null else c.inputStream.bufferedReader().use { it.readText() }
         } finally {
-            try { c.inputStream?.close() } catch (_: Exception) {}
+            c.disconnect()
         }
     } catch (_: IOException) {
         null

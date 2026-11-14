@@ -48,8 +48,7 @@ object MqttStatusApi {
                 val serverNow = connection.getHeaderFieldDate("Date", 0L).takeIf { it > 0L } ?: nowMs
                 Probe(parse(host, body, serverNow), false)
             } finally {
-                // Nie wywołujemy connection.disconnect() – pozwalamy na ponowne użycie socketu TCP/TLS (Keep-Alive)
-                try { connection.inputStream?.close() } catch (_: Exception) {}
+                connection.disconnect()
             }
         } catch (_: IOException) {
             Probe(Health.BAD, true)

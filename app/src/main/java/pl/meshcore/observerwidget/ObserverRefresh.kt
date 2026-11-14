@@ -260,24 +260,35 @@ object ObserverRefresh {
     }
 
     private suspend fun cycle(app: Context) {
-        refreshInProgress = true
-        // Kolejne odświeżenie liczymy od początku pobierania – stały rytm, niezależny od czasu odpowiedzi.
-        planNext(app)
-        renderAll(app)
-        val startedAt = SystemClock.elapsedRealtime()
-        val job = CoroutineScope(Dispatchers.IO).async { collect(app) }
-        val data = withTimeoutOrNull(HARD_TIMEOUT_MS) { job.await() }
-        // Ikona ma zrobić przynajmniej jeden pełny obrót, nawet gdy serwery odpowiedzą błyskawicznie.
-        val spent = SystemClock.elapsedRealtime() - startedAt
-        if (spent < MIN_SPIN_MS) delay(MIN_SPIN_MS - spent)
-        if (data == null) {
-            job.cancel()
-            Log.w(TAG, "Refresh timed out after $HARD_TIMEOUT_MS ms; keeping last data")
+        val pm = app.getSystemService(android.os.PowerManager::class.java)
+        val lock = try {
+            pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "ObserverWidget:refresh")?.apply {
+                setReferenceCounted(false)
+                acquire(15_000L)
+            }
+        } catch (_: Exception) { null }
+        try {
+            refreshInProgress = true
+            // Kolejne odświeżenie liczymy od początku pobierania – stały rytm, niezależny od czasu odpowiedzi.
+            planNext(app)
+            renderAll(app)
+            val startedAt = SystemClock.elapsedRealtime()
+            val job = CoroutineScope(Dispatchers.IO).async { collect(app) }
+            val data = withTimeoutOrNull(HARD_TIMEOUT_MS) { job.await() }
+            // Ikona ma zrobić przynajmniej jeden pełny obrót, nawet gdy serwery odpowiedzą błyskawicznie.
+            val spent = SystemClock.elapsedRealtime() - startedAt
+            if (spent < MIN_SPIN_MS) delay(MIN_SPIN_MS - spent)
+            if (data == null) {
+                job.cancel()
+                Log.w(TAG, "Refresh timed out after $HARD_TIMEOUT_MS ms; keeping last data")
+            }
+            if (!Config(app).monitoringEnabled) return
+            if (data != null) lastData = data
+            val result = (data ?: lastData ?: emptyData(app)).copy(busy = false)
+            evaluateAlerts(app, result, fresh = data != null)
+        } finally {
+            try { lock?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
         }
-        if (!Config(app).monitoringEnabled) return
-        if (data != null) lastData = data
-        val result = (data ?: lastData ?: emptyData(app)).copy(busy = false)
-        evaluateAlerts(app, result, fresh = data != null)
     }
 
     suspend fun refreshOnce(ctx: Context) {
