@@ -67,7 +67,7 @@ object WdgMonitor {
 
     fun validUrl(value: String): Boolean = try {
         val u = Uri.parse(value.trim())
-        (u.scheme == "http" || u.scheme == "https") && !u.host.isNullOrBlank() && u.userInfo == null
+        u.scheme == "https" && !u.host.isNullOrBlank() && u.userInfo == null
     } catch (_: Exception) { false }
 
     private fun state(ctx: Context, id: String): WdgEngine.State {
@@ -106,6 +106,8 @@ object WdgMonitor {
                         return@launch
                     }
                     val success = probe(site.url)
+                    // Settings may have changed or removed this URL while the request was in flight.
+                    if (sites(app).firstOrNull { it.id == site.id }?.url != site.url) return@launch
                     val current = state(app, site.id)
                     val result = WdgEngine.onCheck(current, success, System.currentTimeMillis(), site.intervalMin * 60_000L)
                     saveState(app, site.id, result.state)
