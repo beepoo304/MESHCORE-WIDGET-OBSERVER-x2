@@ -149,14 +149,17 @@ object WdgMonitor {
         val pausedFor = if (pausedAt > 0L) (now - pausedAt).coerceAtLeast(0L) else 0L
         sites(ctx).forEach { site ->
             val s = state(ctx, site.id)
+            val shiftedOnlineSince = if (s.onlineSinceMs > 0L) s.onlineSinceMs + pausedFor else 0L
             val resumed = when (s.status) {
-                WdgEngine.Status.ONLINE -> s.copy(onlineSinceMs = if (s.onlineSinceMs > 0L) s.onlineSinceMs + pausedFor else 0L)
-                WdgEngine.Status.ERROR,
-                WdgEngine.Status.REFRESH -> if (s.status == WdgEngine.Status.ERROR ||
-                    s.pending == WdgEngine.Pending.RESTORE) {
+                WdgEngine.Status.ONLINE -> s.copy(onlineSinceMs = shiftedOnlineSince)
+                WdgEngine.Status.ERROR -> {
                     openOutage(ctx, site.id, now)
-                    s.copy(outageStartedAtMs = now)
-                } else s
+                    s.copy(outageStartedAtMs = now, onlineSinceMs = shiftedOnlineSince)
+                }
+                WdgEngine.Status.REFRESH -> if (s.pending == WdgEngine.Pending.RESTORE) {
+                    openOutage(ctx, site.id, now)
+                    s.copy(outageStartedAtMs = now, onlineSinceMs = shiftedOnlineSince)
+                } else s.copy(onlineSinceMs = shiftedOnlineSince)
                 else -> s
             }
             saveState(ctx, site.id, resumed.copy(nextCheckAtMs = 0L))
