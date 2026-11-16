@@ -136,7 +136,8 @@ object WdgMonitor {
         prefs(ctx).edit().putLong(KEY_PAUSED_AT, now).apply()
         sites(ctx).forEach { site ->
             val s = state(ctx, site.id)
-            if (s.status == WdgEngine.Status.ERROR) {
+            if (s.status == WdgEngine.Status.ERROR ||
+                (s.status == WdgEngine.Status.REFRESH && s.pending == WdgEngine.Pending.RESTORE)) {
                 closeOutage(ctx, site.id, now)
             }
         }
@@ -150,10 +151,12 @@ object WdgMonitor {
             val s = state(ctx, site.id)
             val resumed = when (s.status) {
                 WdgEngine.Status.ONLINE -> s.copy(onlineSinceMs = if (s.onlineSinceMs > 0L) s.onlineSinceMs + pausedFor else 0L)
-                WdgEngine.Status.ERROR -> {
+                WdgEngine.Status.ERROR,
+                WdgEngine.Status.REFRESH -> if (s.status == WdgEngine.Status.ERROR ||
+                    s.pending == WdgEngine.Pending.RESTORE) {
                     openOutage(ctx, site.id, now)
                     s.copy(outageStartedAtMs = now)
-                }
+                } else s
                 else -> s
             }
             saveState(ctx, site.id, resumed.copy(nextCheckAtMs = 0L))
