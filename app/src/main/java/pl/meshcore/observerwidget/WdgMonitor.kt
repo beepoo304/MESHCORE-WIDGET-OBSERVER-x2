@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Local website watchdog, driven only by the existing MonitorService loop. */
 object WdgMonitor {
-    data class Site(val id: String, val url: String, val intervalMin: Int)
+    data class Site(val id: String, val url: String, val intervalMin: Int, val pushEnabled: Boolean = true)
     data class Outage(val siteId: String, val startMs: Long, val endMs: Long?) {
         val durationMs: Long get() = ((endMs ?: System.currentTimeMillis()) - startMs).coerceAtLeast(0L)
     }
@@ -42,7 +42,7 @@ object WdgMonitor {
             val a = JSONArray(p.getString(KEY_SITES, "[]"))
             (0 until a.length()).mapNotNull { i ->
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
-                Site(o.optString("id"), o.optString("url"), o.optInt("intervalMin", 10))
+                Site(o.optString("id"), o.optString("url"), o.optInt("intervalMin", 10), o.optBoolean("pushEnabled", true))
             }.filter { it.id.isNotBlank() && validUrl(it.url) && it.intervalMin in INTERVALS }.take(3)
         } catch (_: Exception) { emptyList() }
     }
@@ -58,7 +58,7 @@ object WdgMonitor {
             if (prior != null && prior.url.trim() != site.url.trim()) {
                 prefs(ctx).edit().remove("state_${site.id}").remove("history_${site.id}").apply()
             }
-            a.put(JSONObject().put("id", site.id).put("url", site.url.trim()).put("intervalMin", site.intervalMin))
+            a.put(JSONObject().put("id", site.id).put("url", site.url.trim()).put("intervalMin", site.intervalMin).put("pushEnabled", site.pushEnabled))
         }
         prefs(ctx).edit().putString(KEY_SITES, a.toString()).apply()
         sites.forEach { setNextCheck(ctx, it.id, 0L) }
@@ -114,11 +114,11 @@ object WdgMonitor {
                     when (result.action) {
                         WdgEngine.Action.ERROR -> {
                             openOutage(app, site.id, result.state.outageStartedAtMs)
-                            notify(app, site, false)
+                            if (site.pushEnabled) notify(app, site, false)
                         }
                         WdgEngine.Action.RESTORE -> {
                             closeOutage(app, site.id, System.currentTimeMillis())
-                            notify(app, site, true)
+                            if (site.pushEnabled) notify(app, site, true)
                         }
                         WdgEngine.Action.NONE -> Unit
                     }
