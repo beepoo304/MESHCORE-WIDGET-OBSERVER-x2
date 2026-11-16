@@ -1,7 +1,7 @@
 name: Android Build
 on:
   push:
-    branches: [main]
+    branches: [main, "wdg/2026-11-16"]
   pull_request:
   workflow_dispatch:
 permissions:
