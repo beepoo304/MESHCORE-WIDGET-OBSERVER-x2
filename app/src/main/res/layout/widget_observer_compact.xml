@@ -112,7 +112,7 @@
         <TextView android:id="@+id/wdg_url1" android:layout_width="85dp" android:layout_height="wrap_content"
             android:text="example.com" android:textColor="#FFFFFF" android:textSize="10sp" android:maxLines="1" android:ellipsize="end"/>
         <TextView android:id="@+id/wdg_uptime1" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="5dp" android:translationX="-5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
+            android:layout_marginStart="5dp" android:translationX="8dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
             android:gravity="end" android:maxLines="1"/>
         <TextView android:id="@+id/wdg_status1" android:layout_width="76dp" android:layout_height="wrap_content"
             android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
@@ -126,7 +126,7 @@
         <TextView android:id="@+id/wdg_url2" android:layout_width="85dp" android:layout_height="wrap_content"
             android:text="example.com" android:textColor="#FFFFFF" android:textSize="10sp" android:maxLines="1" android:ellipsize="end"/>
         <TextView android:id="@+id/wdg_uptime2" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="5dp" android:translationX="-5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
+            android:layout_marginStart="5dp" android:translationX="8dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
             android:gravity="end" android:maxLines="1"/>
         <TextView android:id="@+id/wdg_status2" android:layout_width="76dp" android:layout_height="wrap_content"
             android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
@@ -140,7 +140,7 @@
         <TextView android:id="@+id/wdg_url3" android:layout_width="85dp" android:layout_height="wrap_content"
             android:text="example.com" android:textColor="#FFFFFF" android:textSize="10sp" android:maxLines="1" android:ellipsize="end"/>
         <TextView android:id="@+id/wdg_uptime3" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:layout_marginStart="5dp" android:translationX="-5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
+            android:layout_marginStart="5dp" android:translationX="8dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
             android:gravity="end" android:maxLines="1"/>
         <TextView android:id="@+id/wdg_status3" android:layout_width="76dp" android:layout_height="wrap_content"
             android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
