@@ -182,7 +182,7 @@ class SettingsScreen(private val activity: Activity) {
                 row.url.error = tr("Podaj poprawny adres HTTPS", "Enter a valid HTTPS URL")
                 return
             }
-            WdgMonitor.Site(row.id, url, row.interval.selectedItem.toString().toInt())
+            WdgMonitor.Site(row.id, url, WdgMonitor.INTERVALS.getOrElse(row.interval.selectedItemPosition) { 10 })
         }
         if (wdgSites.size > 3) {
             info.setTextColor(Ui.RED)
@@ -258,7 +258,12 @@ class SettingsScreen(private val activity: Activity) {
             wdgRows.removeAll { it.box === box }
             wdgContainer.removeView(box)
         }
-        controls.addView(remove)
+        remove.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            setMargins(0, 0, 0, 0)
+        }
+        remove.textSize = 12f
+        remove.setPadding(dp(8), dp(6), dp(8), dp(6))
+        controls.addView(remove, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         box.addView(controls)
         wdgContainer.addView(box, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             .apply { topMargin = dp(6) })
