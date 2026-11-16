@@ -156,7 +156,7 @@ object WdgMonitor {
                 WdgEngine.Status.ONLINE -> s.copy(onlineSinceMs = shiftedOnlineSince)
                 WdgEngine.Status.ERROR -> {
                     if (!hasOpenOutage(ctx, site.id)) openOutage(ctx, site.id, now)
-                    s.copy(outageStartedAtMs = if (s.outageStartedAtMs > 0L) s.outageStartedAtMs else now, onlineSinceMs = shiftedOnlineSince)
+                    s.copy(outageStartedAtMs = now, onlineSinceMs = shiftedOnlineSince)
                 }
                 WdgEngine.Status.REFRESH -> if (s.pending == WdgEngine.Pending.RESTORE) {
                     if (!hasOpenOutage(ctx, site.id)) openOutage(ctx, site.id, now)
