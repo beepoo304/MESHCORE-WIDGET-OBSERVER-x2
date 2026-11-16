@@ -80,19 +80,10 @@ class SettingsScreen(private val activity: Activity) {
         root.addView(testResult)
 
         root.addView(Ui.section(activity, "WDG"))
-        root.addView(note(tr("Kontrola stron działa tylko wtedy, gdy monitoring Observera jest włączony. Maksymalnie 3 adresy.", "Website checks run only while Observer monitoring is enabled. Maximum 3 URLs.")))
+        root.addView(note(tr("Kontrola stron działa tylko wtedy, gdy monitoring Observera jest włączony. Jedna obserwowana strona.", "Website checks run only while Observer monitoring is enabled. One monitored website.")))
         wdgContainer = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         root.addView(wdgContainer)
-        WdgMonitor.sites(activity).forEach { addWdgRow(it) }
-        root.addView(Ui.outlineButton(activity, tr("+ Dodaj stronę", "+ Add website")) {
-            if (wdgRows.size >= 3) {
-                info.text = tr("Można dodać maksymalnie 3 strony.", "You can add up to 3 websites.")
-            } else {
-                addWdgRow(WdgMonitor.Site("site${System.currentTimeMillis()}", "", 10))
-                info.text = ""
-            }
-        })
-
+        WdgMonitor.sites(activity).take(1).forEach { addWdgRow(it) }
         root.addView(Ui.section(activity, tr("Odświeżanie i progi", "Refresh and thresholds")))
         intervalLabel = Ui.text(activity, "", 14f, Ui.TEXT).apply { setPadding(dp(16), dp(4), dp(16), 0) }
         root.addView(intervalLabel)
@@ -184,9 +175,9 @@ class SettingsScreen(private val activity: Activity) {
             }
             WdgMonitor.Site(row.id, url, WdgMonitor.INTERVALS.getOrElse(row.interval.selectedItemPosition) { 10 }, row.push.isChecked)
         }
-        if (wdgSites.size > 3) {
+        if (wdgSites.size > 1) {
             info.setTextColor(Ui.RED)
-            info.text = tr("Maksymalnie 3 strony WDG.", "Maximum 3 WDG websites.")
+            info.text = tr("Można pilnować tylko jednej strony WDG.", "Only one WDG website can be monitored.")
             return
         }
         val mapperApi = MapperApi.normalizeBase(mapperRaw)
