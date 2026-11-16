@@ -104,6 +104,7 @@
         <TextView android:id="@+id/m2_last" android:layout_width="88dp" android:layout_height="wrap_content" android:layout_gravity="center_vertical"
             android:layout_marginStart="6dp" android:gravity="center" android:background="@drawable/pill_gray" android:text="—" android:textColor="#0A0A0A"
             android:textSize="14sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:paddingTop="5dp" android:paddingBottom="5dp"/>
+    </LinearLayout>
     <LinearLayout android:id="@+id/wdg_row1" android:layout_width="match_parent" android:layout_height="wrap_content"
         android:layout_marginTop="3dp" android:orientation="horizontal" android:gravity="center_vertical"
         android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="1dp" android:paddingBottom="1dp"
@@ -145,6 +146,5 @@
             android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
             android:textSize="10sp" android:textStyle="bold" android:maxLines="1"
             android:paddingTop="2dp" android:paddingBottom="2dp" android:background="@drawable/pill_green"/>
-    </LinearLayout>
     </LinearLayout>
 </LinearLayout>

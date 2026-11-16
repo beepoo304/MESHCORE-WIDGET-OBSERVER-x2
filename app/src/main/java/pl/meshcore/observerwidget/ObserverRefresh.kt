@@ -172,6 +172,7 @@ object ObserverRefresh {
         val config = Config(app)
         config.monitoringStoppedAtMs = 0L
         config.monitoringEnabled = true
+        WdgMonitor.onMonitoringStarted(app)
         RefreshWorker.sync(app)
         ensureTicking(app)
         refreshAll(app)

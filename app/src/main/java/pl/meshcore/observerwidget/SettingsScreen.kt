@@ -182,7 +182,7 @@ class SettingsScreen(private val activity: Activity) {
                 row.url.error = tr("Podaj poprawny adres http:// lub https://", "Enter a valid http:// or https:// URL")
                 return
             }
-            WdgMonitor.Site("site${index + 1}", url, row.interval.selectedItem.toString().toInt())
+            WdgMonitor.Site(row.id, url, row.interval.selectedItem.toString().toInt())
         }
         if (wdgSites.size > 3) {
             info.setTextColor(Ui.RED)
