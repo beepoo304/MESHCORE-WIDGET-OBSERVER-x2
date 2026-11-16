@@ -50,8 +50,15 @@ object WdgMonitor {
         require(sites.size <= 3)
         require(sites.map { it.id }.distinct().size == sites.size)
         require(sites.all { it.id.isNotBlank() && validUrl(it.url) && it.intervalMin in INTERVALS })
+        val previous = sites(ctx).associateBy { it.id }
         val a = JSONArray()
-        sites.forEach { s -> a.put(JSONObject().put("id", s.id).put("url", s.url.trim()).put("intervalMin", s.intervalMin)) }
+        sites.forEach { site ->
+            val prior = previous[site.id]
+            if (prior != null && prior.url.trim() != site.url.trim()) {
+                prefs(ctx).edit().remove("state_${site.id}").remove("history_${site.id}").apply()
+            }
+            a.put(JSONObject().put("id", site.id).put("url", site.url.trim()).put("intervalMin", site.intervalMin))
+        }
         prefs(ctx).edit().putString(KEY_SITES, a.toString()).apply()
         sites.forEach { setNextCheck(ctx, it.id, 0L) }
         ObserverRefresh.renderAll(ctx)
@@ -202,8 +209,11 @@ object WdgMonitor {
         if (!Config(ctx).monitoringEnabled) emptyList() else sites(ctx).map { site ->
             val s = state(ctx, site.id)
             val host = Uri.parse(site.url).host ?: site.url
-            val since = if (s.status == WdgEngine.Status.ERROR) s.outageStartedAtMs else s.onlineSinceMs
-            WidgetItem(site.id, host, if (since > 0L) formatUptime((nowMs - since).coerceAtLeast(0L)) else "—", s.status)
+            val uptimeMs = if (s.status == WdgEngine.Status.ERROR && s.onlineSinceMs > 0L)
+                (s.outageStartedAtMs - s.onlineSinceMs).coerceAtLeast(0L)
+            else if (s.status == WdgEngine.Status.ERROR) 0L
+            else (nowMs - s.onlineSinceMs).coerceAtLeast(0L)
+            WidgetItem(site.id, host, if (s.onlineSinceMs > 0L) formatUptime(uptimeMs) else "—", s.status)
         }
 
     private fun formatUptime(ms: Long): String {
