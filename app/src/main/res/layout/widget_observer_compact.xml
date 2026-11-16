@@ -55,18 +55,18 @@
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
         android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/card_broker"
-        android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="3dp" android:paddingBottom="3dp">
+        android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="2dp" android:paddingBottom="2dp">
         <ImageView android:id="@+id/m1_cloud" android:layout_width="18dp" android:layout_height="18dp" android:layout_gravity="center_vertical"
             android:src="@drawable/ic_cloud" android:scaleType="fitCenter" android:contentDescription="@null"/>
         <TextView android:id="@+id/m1_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_vertical"
-            android:layout_marginStart="7dp" android:text="MQTT1" android:textColor="#6B6B6B" android:textSize="13sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+            android:layout_marginStart="7dp" android:text="MQTT1" android:textColor="#6B6B6B" android:textSize="12sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
         <FrameLayout android:layout_width="1dp" android:layout_height="28dp" android:layout_gravity="center_vertical"
             android:layout_marginStart="9dp" android:layout_marginEnd="9dp" android:background="#333333"/>
         <LinearLayout android:id="@+id/m1_hour_col" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
             android:layout_gravity="center_vertical" android:orientation="vertical">
             <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:baselineAligned="true">
                 <TextView android:id="@+id/m1_hour" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="—" android:textColor="#FFFFFF" android:textSize="17sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+                    android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="4dp"
                     android:text="pkt/h" android:textColor="#8A8A8A" android:textSize="10sp" android:maxLines="1"/>
             </LinearLayout>
@@ -77,22 +77,22 @@
         </LinearLayout>
         <TextView android:id="@+id/m1_last" android:layout_width="76dp" android:layout_height="wrap_content" android:layout_gravity="center_vertical"
             android:layout_marginStart="6dp" android:gravity="center" android:background="@drawable/pill_gray" android:text="—" android:textColor="#0A0A0A"
-            android:textSize="12sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:paddingTop="3dp" android:paddingBottom="3dp"/>
+            android:textSize="12sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:paddingTop="2dp" android:paddingBottom="2dp"/>
     </LinearLayout>
-    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="5dp"
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="4dp"
         android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/card_broker"
-        android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="3dp" android:paddingBottom="3dp">
+        android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="2dp" android:paddingBottom="2dp">
         <ImageView android:id="@+id/m2_cloud" android:layout_width="18dp" android:layout_height="18dp" android:layout_gravity="center_vertical"
             android:src="@drawable/ic_cloud" android:scaleType="fitCenter" android:contentDescription="@null"/>
         <TextView android:id="@+id/m2_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_vertical"
-            android:layout_marginStart="7dp" android:text="MQTT2" android:textColor="#6B6B6B" android:textSize="13sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+            android:layout_marginStart="7dp" android:text="MQTT2" android:textColor="#6B6B6B" android:textSize="12sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
         <FrameLayout android:layout_width="1dp" android:layout_height="28dp" android:layout_gravity="center_vertical"
             android:layout_marginStart="9dp" android:layout_marginEnd="9dp" android:background="#333333"/>
         <LinearLayout android:id="@+id/m2_hour_col" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
             android:layout_gravity="center_vertical" android:orientation="vertical">
             <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:baselineAligned="true">
                 <TextView android:id="@+id/m2_hour" android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="—" android:textColor="#FFFFFF" android:textSize="17sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
+                    android:text="—" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1"/>
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="4dp"
                     android:text="pkt/h" android:textColor="#8A8A8A" android:textSize="10sp" android:maxLines="1"/>
             </LinearLayout>
@@ -103,6 +103,48 @@
         </LinearLayout>
         <TextView android:id="@+id/m2_last" android:layout_width="76dp" android:layout_height="wrap_content" android:layout_gravity="center_vertical"
             android:layout_marginStart="6dp" android:gravity="center" android:background="@drawable/pill_gray" android:text="—" android:textColor="#0A0A0A"
-            android:textSize="12sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:paddingTop="3dp" android:paddingBottom="3dp"/>
+            android:textSize="12sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:fontFeatureSettings="tnum" android:maxLines="1" android:paddingTop="2dp" android:paddingBottom="2dp"/>
+    <LinearLayout android:id="@+id/wdg_row1" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingStart="8dp" android:paddingEnd="8dp" android:paddingTop="1dp" android:paddingBottom="1dp"
+        android:background="@drawable/card_broker" android:visibility="gone">
+        <TextView android:id="@+id/wdg_url1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="example.com" android:textColor="#FFFFFF" android:textSize="10sp" android:maxLines="1" android:ellipsize="end"/>
+        <TextView android:id="@+id/wdg_uptime1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginStart="5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
+            android:gravity="end" android:maxLines="1"/>
+        <TextView android:id="@+id/wdg_status1" android:layout_width="64dp" android:layout_height="wrap_content"
+            android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
+            android:textSize="9sp" android:textStyle="bold" android:maxLines="1"
+            android:paddingTop="2dp" android:paddingBottom="2dp" android:background="@drawable/pill_green"/>
+    </LinearLayout>
+    <LinearLayout android:id="@+id/wdg_row2" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingStart="8dp" android:paddingEnd="8dp" android:paddingTop="1dp" android:paddingBottom="1dp"
+        android:background="@drawable/card_broker" android:visibility="gone">
+        <TextView android:id="@+id/wdg_url2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="example.com" android:textColor="#FFFFFF" android:textSize="10sp" android:maxLines="1" android:ellipsize="end"/>
+        <TextView android:id="@+id/wdg_uptime2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginStart="5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
+            android:gravity="end" android:maxLines="1"/>
+        <TextView android:id="@+id/wdg_status2" android:layout_width="64dp" android:layout_height="wrap_content"
+            android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
+            android:textSize="9sp" android:textStyle="bold" android:maxLines="1"
+            android:paddingTop="2dp" android:paddingBottom="2dp" android:background="@drawable/pill_green"/>
+    </LinearLayout>
+    <LinearLayout android:id="@+id/wdg_row3" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingStart="8dp" android:paddingEnd="8dp" android:paddingTop="1dp" android:paddingBottom="1dp"
+        android:background="@drawable/card_broker" android:visibility="gone">
+        <TextView android:id="@+id/wdg_url3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="example.com" android:textColor="#FFFFFF" android:textSize="10sp" android:maxLines="1" android:ellipsize="end"/>
+        <TextView android:id="@+id/wdg_uptime3" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginStart="5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
+            android:gravity="end" android:maxLines="1"/>
+        <TextView android:id="@+id/wdg_status3" android:layout_width="64dp" android:layout_height="wrap_content"
+            android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
+            android:textSize="9sp" android:textStyle="bold" android:maxLines="1"
+            android:paddingTop="2dp" android:paddingBottom="2dp" android:background="@drawable/pill_green"/>
+    </LinearLayout>
     </LinearLayout>
 </LinearLayout>

@@ -255,6 +255,30 @@ object WidgetRenderer {
         val live = d.copy(orangeMin = config.orangeMin, redMin = config.redMin)
         broker(v, live, d.broker1, effectiveNowMs, monitoringEnabled, layout, d.broker1FrozenAgeMs, R.id.m1_hour, R.id.m1_total, R.id.m1_last)
         broker(v, live, d.broker2, effectiveNowMs, monitoringEnabled, layout, d.broker2FrozenAgeMs, R.id.m2_hour, R.id.m2_total, R.id.m2_last)
+        val wdgItems = WdgMonitor.widgetItems(ctx, nowMs).take(3)
+        val rowIds = listOf(
+            Triple(R.id.wdg_row1, R.id.wdg_url1, R.id.wdg_uptime1) to R.id.wdg_status1,
+            Triple(R.id.wdg_row2, R.id.wdg_url2, R.id.wdg_uptime2) to R.id.wdg_status2,
+            Triple(R.id.wdg_row3, R.id.wdg_url3, R.id.wdg_uptime3) to R.id.wdg_status3
+        )
+        rowIds.forEachIndexed { index, pair ->
+            val (ids, statusId) = pair
+            val item = wdgItems.getOrNull(index)
+            v.setViewVisibility(ids.first, if (item == null) android.view.View.GONE else android.view.View.VISIBLE)
+            if (item != null) {
+                v.setTextViewText(ids.second, item.host)
+                v.setTextViewText(ids.third, "UPTIME: ${item.uptime}")
+                val (label, color, bg) = when (item.status) {
+                    WdgEngine.Status.ONLINE -> Triple("ONLINE", GREEN, R.drawable.pill_green)
+                    WdgEngine.Status.ERROR -> Triple("ERROR", RED, R.drawable.pill_red)
+                    WdgEngine.Status.REFRESH -> Triple("REFRESH", ORANGE, R.drawable.pill_orange)
+                    WdgEngine.Status.UNKNOWN -> Triple("UNKNOWN", GRAY, R.drawable.pill_gray)
+                }
+                v.setTextViewText(statusId, label)
+                v.setTextColor(statusId, 0xFF0A0A0A.toInt())
+                v.setInt(statusId, "setBackgroundResource", bg)
+            }
+        }
         return v
     }
 
