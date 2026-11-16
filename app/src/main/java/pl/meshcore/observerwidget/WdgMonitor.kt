@@ -127,13 +127,15 @@ object WdgMonitor {
         sites(ctx).forEach { setNextCheck(ctx, it.id, 0L) }
     }
 
-    private fun hasValidatedInternet(ctx: Context): Boolean = try {
-        val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return false
-        val network = cm.activeNetwork ?: return false
-        val caps = cm.getNetworkCapabilities(network) ?: return false
-        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-    } catch (_: Exception) { false }
+    private fun hasValidatedInternet(ctx: Context): Boolean {
+        return try {
+            val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return false
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (_: Exception) { false }
+    }
 
     private fun probe(address: String): Boolean {
         var c: HttpURLConnection? = null
