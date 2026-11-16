@@ -29,6 +29,7 @@ class ObserverWidgetProvider : AppWidgetProvider() {
             }
             ObserverRefresh.ACTION_TICK -> ObserverRefresh.tick(context)
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                if (Config(context).monitoringEnabled) WdgMonitor.onMonitoringStarted(context)
                 RefreshWorker.sync(context)
                 ObserverRefresh.ensureTicking(context)
                 ObserverRefresh.refreshAll(context)
@@ -38,6 +39,7 @@ class ObserverWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onEnabled(context: Context) {
+        if (Config(context).monitoringEnabled) WdgMonitor.onMonitoringStarted(context)
         RefreshWorker.sync(context)
         ObserverRefresh.ensureTicking(context)
     }
