@@ -81,6 +81,8 @@ class MonitorService : Service() {
                 return
             }
             renewWakeLock()
+            // WDG shares this existing tick; it creates no service, timer, or WakeLock.
+            WdgMonitor.tick(this, scope)
             // Pobieranie danych biegnie cały czas (także przy wyłączonym ekranie);
             // rysowanie co 1 s ma sens tylko przy włączonym ekranie.
             if (ObserverRefresh.isRefreshDue()) ObserverRefresh.refreshAll(this)
