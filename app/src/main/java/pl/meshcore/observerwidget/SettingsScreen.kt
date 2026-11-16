@@ -10,6 +10,9 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Switch
+import android.widget.Spinner
+import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.TextView
 import kotlin.concurrent.thread
 
@@ -38,6 +41,9 @@ class SettingsScreen(private val activity: Activity) {
     private lateinit var alertMap: Switch
     private lateinit var lockScreen: Switch
     private lateinit var mapperField: EditText
+    private lateinit var wdgContainer: LinearLayout
+    private data class WdgRow(val id: String, val url: EditText, val interval: Spinner, val box: LinearLayout)
+    private val wdgRows = mutableListOf<WdgRow>()
 
     /** Zawartość ekranu (bez przewijania – opakowuje ją wywołujący). */
     fun build(): View {
@@ -72,6 +78,20 @@ class SettingsScreen(private val activity: Activity) {
             setPadding(dp(16), 0, dp(16), 0)
         }
         root.addView(testResult)
+
+        root.addView(Ui.section(activity, "WDG"))
+        root.addView(note(tr("Kontrola stron działa tylko wtedy, gdy monitoring Observera jest włączony. Maksymalnie 3 adresy.", "Website checks run only while Observer monitoring is enabled. Maximum 3 URLs.")))
+        wdgContainer = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(wdgContainer)
+        WdgMonitor.sites(activity).forEach { addWdgRow(it) }
+        root.addView(Ui.outlineButton(activity, tr("+ Dodaj stronę", "+ Add website")) {
+            if (wdgRows.size >= 3) {
+                info.text = tr("Można dodać maksymalnie 3 strony.", "You can add up to 3 websites.")
+            } else {
+                addWdgRow(WdgMonitor.Site("site${System.currentTimeMillis()}", "", 10))
+                info.text = ""
+            }
+        })
 
         root.addView(Ui.section(activity, tr("Odświeżanie i progi", "Refresh and thresholds")))
         intervalLabel = Ui.text(activity, "", 14f, Ui.TEXT).apply { setPadding(dp(16), dp(4), dp(16), 0) }
@@ -156,6 +176,19 @@ class SettingsScreen(private val activity: Activity) {
             mapperField.error = tr("Podaj poprawny adres API mapera (bez spacji)", "Enter a valid Mapper API address (no spaces)")
             return
         }
+        val wdgSites = wdgRows.mapIndexed { index, row ->
+            val url = row.url.text.toString().trim()
+            if (!WdgMonitor.validUrl(url)) {
+                row.url.error = tr("Podaj poprawny adres http:// lub https://", "Enter a valid http:// or https:// URL")
+                return
+            }
+            WdgMonitor.Site("site${index + 1}", url, row.interval.selectedItem.toString().toInt())
+        }
+        if (wdgSites.size > 3) {
+            info.setTextColor(Ui.RED)
+            info.text = tr("Maksymalnie 3 strony WDG.", "Maximum 3 WDG websites.")
+            return
+        }
         val mapperApi = MapperApi.normalizeBase(mapperRaw)
         // Zmiana Observera albo API mapera = inna baza/ID: reset stanu mapowania i pozycji RPT.
         if (id != cfg.observerId || mapperApi != MapperApi.normalizeBase(cfg.mapperApi)) {
@@ -167,6 +200,7 @@ class SettingsScreen(private val activity: Activity) {
             cfg.mapperObsPosOk = false
             cfg.mapperObsPosAtMs = 0L
         }
+        WdgMonitor.saveSites(activity.applicationContext, wdgSites)
         cfg.observerId = id
         cfg.mapperApi = mapperApi
         MapperApi.base = mapperApi
@@ -188,6 +222,47 @@ class SettingsScreen(private val activity: Activity) {
         info.text = tr("Zapisano", "Saved")
         ObserverRefresh.ensureTicking(activity)
         ObserverRefresh.refreshAll(activity)
+    }
+
+    private fun addWdgRow(site: WdgMonitor.Site) {
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.rounded(activity, Ui.PANEL, 8)
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+        }
+        val url = EditText(activity).apply {
+            setText(site.url)
+            hint = "https://example.com/"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+            textSize = 14f
+            setTextColor(Ui.TEXT)
+            setHintTextColor(Ui.MUTED)
+            background = fieldBackground()
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+        }
+        box.addView(Ui.text(activity, tr("Adres strony", "Website URL"), 11f, Ui.MUTED))
+        box.addView(url, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val controls = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        controls.addView(Ui.text(activity, tr("Interwał", "Interval"), 12f, Ui.MUTED))
+        val spinner = Spinner(activity).apply {
+            adapter = ArrayAdapter(activity, android.R.layout.simple_spinner_dropdown_item,
+                WdgMonitor.INTERVALS.map { "$it min" })
+            setSelection(WdgMonitor.INTERVALS.indexOf(site.intervalMin).coerceAtLeast(0))
+        }
+        controls.addView(spinner, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val remove = Ui.outlineButton(activity, tr("Usuń", "Remove")) {
+            wdgRows.removeAll { it.box === box }
+            wdgContainer.removeView(box)
+        }
+        controls.addView(remove)
+        box.addView(controls)
+        wdgContainer.addView(box, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            .apply { topMargin = dp(6) })
+        wdgRows.add(WdgRow(site.id, url, spinner, box))
     }
 
     private fun testApi() {
