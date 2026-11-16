@@ -114,7 +114,7 @@
         <TextView android:id="@+id/wdg_uptime1" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:layout_marginStart="5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
             android:gravity="end" android:maxLines="1"/>
-        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
+        <TextView android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" android:text=""/>
         <TextView android:id="@+id/wdg_status1" android:layout_width="76dp" android:layout_height="wrap_content"
             android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
             android:textSize="9sp" android:textStyle="bold" android:maxLines="1"
@@ -129,7 +129,7 @@
         <TextView android:id="@+id/wdg_uptime2" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:layout_marginStart="5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
             android:gravity="end" android:maxLines="1"/>
-        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
+        <TextView android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" android:text=""/>
         <TextView android:id="@+id/wdg_status2" android:layout_width="76dp" android:layout_height="wrap_content"
             android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
             android:textSize="9sp" android:textStyle="bold" android:maxLines="1"
@@ -144,7 +144,7 @@
         <TextView android:id="@+id/wdg_uptime3" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:layout_marginStart="5dp" android:text="UPTIME: —" android:textColor="#8A8A8A" android:textSize="9sp"
             android:gravity="end" android:maxLines="1"/>
-        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1"/>
+        <TextView android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" android:text=""/>
         <TextView android:id="@+id/wdg_status3" android:layout_width="76dp" android:layout_height="wrap_content"
             android:layout_marginStart="6dp" android:gravity="center" android:text="ONLINE" android:textColor="#0A0A0A"
             android:textSize="9sp" android:textStyle="bold" android:maxLines="1"
