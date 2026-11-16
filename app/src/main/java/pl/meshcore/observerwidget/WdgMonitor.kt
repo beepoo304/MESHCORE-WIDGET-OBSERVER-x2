@@ -43,12 +43,12 @@ object WdgMonitor {
             (0 until a.length()).mapNotNull { i ->
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
                 Site(o.optString("id"), o.optString("url"), o.optInt("intervalMin", 10), o.optBoolean("pushEnabled", true))
-            }.filter { it.id.isNotBlank() && validUrl(it.url) && it.intervalMin in INTERVALS }.take(3)
+            }.filter { it.id.isNotBlank() && validUrl(it.url) && it.intervalMin in INTERVALS }.take(1)
         } catch (_: Exception) { emptyList() }
     }
 
     fun saveSites(ctx: Context, sites: List<Site>) {
-        require(sites.size <= 3)
+        require(sites.size <= 1)
         require(sites.map { it.id }.distinct().size == sites.size)
         require(sites.all { it.id.isNotBlank() && validUrl(it.url) && it.intervalMin in INTERVALS })
         val previous = sites(ctx).associateBy { it.id }
