@@ -12,10 +12,12 @@ import android.util.Log
 import android.widget.RemoteViews
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -35,6 +37,7 @@ object ObserverRefresh {
     private const val MIN_SPIN_MS = 900L
 
     private val gate = RefreshGate()
+    private val fallbackWdgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Volatile
     private var lastData: WidgetData? = null
@@ -120,6 +123,7 @@ object ObserverRefresh {
         val app = ctx.applicationContext
         if (!Config(app).monitoringEnabled) return
         if (MonitorService.isRunning) return
+        WdgMonitor.tick(app, fallbackWdgScope)
         renderAll(app)
         if (isRefreshDue()) refreshAll(app) else scheduleTick(app)
     }
@@ -156,6 +160,7 @@ object ObserverRefresh {
         val config = Config(app)
         if (config.monitoringStoppedAtMs <= 0L) config.monitoringStoppedAtMs = System.currentTimeMillis()
         config.monitoringEnabled = false
+        WdgMonitor.onMonitoringStopped(app)
         cancelAlarm(app)
         nextRefreshAtMs = 0L
         MonitorService.stop(app)

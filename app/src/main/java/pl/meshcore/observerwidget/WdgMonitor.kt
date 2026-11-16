@@ -28,6 +28,7 @@ object WdgMonitor {
 
     private const val PREFS = "wdg_monitor"
     private const val KEY_SITES = "sites"
+    private const val KEY_PAUSED_AT = "pausedAt"
     private const val CHANNEL = "wdg_alerts"
     private const val TAG = "WDG"
     private val inFlight = ConcurrentHashMap.newKeySet<String>()
@@ -130,8 +131,34 @@ object WdgMonitor {
         }
     }
 
+    fun onMonitoringStopped(ctx: Context) {
+        val now = System.currentTimeMillis()
+        prefs(ctx).edit().putLong(KEY_PAUSED_AT, now).apply()
+        sites(ctx).forEach { site ->
+            val s = state(ctx, site.id)
+            if (s.status == WdgEngine.Status.ERROR) {
+                closeOutage(ctx, site.id, now)
+            }
+        }
+    }
+
     fun onMonitoringStarted(ctx: Context) {
-        sites(ctx).forEach { setNextCheck(ctx, it.id, 0L) }
+        val now = System.currentTimeMillis()
+        val pausedAt = prefs(ctx).getLong(KEY_PAUSED_AT, 0L)
+        val pausedFor = if (pausedAt > 0L) (now - pausedAt).coerceAtLeast(0L) else 0L
+        sites(ctx).forEach { site ->
+            val s = state(ctx, site.id)
+            val resumed = when (s.status) {
+                WdgEngine.Status.ONLINE -> s.copy(onlineSinceMs = if (s.onlineSinceMs > 0L) s.onlineSinceMs + pausedFor else 0L)
+                WdgEngine.Status.ERROR -> {
+                    openOutage(ctx, site.id, now)
+                    s.copy(outageStartedAtMs = now)
+                }
+                else -> s
+            }
+            saveState(ctx, site.id, resumed.copy(nextCheckAtMs = 0L))
+        }
+        prefs(ctx).edit().remove(KEY_PAUSED_AT).apply()
     }
 
     private fun hasValidatedInternet(ctx: Context): Boolean {
@@ -196,7 +223,9 @@ object WdgMonitor {
 
     /** Clearing history preserves live state; an active outage starts a fresh record at clear time. */
     fun clearHistory(ctx: Context, id: String) {
-        val active = state(ctx, id).status == WdgEngine.Status.ERROR
+        val live = state(ctx, id)
+        val active = live.status == WdgEngine.Status.ERROR ||
+            (live.status == WdgEngine.Status.REFRESH && live.pending == WdgEngine.Pending.RESTORE)
         val now = System.currentTimeMillis()
         val a = JSONArray()
         if (active) a.put(JSONObject().put("start", now).put("end", JSONObject.NULL))
@@ -206,7 +235,7 @@ object WdgMonitor {
     fun clearAllHistory(ctx: Context) = sites(ctx).forEach { clearHistory(ctx, it.id) }
 
     fun widgetItems(ctx: Context, nowMs: Long = System.currentTimeMillis()): List<WidgetItem> =
-        if (!Config(ctx).monitoringEnabled) emptyList() else sites(ctx).map { site ->
+        sites(ctx).map { site ->
             val s = state(ctx, site.id)
             val host = Uri.parse(site.url).host ?: site.url
             val uptimeMs = if (s.status == WdgEngine.Status.ERROR && s.onlineSinceMs > 0L)
