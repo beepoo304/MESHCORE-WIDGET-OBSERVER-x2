@@ -155,12 +155,12 @@ object WdgMonitor {
             val resumed = when (s.status) {
                 WdgEngine.Status.ONLINE -> s.copy(onlineSinceMs = shiftedOnlineSince)
                 WdgEngine.Status.ERROR -> {
-                    openOutage(ctx, site.id, now)
-                    s.copy(outageStartedAtMs = now, onlineSinceMs = shiftedOnlineSince)
+                    if (!hasOpenOutage(ctx, site.id)) openOutage(ctx, site.id, now)
+                    s.copy(outageStartedAtMs = if (s.outageStartedAtMs > 0L) s.outageStartedAtMs else now, onlineSinceMs = shiftedOnlineSince)
                 }
                 WdgEngine.Status.REFRESH -> if (s.pending == WdgEngine.Pending.RESTORE) {
-                    openOutage(ctx, site.id, now)
-                    s.copy(outageStartedAtMs = now, onlineSinceMs = shiftedOnlineSince)
+                    if (!hasOpenOutage(ctx, site.id)) openOutage(ctx, site.id, now)
+                    s.copy(outageStartedAtMs = if (s.outageStartedAtMs > 0L) s.outageStartedAtMs else now, onlineSinceMs = shiftedOnlineSince)
                 } else s.copy(onlineSinceMs = shiftedOnlineSince)
                 else -> s
             }
@@ -207,6 +207,11 @@ object WdgMonitor {
         val a = history(ctx, id)
         a.put(JSONObject().put("start", start).put("end", JSONObject.NULL))
         writeHistory(ctx, id, a)
+    }
+
+    private fun hasOpenOutage(ctx: Context, id: String): Boolean {
+        val a = history(ctx, id)
+        return (0 until a.length()).any { i -> a.optJSONObject(i)?.isNull("end") == true }
     }
 
     private fun closeOutage(ctx: Context, id: String, end: Long) {

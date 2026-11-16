@@ -45,6 +45,7 @@ class ObserverWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onDisabled(context: Context) {
+        if (Config(context).monitoringEnabled) WdgMonitor.onMonitoringStopped(context)
         ObserverRefresh.cancelAlarm(context)
         MonitorService.stop(context)
         RefreshWorker.sync(context)
