@@ -901,7 +901,7 @@ class MainActivity : Activity() {
 
     // ───────────────────────────── STATYSTYKI ─────────────────────────────
 
-    /** Statystyki: 0 = Repeatery (z bazy mapera), 1 = Przestoje (rejestr [Outages]). */
+    /** Statystyki: 0 = Repeatery, 1 = Przestoje MQTT/Observer, 2 = WDG. */
     private var statsMode = 0
     /** Indeks okresu w [STATS_PERIODS] — wspólny dla obu widoków. */
     private var statsPeriod = 1
@@ -956,7 +956,21 @@ class MainActivity : Activity() {
         outDash.removeAllViews()
         val now = System.currentTimeMillis()
         val outages = statsMode == 1
-        val right: View = if (outages) {
+        val wdg = statsMode == 2
+        val right: View = if (wdg) {
+            val sites = WdgMonitor.sites(this)
+            Ui.text(this, tr("Wyczyść", "Clear"), 13f, if (sites.isEmpty()) Ui.MUTED else Ui.RED, bold = true).apply {
+                setPadding(dp(12), dp(4), dp(12), dp(4))
+                background = Ui.rounded(this@MainActivity, 0x00000000, 16, Ui.OUTLINE)
+                setOnClickListener {
+                    if (sites.isEmpty()) return@setOnClickListener
+                    AlertDialog.Builder(this@MainActivity).setTitle(tr("Wyczyścić historię WDG?", "Clear WDG history?"))
+                        .setMessage(tr("Usunąć historię przestojów wszystkich stron?", "Delete outage history for all websites?"))
+                        .setPositiveButton(tr("Wyczyść", "Clear")) { _, _ -> WdgMonitor.clearAllHistory(this@MainActivity); rerender() }
+                        .setNegativeButton(tr("Anuluj", "Cancel"), null).show()
+                }
+            }
+        } else if (outages) {
             val list = Outages.all(this, now)
             Ui.text(this, tr("Wyczyść", "Clear"), 13f, if (list.isEmpty()) Ui.MUTED else Ui.RED, bold = true).apply {
                 setPadding(dp(12), dp(4), dp(12), dp(4))
@@ -991,11 +1005,10 @@ class MainActivity : Activity() {
         }
         outDash.addView(Ui.topBar(
             this, tr("STATYSTYKI", "STATS"),
-            if (outages) tr("Przerwy w pracy MQTT1, MQTT2 i Observera", "Downtime of MQTT1, MQTT2 and Observer")
-            else tr("Dane z mappera · ${MapperApi.host(Config(this).mapperApi)}", "Mapper data · ${MapperApi.host(Config(this).mapperApi)}"),
+            when { wdg -> "Website watchdog"; outages -> tr("Przerwy w pracy MQTT1, MQTT2 i Observera", "Downtime of MQTT1, MQTT2 and Observer"); else -> tr("Dane z mappera · ${MapperApi.host(Config(this).mapperApi)}", "Mapper data · ${MapperApi.host(Config(this).mapperApi)}") },
             right
         ))
-        outDash.addView(chipRow(listOf(tr("Repeatery", "Repeaters"), tr("Przestoje", "Outages")), statsMode, segmented = true) {
+        outDash.addView(chipRow(listOf(tr("Repeatery", "Repeaters"), tr("Przestoje", "Outages"), "WDG"), statsMode, segmented = true) {
             statsMode = it
             outScroll.scrollTo(0, 0)
             rerender()
@@ -1006,9 +1019,54 @@ class MainActivity : Activity() {
             statsPeriod = it
             rerender()
         })
-        if (outages) renderOutages(statsPeriods[period].first, statsPeriods[period].second, now)
-        else renderRepeaterStats(now)
+        when { outages -> renderOutages(statsPeriods[period].first, statsPeriods[period].second, now); wdg -> renderWdgStats(statsPeriods[period].first, statsPeriods[period].second, now); else -> renderRepeaterStats(now) }
         outDash.addView(Ui.spacer(this, 16))
+    }
+
+    /** Statystyki dostępności stron WDG i historia awarii dla wybranego okresu. */
+    private fun renderWdgStats(periodMs: Long, periodLabel: String, now: Long) {
+        val sites = WdgMonitor.sites(this)
+        if (!Config(this).monitoringEnabled) outDash.addView(infoItem(tr("Monitoring zatrzymany – WDG nie wykonuje kontroli.", "Monitoring stopped – WDG checks are paused."), Ui.ORANGE))
+        if (sites.isEmpty()) {
+            outDash.addView(infoItem(tr("Brak skonfigurowanych stron. Dodaj adres w Ustawieniach → WDG.", "No websites configured. Add a URL in Settings → WDG."), Ui.MUTED))
+            return
+        }
+        for (site in sites) {
+            val all = WdgMonitor.outages(this, site.id)
+            val startWindow = if (periodMs > 0L) now - periodMs else 0L
+            val selected = all.filter { (it.endMs ?: now) >= startWindow }
+            val downtime = selected.sumOf { outage ->
+                val from = maxOf(outage.startMs, startWindow)
+                val to = minOf(outage.endMs ?: now, now)
+                (to - from).coerceAtLeast(0L)
+            }
+            val status = WdgMonitor.widgetItems(this, now).firstOrNull { it.id == site.id }?.status ?: WdgEngine.Status.UNKNOWN
+            val color = when (status) { WdgEngine.Status.ONLINE -> Ui.GREEN; WdgEngine.Status.ERROR -> Ui.RED; WdgEngine.Status.REFRESH -> Ui.ORANGE; WdgEngine.Status.UNKNOWN -> Ui.MUTED }
+            outDash.addView(Ui.section(this, android.net.Uri.parse(site.url).host ?: site.url, "$periodLabel · \${site.intervalMin} min"))
+            outDash.addView(Ui.kvRow(this,
+                Ui.kv(this, tr("Status", "Status"), status.name, color),
+                Ui.kv(this, tr("Przestój", "Downtime"), duration(downtime), if (downtime > 0L) Ui.ORANGE else Ui.GREEN),
+                Ui.kv(this, tr("Zdarzenia", "Events"), selected.size.toString(), Ui.TEXT)
+            ).apply { setPadding(dp(16), dp(4), dp(16), dp(4)) })
+            outDash.addView(Ui.text(this, tr("Historia awarii", "Outage history"), 12f, Ui.MUTED, bold = true).apply { setPadding(dp(16), dp(8), dp(16), dp(2)) })
+            if (selected.isEmpty()) outDash.addView(infoItem(tr("Brak awarii w wybranym okresie.", "No outages in the selected period."), Ui.GREEN))
+            else selected.sortedByDescending { it.startMs }.forEach { outage ->
+                val end = outage.endMs?.let { TimeFormat.dayMonth(it) + " " + TimeFormat.hm(it) } ?: tr("trwa", "ongoing")
+                val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(6), dp(16), dp(6)) }
+                row.addView(Ui.text(this, "\${TimeFormat.dayMonth(outage.startMs)} \${TimeFormat.hm(outage.startMs)} → $end", 13f, if (outage.endMs == null) Ui.RED else Ui.TEXT))
+                row.addView(Ui.text(this, duration(outage.durationMs), 11f, Ui.MUTED))
+                outDash.addView(row)
+            }
+            outDash.addView(Ui.text(this, tr("Wyczyść historię tej strony", "Clear this website's history"), 12f, Ui.RED, bold = true).apply {
+                setPadding(dp(16), dp(8), dp(16), dp(8))
+                setOnClickListener {
+                    AlertDialog.Builder(this@MainActivity).setTitle(tr("Wyczyścić historię?", "Clear history?"))
+                        .setMessage(tr("Usunąć historię awarii \${site.url}? Trwająca awaria będzie liczona od nowa.", "Delete outage history for \${site.url}? An ongoing outage will restart from now."))
+                        .setPositiveButton(tr("Wyczyść", "Clear")) { _, _ -> WdgMonitor.clearHistory(this@MainActivity, site.id); rerender() }
+                        .setNegativeButton(tr("Anuluj", "Cancel"), null).show()
+                }
+            })
+        }
     }
 
     /** Rząd przełączników (chipy); [segmented] = dwa pola na całą szerokość. */
