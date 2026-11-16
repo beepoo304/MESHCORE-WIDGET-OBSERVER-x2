@@ -1042,7 +1042,7 @@ class MainActivity : Activity() {
             }
             val status = WdgMonitor.widgetItems(this, now).firstOrNull { it.id == site.id }?.status ?: WdgEngine.Status.UNKNOWN
             val color = when (status) { WdgEngine.Status.ONLINE -> Ui.GREEN; WdgEngine.Status.ERROR -> Ui.RED; WdgEngine.Status.REFRESH -> Ui.ORANGE; WdgEngine.Status.UNKNOWN -> Ui.MUTED }
-            outDash.addView(Ui.section(this, android.net.Uri.parse(site.url).host ?: site.url, "$periodLabel · \${site.intervalMin} min"))
+            outDash.addView(Ui.section(this, android.net.Uri.parse(site.url).host ?: site.url, "$periodLabel · ${site.intervalMin} min"))
             outDash.addView(Ui.kvRow(this,
                 Ui.kv(this, tr("Status", "Status"), status.name, color),
                 Ui.kv(this, tr("Przestój", "Downtime"), duration(downtime), if (downtime > 0L) Ui.ORANGE else Ui.GREEN),
@@ -1053,7 +1053,7 @@ class MainActivity : Activity() {
             else selected.sortedByDescending { it.startMs }.forEach { outage ->
                 val end = outage.endMs?.let { TimeFormat.dayMonth(it) + " " + TimeFormat.hm(it) } ?: tr("trwa", "ongoing")
                 val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(6), dp(16), dp(6)) }
-                row.addView(Ui.text(this, "\${TimeFormat.dayMonth(outage.startMs)} \${TimeFormat.hm(outage.startMs)} → $end", 13f, if (outage.endMs == null) Ui.RED else Ui.TEXT))
+                row.addView(Ui.text(this, "${TimeFormat.dayMonth(outage.startMs)} ${TimeFormat.hm(outage.startMs)} → $end", 13f, if (outage.endMs == null) Ui.RED else Ui.TEXT))
                 row.addView(Ui.text(this, duration(outage.durationMs), 11f, Ui.MUTED))
                 outDash.addView(row)
             }
@@ -1061,7 +1061,7 @@ class MainActivity : Activity() {
                 setPadding(dp(16), dp(8), dp(16), dp(8))
                 setOnClickListener {
                     AlertDialog.Builder(this@MainActivity).setTitle(tr("Wyczyścić historię?", "Clear history?"))
-                        .setMessage(tr("Usunąć historię awarii \${site.url}? Trwająca awaria będzie liczona od nowa.", "Delete outage history for \${site.url}? An ongoing outage will restart from now."))
+                        .setMessage(tr("Usunąć historię awarii ${site.url}? Trwająca awaria będzie liczona od nowa.", "Delete outage history for ${site.url}? An ongoing outage will restart from now."))
                         .setPositiveButton(tr("Wyczyść", "Clear")) { _, _ -> WdgMonitor.clearHistory(this@MainActivity, site.id); rerender() }
                         .setNegativeButton(tr("Anuluj", "Cancel"), null).show()
                 }

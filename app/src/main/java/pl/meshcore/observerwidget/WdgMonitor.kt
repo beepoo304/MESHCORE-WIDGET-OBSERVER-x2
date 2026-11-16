@@ -241,9 +241,10 @@ object WdgMonitor {
         sites(ctx).map { site ->
             val s = state(ctx, site.id)
             val host = Uri.parse(site.url).host ?: site.url
-            val uptimeMs = if (s.status == WdgEngine.Status.ERROR && s.onlineSinceMs > 0L)
+            val outageView = s.status == WdgEngine.Status.ERROR || (s.status == WdgEngine.Status.REFRESH && s.pending == WdgEngine.Pending.RESTORE)
+            val uptimeMs = if (outageView && s.onlineSinceMs > 0L)
                 (s.outageStartedAtMs - s.onlineSinceMs).coerceAtLeast(0L)
-            else if (s.status == WdgEngine.Status.ERROR) 0L
+            else if (outageView) 0L
             else (nowMs - s.onlineSinceMs).coerceAtLeast(0L)
             WidgetItem(site.id, host, if (s.onlineSinceMs > 0L) formatUptime(uptimeMs) else "—", s.status)
         }
