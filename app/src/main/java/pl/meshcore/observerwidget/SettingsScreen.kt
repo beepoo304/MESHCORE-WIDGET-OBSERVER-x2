@@ -179,7 +179,7 @@ class SettingsScreen(private val activity: Activity) {
         val wdgSites = wdgRows.mapIndexed { index, row ->
             val url = row.url.text.toString().trim()
             if (!WdgMonitor.validUrl(url)) {
-                row.url.error = tr("Podaj poprawny adres http:// lub https://", "Enter a valid http:// or https:// URL")
+                row.url.error = tr("Podaj poprawny adres HTTPS", "Enter a valid HTTPS URL")
                 return
             }
             WdgMonitor.Site(row.id, url, row.interval.selectedItem.toString().toInt())
