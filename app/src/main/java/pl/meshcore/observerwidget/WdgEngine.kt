@@ -1,7 +1,7 @@
 package pl.meshcore.observerwidget
 
 /** Pure WDG state machine. Times are wall-clock milliseconds. */
-internal object WdgEngine {
+object WdgEngine {
     enum class Status { UNKNOWN, ONLINE, REFRESH, ERROR }
     enum class Pending { NONE, DOWN, RESTORE }
     enum class Action { NONE, ERROR, RESTORE }
