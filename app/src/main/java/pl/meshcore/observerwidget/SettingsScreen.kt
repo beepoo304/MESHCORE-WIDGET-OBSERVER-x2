@@ -42,7 +42,7 @@ class SettingsScreen(private val activity: Activity) {
     private lateinit var lockScreen: Switch
     private lateinit var mapperField: EditText
     private lateinit var wdgContainer: LinearLayout
-    private data class WdgRow(val id: String, val url: EditText, val interval: Spinner, val box: LinearLayout)
+    private data class WdgRow(val id: String, val url: EditText, val interval: Spinner, val push: Switch, val box: LinearLayout)
     private val wdgRows = mutableListOf<WdgRow>()
 
     /** Zawartość ekranu (bez przewijania – opakowuje ją wywołujący). */
@@ -182,7 +182,7 @@ class SettingsScreen(private val activity: Activity) {
                 row.url.error = tr("Podaj poprawny adres HTTPS", "Enter a valid HTTPS URL")
                 return
             }
-            WdgMonitor.Site(row.id, url, WdgMonitor.INTERVALS.getOrElse(row.interval.selectedItemPosition) { 10 })
+            WdgMonitor.Site(row.id, url, WdgMonitor.INTERVALS.getOrElse(row.interval.selectedItemPosition) { 10 }, row.push.isChecked)
         }
         if (wdgSites.size > 3) {
             info.setTextColor(Ui.RED)
@@ -254,6 +254,17 @@ class SettingsScreen(private val activity: Activity) {
             setSelection(WdgMonitor.INTERVALS.indexOf(site.intervalMin).coerceAtLeast(0))
         }
         controls.addView(spinner, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val push = Switch(activity).apply {
+            text = "PUSH"
+            isChecked = site.pushEnabled
+            textSize = 11f
+            setTextColor(Ui.TEXT)
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            thumbTintList = ColorStateList(states, intArrayOf(Ui.GREEN, Ui.MUTED))
+            trackTintList = ColorStateList(states, intArrayOf(0x8867D78A.toInt(), Ui.OUTLINE))
+            setPadding(dp(2), 0, dp(2), 0)
+        }
+        controls.addView(push, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val remove = Ui.outlineButton(activity, tr("Usuń", "Remove")) {
             wdgRows.removeAll { it.box === box }
             wdgContainer.removeView(box)
@@ -267,7 +278,7 @@ class SettingsScreen(private val activity: Activity) {
         box.addView(controls)
         wdgContainer.addView(box, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             .apply { topMargin = dp(6) })
-        wdgRows.add(WdgRow(site.id, url, spinner, box))
+        wdgRows.add(WdgRow(site.id, url, spinner, push, box))
     }
 
     private fun testApi() {
